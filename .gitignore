@@ -1,0 +1,11 @@
+node_modules
+.output
+.data
+dist
+.nuxt
+uploads/*
+!uploads/.gitkeep
+*.sqlite
+*.sqlite-journal
+.env
+.env.local

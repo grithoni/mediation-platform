@@ -1,0 +1,41 @@
+{
+  "name": "mediation-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "dev:party": "NUXT_PUBLIC_APP_MODE=party nuxt dev --port 3000",
+    "dev:mediator": "NUXT_PUBLIC_APP_MODE=mediator nuxt dev --port 3001",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:migrate": "npx tsx server/database/migrate.ts",
+    "db:seed": "npx tsx server/database/seed.ts",
+    "db:seed-mediators": "npx tsx server/database/seed-mediators.ts",
+    "db:seed-cases": "npx tsx server/database/seed-cases.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.0",
+    "@nuxt/ui": "^3.0.0",
+    "ai": "^4.3.0",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.7.0",
+    "drizzle-orm": "^0.41.0",
+    "nuxt": "^3.17.2",
+    "uuid": "^11.1.0",
+    "vue": "^3.5.13",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.111",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.30.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

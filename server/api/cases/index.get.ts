@@ -1,0 +1,33 @@
+import { desc, eq } from 'drizzle-orm'
+import { getDb } from '../../database'
+import { cases, mediators } from '../../database/schema'
+import { requireAuth } from '../../middleware/auth'
+
+export default defineEventHandler(async (event) => {
+  requireAuth(event)
+
+  const db = getDb()
+
+  const allCases = db
+    .select({
+      id: cases.id,
+      title: cases.title,
+      description: cases.description,
+      partyAName: cases.partyAName,
+      partyBName: cases.partyBName,
+      partyAContact: cases.partyAContact,
+      partyBContact: cases.partyBContact,
+      status: cases.status,
+      mediatorId: cases.mediatorId,
+      accessCode: cases.accessCode,
+      createdAt: cases.createdAt,
+      updatedAt: cases.updatedAt,
+      mediatorName: mediators.name,
+    })
+    .from(cases)
+    .leftJoin(mediators, eq(cases.mediatorId, mediators.id))
+    .orderBy(desc(cases.createdAt))
+    .all()
+
+  return { success: true, data: allCases }
+})
