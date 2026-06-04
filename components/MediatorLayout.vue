@@ -11,7 +11,7 @@ const { user, logout, isLoading } = useAuth()
           <!-- Logo / Platform Name -->
           <div class="flex items-center gap-2.5">
             <UIcon name="i-lucide-scale" class="w-5 h-5 text-[#1e3a5f] dark:text-gray-400" />
-            <span class="text-base font-semibold text-gray-900 dark:text-white">全时在线的调解专家</span>
+            <span class="text-base font-semibold text-gray-900 dark:text-white">全时在线的争议解决专家</span>
             <span class="text-xs font-mono text-gray-400 dark:text-gray-500 hidden sm:inline">admin</span>
           </div>
 

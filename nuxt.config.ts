@@ -31,7 +31,7 @@ export default defineNuxtConfig({
     openaiModel: 'gpt-4o-mini',
     // Public (exposed to client)
     public: {
-      appName: '全时在线的调解专家',
+      appName: '全时在线的争议解决专家',
       appMode: 'party',
     },
   },

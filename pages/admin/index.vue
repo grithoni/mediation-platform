@@ -10,8 +10,8 @@
       <div class="text-center mb-8">
         <div class="flex items-center justify-center gap-2.5 mb-3">
           <UIcon name="i-lucide-scale" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
-          <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的调解专家</span>
-        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono mt-1">Always Online Mediation Expert</p>
+          <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的争议解决专家</span>
+        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono mt-1">Always Online Dispute Resolution Expert</p>
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">mediator sign in</p>
       </div>
