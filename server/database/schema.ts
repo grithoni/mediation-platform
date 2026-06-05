@@ -13,8 +13,11 @@ export const cases = sqliteTable('cases', {
   partyBContact: text('party_b_contact'),
   claimsSummary: text('claims_summary'), // 请求和答辩（摘要）
   evidenceSummary: text('evidence_summary'), // 证据和质证（摘要）
+  phase: text('phase').notNull().default('analysis'), // analysis | dialog | mediator_selection | active | resolved | closed
+  dynamicFileUpdatedAt: integer('dynamic_file_updated_at'), // 动态文件最后更新时间（秒级时间戳）
   status: text('status').notNull().default('pending'), // pending | active | resolved | closed
   mediatorId: text('mediator_id').references(() => mediators.id),
+  mediatorBoundAt: integer('mediator_bound_at'), // 调解员绑定时间
   accessCode: text('access_code').notNull(), // 当事人访问验证码（密码）
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
@@ -94,4 +97,32 @@ export const sessions = sqliteTable('sessions', {
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   endedAt: integer('ended_at', { mode: 'timestamp' }),
+})
+
+// ============================================================
+// 案件动态分析文件表（Agent 自动生成 + 持续更新）
+// ============================================================
+export const caseDynamicFiles = sqliteTable('case_dynamic_files', {
+  id: text('id').primaryKey(), // same as case id
+  caseId: text('case_id').notNull().references(() => cases.id),
+  // 当事人特征分析
+  partyAnalysis: text('party_analysis'),
+  // 事实时间线（JSON array of {time,event,source}）
+  timeline: text('timeline'),
+  // 争议清单（JSON array of {issue,category,partyAPosition,partyBPosition,priority}）
+  disputeChecklist: text('dispute_checklist'),
+  // 已识别的立场
+  positions: text('positions'),
+  // 已发现的潜在利益
+  potentialInterests: text('potential_interests'),
+  // 各方最佳替代方案 (BATNA)
+  batna: text('batna'),
+  // 智能体分析日志（追加式，JSON array of {turn,action,result,timestamp}）
+  agentLog: text('agent_log'),
+  // 当事人对话轮次计数
+  dialogTurnCount: integer('dialog_turn_count').default(0),
+  // 对话是否已结束
+  dialogEnded: integer('dialog_ended', { mode: 'boolean' }).default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })

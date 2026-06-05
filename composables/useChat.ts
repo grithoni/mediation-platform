@@ -184,7 +184,7 @@ export function useChat(caseId: Ref<string>) {
   /**
    * Send a message to the AI assistant
    */
-  async function sendAiMessage(message: string, senderIdentifier?: string, senderName?: string) {
+  async function sendAiMessage(message: string, senderIdentifier?: string, senderName?: string): Promise<{ content: string; dialogEnded?: boolean }> {
     aiStreaming.value = true
     aiStreamContent.value = ''
 
@@ -199,6 +199,7 @@ export function useChat(caseId: Ref<string>) {
           senderName: string
           content: string
           createdAt: string
+          dialogEnded?: boolean
         }
       }>('/api/chat/ai', {
         method: 'POST',
@@ -211,7 +212,6 @@ export function useChat(caseId: Ref<string>) {
       })
 
       if (data?.success && data.data) {
-        // Simulate streaming effect
         const fullContent = data.data.content
         for (let i = 0; i < fullContent.length; i++) {
           aiStreamContent.value = fullContent.slice(0, i + 1)
@@ -227,6 +227,7 @@ export function useChat(caseId: Ref<string>) {
           content: data.data.content,
           createdAt: data.data.createdAt,
         })
+        return { content: data.data.content, dialogEnded: data.data.dialogEnded }
       }
     }
     catch (err) {
@@ -236,6 +237,7 @@ export function useChat(caseId: Ref<string>) {
       aiStreaming.value = false
       aiStreamContent.value = ''
     }
+    return { content: '' }
   }
 
   /**

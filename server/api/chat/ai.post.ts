@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
-import { cases, messages } from '../../database/schema'
+import { cases, messages, caseDynamicFiles } from '../../database/schema'
 
 // ============================================================
 // System prompt template for mediation AI
@@ -38,6 +38,45 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少必要参数' })
   }
 
+  // Keyword intercept (same as agent.post.ts)
+  const endDialogKeywords = [
+    '分配调解员', '选择调解员', '我要找调解员', '帮我找调解员',
+    '我要联系调解员', '联系调解员', '结束谈话', '结束对话', '结束',
+    '就这样', '可以了', '不用了', '不需要', '无需', '无补充',
+    '不需要调解', '找调解员', '推荐调解员', '安排调解员', '帮我联系', '帮我找',
+  ]
+  const msgClean = (body.message as string).replace(/\s/g, '')
+  if (endDialogKeywords.some(kw => msgClean.includes(kw)) && body.caseId !== 'demo') {
+    const dbPre = getDb()
+    const nowDate = new Date()
+    const nowUnix = Math.floor(Date.now() / 1000)
+    // End dialog
+    const existing = dbPre.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, body.caseId)).get()
+    if (existing) {
+      dbPre.update(caseDynamicFiles).set({ dialogEnded: true, updatedAt: nowDate } as any).where(eq(caseDynamicFiles.caseId, body.caseId)).run()
+    } else {
+      dbPre.insert(caseDynamicFiles).values({
+        id: body.caseId, caseId: body.caseId, dialogEnded: true, dialogTurnCount: 0,
+        createdAt: nowDate, updatedAt: nowDate,
+      } as any).run()
+    }
+    dbPre.update(cases).set({ phase: 'mediator_selection', updatedAt: nowDate } as any).where(eq(cases.id, body.caseId)).run()
+
+    return {
+      success: true,
+      data: {
+        id: 'keyword-' + body.caseId,
+        caseId: body.caseId,
+        senderType: 'ai' as const,
+        senderId: 'mediation-ai',
+        senderName: 'AI助手',
+        content: '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。',
+        createdAt: new Date().toISOString(),
+        dialogEnded: true,
+      },
+    }
+  }
+
   const db = getDb()
 
   // Verify case exists
@@ -48,9 +87,10 @@ export default defineEventHandler(async (event) => {
 
   const now = new Date()
 
-  // Save party message to DB
-  const partyMessageId = uuidv4()
-  db.insert(messages)
+  // Save party message to DB (skip for skill/internal calls)
+  let partyMessageId = 'skill-' + Date.now()
+  if (!body.skipSave) {
+    db.insert(messages)
     .values({
       id: partyMessageId,
       caseId: body.caseId,
@@ -61,6 +101,7 @@ export default defineEventHandler(async (event) => {
       createdAt: now,
     })
     .run()
+  }
 
   // Load conversation history (last 20 messages)
   const history = db
@@ -107,10 +148,12 @@ export default defineEventHandler(async (event) => {
     aiContent = generateMockResponse(body.message)
   }
 
-  // Save AI response to DB
-  const aiMessageId = uuidv4()
+  // Save AI response to DB (skip for skill/internal calls)
+  let aiMessageId = 'ai-skill-' + Date.now()
   const aiCreatedAt = new Date()
-  db.insert(messages)
+  if (!body.skipSave) {
+    aiMessageId = uuidv4()
+    db.insert(messages)
     .values({
       id: aiMessageId,
       caseId: body.caseId,
@@ -121,6 +164,7 @@ export default defineEventHandler(async (event) => {
       createdAt: aiCreatedAt,
     })
     .run()
+  }
 
   return {
     success: true,

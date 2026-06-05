@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const caseNumber = `${currentYear}-${maxN + 1}`
-  const accessCode = uuidv4().slice(0, 6)
+  const accessCode = '123'
 
   const caseTitle = caseTypeLabels[caseType] || '新建案件'
 

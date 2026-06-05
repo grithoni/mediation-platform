@@ -92,6 +92,8 @@ export default defineEventHandler(async (event) => {
         partyBName: caseData.partyBName,
         claimsSummary: caseData.claimsSummary,
         evidenceSummary: caseData.evidenceSummary,
+        phase: (caseData as any).phase || 'analysis',
+        mediatorId: (caseData as any).mediatorId || null,
         status: caseData.status,
         messages: caseMessages,
         documents: caseDocuments,

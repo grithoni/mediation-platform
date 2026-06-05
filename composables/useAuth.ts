@@ -17,7 +17,9 @@ export function useAuth() {
   async function fetchUser(): Promise<AuthUser | null> {
     isLoading.value = true
     try {
-      const data = await $fetch<{ success: boolean; user: AuthUser }>('/api/auth/me')
+      const data = await $fetch<{ success: boolean; user: AuthUser }>('/api/auth/me', {
+        credentials: 'include',
+      })
       user.value = data.user
       return data.user ?? null
     }
@@ -39,6 +41,7 @@ export function useAuth() {
       const data = await $fetch<{ success: boolean; user: AuthUser }>('/api/auth/login', {
         method: 'POST',
         body: { username, password },
+        credentials: 'include',
       })
       if (!data.success) {
         throw new Error('登录失败')

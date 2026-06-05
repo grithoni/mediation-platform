@@ -5,7 +5,7 @@
       <div class="text-center mb-8">
         <div class="flex items-center justify-center gap-2.5 mb-3">
           <UIcon name="i-lucide-scale" class="w-6 h-6 text-[#1e3a5f] dark:text-gray-400" />
-          <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的争议解决专家</span>
+          <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的调解专家</span>
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">mediator sign in</p>
       </div>

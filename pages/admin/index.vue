@@ -10,8 +10,9 @@
       <div class="text-center mb-8">
         <div class="flex items-center justify-center gap-2.5 mb-3">
           <UIcon name="i-lucide-scale" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
-          <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的争议解决专家</span>
+           <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的争议解决专家</span>
         <p class="text-sm text-gray-500 dark:text-gray-400 font-mono mt-1">Always Online Dispute Resolution Expert</p>
+        <p class="text-sm text-gray-400 dark:text-gray-500 font-mono mt-2">调解员工作台 · Mediator Workstation</p>
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">mediator sign in</p>
       </div>
@@ -36,67 +37,93 @@
 
   <!-- Main content when authenticated -->
   <div v-else class="flex-1 flex min-h-0">
-    <!-- Left: Case List -->
-    <div class="w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-950">
-      <!-- Search & Actions -->
-      <div class="p-4 border-b border-gray-200 dark:border-gray-800 space-y-3">
-        <UInput v-model="searchQuery" placeholder="搜索案件编号..." icon="i-lucide-search" size="sm" />
-        <UButton icon="i-lucide-plus" size="lg" block class="bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100" @click="showCreateDialog = true">
-          新建案件
-        </UButton>
+    <!-- Left: Collapsible Sidebar -->
+    <div class="w-72 shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-950">
+      <!-- Section 1: 案件列表 -->
+      <div class="border-b border-gray-200 dark:border-gray-800">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.cases = !sidebarOpen.cases">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">📋 案件列表</span>
+          <UIcon :name="sidebarOpen.cases ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+        </button>
+        <div v-if="sidebarOpen.cases" class="px-2 pb-2 space-y-1">
+          <UInput v-model="searchQuery" placeholder="搜索案件编号..." icon="i-lucide-search" size="sm" class="mb-2" />
+          <div v-if="casesLoading" class="flex items-center justify-center py-8">
+            <UIcon name="i-lucide-loader-2" class="w-5 h-5 text-blue-400 animate-spin" />
+          </div>
+          <template v-else>
+            <button v-for="c in filteredCases" :key="c.id"
+              class="w-full text-left px-3 py-2 rounded-md transition-colors border text-sm"
+              :class="selectedCaseId === c.id ? 'bg-blue-50 dark:bg-blue-950 border-blue-200' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:bg-gray-50'"
+              @click="selectCase(c.id)">
+              <div class="font-mono text-xs text-gray-400 mb-0.5">{{ c.id }}</div>
+              <div class="font-medium text-gray-900 dark:text-white truncate">{{ c.title }}</div>
+              <div class="text-xs text-gray-500 mt-0.5">{{ c.partyAName }} vs {{ c.partyBName }}</div>
+            </button>
+            <div v-if="!casesLoading && filteredCases.length === 0" class="py-8 text-center">
+              <p class="text-xs text-gray-400">暂无案件</p>
+            </div>
+          </template>
+        </div>
       </div>
 
-      <!-- Case Cards -->
-      <div class="flex-1 overflow-y-auto p-2 space-y-1">
-        <div v-if="casesLoading" class="flex items-center justify-center py-16">
-          <UIcon name="i-lucide-loader-2" class="w-6 h-6 text-blue-400 dark:text-blue-500 animate-spin" />
+      <!-- Section 2: 近期对话 -->
+      <div class="border-b border-gray-200 dark:border-gray-800">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.history = !sidebarOpen.history">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">💬 近期对话</span>
+          <UIcon :name="sidebarOpen.history ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+        </button>
+        <div v-if="sidebarOpen.history" class="px-2 pb-2">
+          <div class="text-xs text-gray-400 py-4 text-center">绑定案件后将在此显示对话记录</div>
         </div>
-        <template v-else>
-          <button
-            v-for="c in filteredCases"
-            :key="c.id"
-            class="w-full text-left p-3 rounded-md transition-colors border"
-            :class="selectedCaseId === c.id
-              ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800'
-              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'"
-            @click="selectCase(c.id)"
-          >
-            <div class="text-sm font-mono text-gray-400 dark:text-gray-500 mb-1">{{ c.id }}</div>
-            <div class="text-base font-medium text-gray-900 dark:text-white truncate">{{ c.title }}</div>
-            <div class="flex items-center gap-2 mt-1.5">
-              <UBadge :color="getStatusColor(c.status)" variant="soft" size="xs">
-                {{ getStatusLabel(c.status) }}
-              </UBadge>
-              <span class="text-xs text-gray-400 dark:text-gray-500 font-mono">{{ formatDate(c.createdAt) }}</span>
-            </div>
-          </button>
-          <div v-if="!casesLoading && filteredCases.length === 0" class="py-16 text-center">
-            <UIcon name="i-lucide-inbox" class="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-            <p class="text-sm text-gray-400 dark:text-gray-500">暂无案件</p>
-          </div>
-        </template>
+      </div>
+
+      <!-- Section 3: 设置 -->
+      <div class="border-b border-gray-200 dark:border-gray-800">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.settings = !sidebarOpen.settings">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">⚙️ 设置</span>
+          <UIcon :name="sidebarOpen.settings ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+        </button>
+        <div v-if="sidebarOpen.settings" class="px-4 py-3 text-xs text-gray-500 space-y-2">
+          <div>当前用户：{{ auth.user.value?.name }}</div>
+          <div>角色：{{ auth.user.value?.role === 'admin' ? '管理员' : '调解员' }}</div>
+          <UButton icon="i-lucide-plus" size="sm" block variant="soft" @click="showCreateDialog = true">新建案件</UButton>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="mt-auto p-3 border-t border-gray-200 dark:border-gray-800">
+        <UButton icon="i-lucide-log-out" size="sm" block variant="ghost" @click="auth.logout()">登出</UButton>
       </div>
     </div>
 
-    <!-- Right: Empty or Chat -->
-    <div class="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900">
-      <div v-if="!selectedCaseId" class="flex-1 flex items-center justify-center">
-        <div class="text-center">
-          <UIcon name="i-lucide-message-circle" class="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">调解员工作台</h2>
-          <p class="text-sm text-gray-400 dark:text-gray-500 font-mono">选择左侧案件开始对话</p>
+    <!-- Right: Case Detail or Empty -->
+    <div v-if="!selectedCaseId" class="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
+      <div class="text-center">
+        <UIcon name="i-lucide-scale" class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">调解员工作台</h2>
+        <p class="text-sm text-gray-400 dark:text-gray-500">选择左侧案件开始工作</p>
+      </div>
+    </div>
+
+    <!-- Right: Case Detail when selected -->
+    <div v-else class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900">
+      <!-- Case Info Bar -->
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 text-sm">
+            <span class="font-mono text-blue-600 dark:text-blue-400">{{ selectedCaseId }}</span>
+            <span class="text-gray-900 dark:text-white font-medium">{{ selectedCaseTitle }}</span>
+            <UBadge :color="getStatusColor(selectedCaseStatus)" variant="soft" size="xs">{{ getStatusLabel(selectedCaseStatus) }}</UBadge>
+          </div>
+          <span class="text-xs text-gray-400">{{ selectedCaseParties }}</span>
         </div>
       </div>
-      <div v-else class="flex-1 flex flex-col min-h-0">
-        <!-- Chat -->
+
+      <!-- TOP: Chat Dialog (flex-1) -->
+      <div class="flex-1 flex flex-col min-h-0">
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
           <template v-if="selectedMessages.length">
-            <div
-              v-for="msg in selectedMessages"
-              :key="msg.id"
-              class="flex"
-              :class="msg.senderType === 'mediator' ? 'justify-end' : 'justify-start'"
-            >
+            <div v-for="msg in selectedMessages" :key="msg.id" class="flex" :class="msg.senderType === 'mediator' ? 'justify-end' : 'justify-start'">
               <div class="max-w-[75%] rounded-lg px-3 py-2" :class="bubbleClass(msg.senderType)">
                 <div class="text-xs font-medium mb-1 opacity-60">{{ senderLabel(msg) }}</div>
                 <div class="text-base whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
@@ -105,19 +132,78 @@
             </div>
           </template>
           <div v-else class="flex-1 flex items-center justify-center">
-            <div class="text-center">
-              <UIcon name="i-lucide-message-circle" class="w-10 h-10 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-              <p class="text-sm text-gray-400 dark:text-gray-500">暂无对话记录</p>
-            </div>
+            <div class="text-center"><p class="text-sm text-gray-400">暂无对话记录</p></div>
           </div>
         </div>
-
-        <!-- Quick Input -->
+        <!-- Chat Input -->
         <div class="border-t border-gray-200 dark:border-gray-800 p-3">
           <form @submit.prevent="sendQuickMessage" class="flex gap-2">
             <UInput v-model="quickMessage" placeholder="输入消息..." class="flex-1" size="sm" />
             <UButton type="submit" icon="i-lucide-send" size="lg" :disabled="!quickMessage.trim()" class="bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100" />
           </form>
+        </div>
+      </div>
+
+      <!-- BOTTOM: Skills (left) + Scripts (right), collapsible -->
+      <div class="shrink-0 border-t border-gray-200 dark:border-gray-800 h-[35%] min-h-[200px] flex">
+        <!-- Bottom-Left: Skills List -->
+        <div class="w-44 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-3 overflow-y-auto">
+          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">技能工具</div>
+          <button
+            class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors mb-1"
+            :class="activeSkill === 'first-talk' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'"
+            @click="openSkill('first-talk')"
+          >
+            💬 首轮沟通话术
+          </button>
+          <div class="text-xs text-gray-400 px-3 py-2">更多开发中...</div>
+        </div>
+
+        <!-- Bottom-Right: Sequential Script Wizard -->
+        <div class="flex-1 overflow-y-auto bg-blue-50/50 dark:bg-blue-950/10">
+          <div v-if="!activeSkill" class="flex items-center justify-center h-full">
+            <p class="text-xs text-gray-400">点击左侧技能查看推荐话术</p>
+          </div>
+          <div v-else-if="skillLoading" class="flex items-center justify-center h-full gap-2 text-sm text-blue-500">
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 正在生成...
+          </div>
+          <div v-else class="p-4 flex flex-col h-full">
+            <!-- Header: step indicator -->
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-medium text-blue-700 dark:text-blue-300">智能分析提问 第{{ currentScriptIndex + 1 }}步 · {{ skillScripts[currentScriptIndex]?.stage }}</span>
+              <button class="text-blue-400 hover:text-blue-600 text-xs" @click="activeSkill = null">✕</button>
+            </div>
+
+            <!-- Progress -->
+            <div class="flex gap-1 mb-3">
+              <div v-for="(_, i) in skillScripts" :key="i" class="flex-1 h-1.5 rounded-full"
+                :class="i <= currentScriptIndex ? 'bg-blue-500' : i === skillScripts.length - 1 && skillLoading ? 'bg-blue-300 animate-pulse' : 'bg-gray-200 dark:bg-gray-700'"></div>
+            </div>
+
+            <!-- Stage label -->
+            <div class="text-xs text-blue-500 dark:text-blue-400 font-medium mb-2 uppercase tracking-wide">{{ skillScripts[currentScriptIndex]?.stage }}</div>
+
+            <!-- Current script content -->
+            <div class="flex-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
+              <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ skillScripts[currentScriptIndex]?.content }}</div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                class="px-3 py-1.5 text-xs rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
+                :disabled="currentScriptIndex === 0"
+                @click="prevScript"
+              >← 上一步</button>
+              <div class="flex gap-2">
+                <UButton size="xs" variant="soft" color="blue" @click="useCurrentScript">使用此话术</UButton>
+                <button
+                  class="px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
+                  @click="nextScript"
+                >跳过 →</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -221,6 +307,94 @@ const cases = ref<CaseItem[]>([])
 const allMessages = ref<MessageItem[]>([])
 const chat = useChat(computed(() => selectedCaseId.value || ''))
 
+// Sidebar accordion state
+const sidebarOpen = reactive({ cases: true, history: false, settings: false })
+
+// Skill state
+const activeSkill = ref<'first-talk' | null>(null)
+const skillLoading = ref(false)
+const skillError = ref('')
+const skillScripts = ref<Array<{ stage: string; content: string }>>([])
+const currentScriptIndex = ref(0)
+
+async function generateNextScript() {
+  skillLoading.value = true
+  skillError.value = ''
+  try {
+    // Build context: previous scripts + conversation summary
+    const prevStages = skillScripts.value.map((s, i) => `第${i + 1}轮(${s.stage}): ${s.content.substring(0, 100)}`).join('\n')
+    const msgCount = selectedMessages.value.length
+    const lastMsgs = selectedMessages.value.slice(-3).map(m => `[${m.senderName || m.senderType}]: ${m.content.substring(0, 200)}`).join('\n')
+
+    const stageNames = ['开场白', '确认诉求', '引导沟通', '聚焦议题', '总结收尾']
+    const nextStage = stageNames[skillScripts.value.length] || '下一步提问'
+
+    const prompt = `你是一个商事调解专家。当前案件: ${selectedCaseId.value}。
+现在的对话人是调解员，对方是当事人 ${selectedCaseParties.value.split(' vs ')[0] || '当事人'}。
+
+## 已完成的话术
+${prevStages || '（首次沟通）'}
+
+## 最近对话记录
+${lastMsgs || '（尚无对话）'}
+
+## 当前进度: 第 ${skillScripts.value.length + 1} 步 - ${nextStage}
+
+请根据对话上下文，生成下一个沟通话术。只输出纯文本话术内容（不要JSON、不要标记、不要解释），以适合直接发送给当事人的口语化表达。`
+
+    const resp = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/ai', {
+      method: 'POST',
+      body: {
+        caseId: selectedCaseId.value,
+        message: prompt,
+        senderIdentifier: 'mediator',
+        senderName: '调解员',
+        skipSave: true,
+      },
+    })
+    if (resp?.data?.content) {
+      const text = resp.data.content.replace(/^["'\s]+|["'\s]+$/g, '').trim()
+      skillScripts.value.push({ stage: nextStage, content: text })
+      currentScriptIndex.value = skillScripts.value.length - 1
+    }
+  } catch (err: any) {
+    skillError.value = err?.message || '生成失败'
+  } finally {
+    skillLoading.value = false
+  }
+}
+
+function nextScript() {
+  if (skillLoading.value) return
+  if (currentScriptIndex.value < skillScripts.value.length - 1) {
+    currentScriptIndex.value++
+  } else {
+    generateNextScript()
+  }
+}
+
+function useCurrentScript() {
+  const script = skillScripts.value[currentScriptIndex.value]
+  if (script) {
+    copyToInput(script.content)
+  }
+  // After using, give the mediator time to send. Next click on "跳过" generates the next.
+}
+
+function prevScript() {
+  if (currentScriptIndex.value > 0) {
+    currentScriptIndex.value--
+  }
+}
+
+// Case detail computed
+const selectedCaseTitle = computed(() => cases.value.find(c => c.id === selectedCaseId.value)?.title || '')
+const selectedCaseStatus = computed(() => cases.value.find(c => c.id === selectedCaseId.value)?.status || '')
+const selectedCaseParties = computed(() => {
+  const c = cases.value.find(c => c.id === selectedCaseId.value)
+  return c ? `${c.partyAName} vs ${c.partyBName}` : ''
+})
+
 const newCase = reactive({
   title: '',
   description: '',
@@ -254,12 +428,20 @@ async function handleLogin() {
 async function fetchCases() {
   casesLoading.value = true
   try {
-    const data = await $fetch<{ success: boolean; data: CaseItem[] }>('/api/cases')
+    const data = await $fetch<{ success: boolean; data: CaseItem[]; currentMediatorId?: string; currentMediatorRole?: string }>('/api/cases', {
+      credentials: 'include',
+    })
     if (data?.data) {
-      cases.value = data.data
+      // Filter: admin sees all, mediator sees only their bound cases
+      if (data.currentMediatorRole === 'admin' || !data.currentMediatorId) {
+        cases.value = data.data
+      } else {
+        cases.value = data.data.filter(c => c.mediatorId === data.currentMediatorId)
+      }
     }
-  } catch {
-    // silent
+  } catch (err: any) {
+    console.error('fetchCases failed:', err.statusCode, err.message)
+    cases.value = []
   } finally {
     casesLoading.value = false
   }
@@ -276,19 +458,41 @@ const selectedMessages = computed(() => {
   return allMessages.value.filter(m => m.caseId === selectedCaseId.value)
 })
 
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+function startPolling() {
+  stopPolling()
+  if (!selectedCaseId.value) return
+  pollTimer = setInterval(async () => {
+    try {
+      const resp = await $fetch<{ success: boolean; data: MessageItem[] }>(`/api/chat/messages/${selectedCaseId.value}`, {
+        credentials: 'include',
+      })
+      if (resp?.data) {
+        const otherMsgs = allMessages.value.filter(m => m.caseId !== selectedCaseId.value)
+        allMessages.value = [...otherMsgs, ...resp.data.map(m => ({ ...m, caseId: selectedCaseId.value! }))]
+      }
+    } catch {}
+  }, 2000)
+}
+
 async function selectCase(id: string) {
   selectedCaseId.value = id
-  chat.connectWebSocket(undefined, 'mediator', auth.user.value?.id)
+  startPolling()
   try {
-    const resp = await $fetch<{ success: boolean; data: { messages: MessageItem[] } }>(`/api/cases/${id}`)
+    const resp = await $fetch<{ success: boolean; data: { messages: MessageItem[] } }>(`/api/cases/${id}`, {
+      credentials: 'include',
+    })
     if (resp?.data?.messages) {
       const otherMsgs = allMessages.value.filter(m => m.caseId !== id)
       const newMsgs = resp.data.messages.map(m => ({ ...m, caseId: id }))
       allMessages.value = [...otherMsgs, ...newMsgs]
     }
-  } catch {
-    // silent
-  }
+  } catch {}
 }
 
 async function sendQuickMessage() {
@@ -296,17 +500,97 @@ async function sendQuickMessage() {
   if (!text) return
   quickMessage.value = ''
 
-  const msg: MessageItem = {
-    id: `mediator-${Date.now()}`,
-    caseId: selectedCaseId.value!,
-    senderType: 'mediator',
-    senderId: auth.user.value?.id,
-    senderName: auth.user.value?.name || '调解员',
-    content: text,
-    createdAt: new Date().toISOString(),
+  try {
+    await $fetch('/api/chat/messages', {
+      method: 'POST',
+      body: {
+        caseId: selectedCaseId.value,
+        content: text,
+        senderType: 'mediator',
+        senderId: auth.user.value?.id,
+        senderName: auth.user.value?.name || '调解员',
+      },
+      credentials: 'include',
+    })
+  } catch {}
+}
+
+// ============================================================
+// Skill: 首轮沟通话术
+// ============================================================
+async function openSkill(name: 'first-talk') {
+  activeSkill.value = name
+  skillLoading.value = true
+  skillError.value = ''
+  skillScripts.value = []
+  currentScriptIndex.value = 0
+
+  // Generate first script only
+  try {
+    await generateNextScript()
+  } catch (err: any) {
+    skillError.value = err?.message || '生成失败'
+  } finally {
+    skillLoading.value = false
   }
-  allMessages.value.push(msg)
-  chat.sendMessage(text)
+}
+
+function buildSkillPrompt(): string {
+  return `你是一个商事调解专家。现在需要为案件 ${selectedCaseId.value} 生成首轮沟通话术。
+
+⚠️ 重要约束：首轮沟通只针对一方当事人（申请人${cases.value.find(c => c.id === selectedCaseId.value)?.partyAName || '甲方'}），不要包含对双方的表述，不要说"你们双方"。
+
+## 一、阶段目标
+1. 建立中立信任与程序共识（仅对该方当事人）
+2. 拆解争议：事实/法律/利益/情绪
+3. 确认调解范围、边界与排除项
+
+## 二、工作流
+1. 当事人意图识别、用户画像
+2. 冲突特征分析
+3. 心理引导、情绪疏导
+
+## 三、方法机制
+1. 控场：定规则、防打断、控情绪、控时间
+2. 中立化：不站队、不评价立场、不建议方案
+3. 聚焦：从情绪拉回事实与议题
+4. 过滤：剔除无关诉求、明确核心争点
+5. 现实检验：评估诉讼成本与调解收益
+
+## 四、核心技能
+1. 中立开场话术、程序结构化
+2. 积极倾听、复述、总结
+3. 开放式提问、澄清式提问
+4. 情绪识别、温和控场、重构语言
+5. 事实与观点区分，议题框架化
+
+## 五、输出格式
+请用以下JSON格式输出3-5个话术建议，全部针对该方当事人：
+[
+  {"stage": "开场白", "content": "（以\"您好，我是调解员...\"开头，只与该当事人对话）"},
+  {"stage": "确认诉求", "content": "..."},
+  {"stage": "引导沟通", "content": "..."}
+]
+
+禁止出现的表述：你们双方、对方、另一方、两方、两边`
+}
+
+function parseScriptStages(text: string): Array<{ stage: string; content: string }> {
+  try {
+    // Try to find JSON in the response
+    const match = text.match(/\[[\s\S]*\]/)
+    if (match) {
+      return JSON.parse(match[0])
+    }
+    // Fallback: just show as single item
+    return [{ stage: '话术建议', content: text }]
+  } catch {
+    return [{ stage: '话术建议', content: text }]
+  }
+}
+
+function copyToInput(text: string) {
+  quickMessage.value = text
 }
 
 function senderLabel(msg: { senderType: string; senderName?: string | null }) {

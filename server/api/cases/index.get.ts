@@ -4,24 +4,16 @@ import { cases, mediators } from '../../database/schema'
 import { requireAuth } from '../../middleware/auth'
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event)
-
+  const mediator = requireAuth(event)
   const db = getDb()
 
   const allCases = db
     .select({
-      id: cases.id,
-      title: cases.title,
-      description: cases.description,
-      partyAName: cases.partyAName,
-      partyBName: cases.partyBName,
-      partyAContact: cases.partyAContact,
-      partyBContact: cases.partyBContact,
-      status: cases.status,
-      mediatorId: cases.mediatorId,
-      accessCode: cases.accessCode,
-      createdAt: cases.createdAt,
-      updatedAt: cases.updatedAt,
+      id: cases.id, title: cases.title, description: cases.description,
+      partyAName: cases.partyAName, partyBName: cases.partyBName,
+      partyAContact: cases.partyAContact, partyBContact: cases.partyBContact,
+      status: cases.status, mediatorId: cases.mediatorId, accessCode: cases.accessCode,
+      createdAt: cases.createdAt, updatedAt: cases.updatedAt,
       mediatorName: mediators.name,
     })
     .from(cases)
@@ -29,5 +21,11 @@ export default defineEventHandler(async (event) => {
     .orderBy(desc(cases.createdAt))
     .all()
 
-  return { success: true, data: allCases }
+  // Return all cases + current mediator ID for frontend filtering
+  return {
+    success: true,
+    data: allCases,
+    currentMediatorId: mediator.id,
+    currentMediatorRole: mediator.role,
+  }
 })
