@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
       id: cases.id, title: cases.title, description: cases.description,
       partyAName: cases.partyAName, partyBName: cases.partyBName,
       partyAContact: cases.partyAContact, partyBContact: cases.partyBContact,
-      status: cases.status, mediatorId: cases.mediatorId, accessCode: cases.accessCode,
+      status: cases.status, phase: cases.phase, mediatorId: cases.mediatorId, accessCode: cases.accessCode,
       createdAt: cases.createdAt, updatedAt: cases.updatedAt,
       mediatorName: mediators.name,
     })

@@ -26,20 +26,7 @@ export async function seed() {
     role: 'admin',
   }).run()
 
-  // Create a test mediator
-  const mediatorId = uuid()
-  const mediatorHash = await bcrypt.hash('123', 10)
-
-  db.insert(mediators).values({
-    id: mediatorId,
-    name: '张调解员',
-    username: 'zhangtiaojieyuan',
-    email: 'mediator@mediation.com',
-    passwordHash: mediatorHash,
-    role: 'mediator',
-  }).run()
-
-  // Create sample cases
+  // Create sample cases (no pre-bound mediator — will be bound via party UI)
   const sampleCases = [
     {
       id: 'CM-2025-0001',
@@ -48,8 +35,7 @@ export async function seed() {
       partyAName: '甲公司',
       partyBName: '乙公司',
       accessCode: 'ACC001',
-      mediatorId,
-      status: 'active' as const,
+      status: 'pending' as const,
     },
     {
       id: 'CM-2025-0002',
@@ -58,7 +44,6 @@ export async function seed() {
       partyAName: '张先生',
       partyBName: '李先生',
       accessCode: 'ACC002',
-      mediatorId,
       status: 'pending' as const,
     },
     {
@@ -78,7 +63,6 @@ export async function seed() {
 
   console.log('Seed data created successfully!')
   console.log('Admin login: guanliyuan / 123')
-  console.log('Mediator login: zhangtiaojieyuan / 123')
 }
 
 // Run directly

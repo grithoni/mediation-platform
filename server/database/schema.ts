@@ -102,6 +102,16 @@ export const sessions = sqliteTable('sessions', {
 // ============================================================
 // 案件动态分析文件表（Agent 自动生成 + 持续更新）
 // ============================================================
+export const savedConversations = sqliteTable('saved_conversations', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull().references(() => cases.id),
+  mediatorId: text('mediator_id').notNull().references(() => mediators.id),
+  title: text('title').notNull(),
+  messagesJson: text('messages_json').notNull(),
+  messageCount: integer('message_count').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
+
 export const caseDynamicFiles = sqliteTable('case_dynamic_files', {
   id: text('id').primaryKey(), // same as case id
   caseId: text('case_id').notNull().references(() => cases.id),
