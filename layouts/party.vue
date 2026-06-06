@@ -1,6 +1,9 @@
 <script setup lang="ts">
 const colorMode = useColorMode()
-const isDark = computed(() => colorMode.value === 'dark')
+const isDark = computed({
+  get: () => colorMode.value === 'dark',
+  set: (v) => { colorMode.preference = v ? 'dark' : 'light' },
+})
 
 function toggleTheme() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
