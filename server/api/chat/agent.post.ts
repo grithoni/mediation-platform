@@ -447,6 +447,7 @@ ${message}
         senderId: senderIdentifier || 'unknown',
         senderName: senderName || senderIdentifier || '当事人',
         content: message,
+        visibility: 'private', // AI agent private conversation
         createdAt: new Date(),
       } as any)
       .run()
@@ -482,6 +483,7 @@ ${message}
                   senderId: 'agent',
                   senderName: '调解智能体',
                   content: progress.content,
+                  visibility: 'private', // AI agent private conversation
                   createdAt: new Date(),
                 } as any)
                 .run()

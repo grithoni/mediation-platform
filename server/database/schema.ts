@@ -69,6 +69,7 @@ export const messages = sqliteTable('messages', {
   senderName: text('sender_name'),
   content: text('content').notNull(),
   metadata: text('metadata'), // JSON: AI settings, attachments, etc.
+  visibility: text('visibility').notNull().default('shared'), // 'shared' (visible to mediator) | 'private' (party-AI only)
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 

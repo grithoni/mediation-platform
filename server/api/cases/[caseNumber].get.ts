@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { cases, messages, documents, sessions } from '../../database/schema'
@@ -21,10 +21,11 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, message: '案件不存在' })
     }
 
+    // Mediator view: only see shared messages (party↔mediator), hide party↔AI private chat
     const caseMessages = db
       .select()
       .from(messages)
-      .where(eq(messages.caseId, caseNumber))
+      .where(and(eq(messages.caseId, caseNumber), ne(messages.visibility, 'private')))
       .orderBy(messages.createdAt)
       .all()
 

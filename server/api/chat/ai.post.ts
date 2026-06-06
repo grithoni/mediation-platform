@@ -115,7 +115,8 @@ export default defineEventHandler(async (event) => {
       senderType: 'party', senderId: body.senderIdentifier,
       senderName: body.senderName || body.senderIdentifier,
       content: body.message, createdAt: now,
-    }).run()
+      visibility: 'private', // party→AI messages are private, hidden from mediator
+    } as any).run()
   }
 
   const history = db.select().from(messages)
@@ -157,7 +158,8 @@ export default defineEventHandler(async (event) => {
       id: aiMessageId, caseId: body.caseId,
       senderType: 'ai', senderId: 'mediation-ai', senderName: '调解AI助手',
       content: aiContent, createdAt: aiCreatedAt,
-    }).run()
+      visibility: 'private', // AI responses are private, hidden from mediator
+    } as any).run()
   }
 
   return {
