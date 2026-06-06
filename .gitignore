@@ -11,6 +11,11 @@ dist
 *.sqlite
 *.sqlite-journal
 
+# KB model & cache (large, regenerable)
+server/chroma_data
+server/fastembed_cache
+server/kb/__pycache__
+
 # Uploads
 uploads/*
 !uploads/.gitkeep

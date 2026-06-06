@@ -15,7 +15,8 @@
     "db:migrate": "npx tsx server/database/migrate.ts",
     "db:seed": "npx tsx server/database/seed.ts",
     "db:seed-mediators": "npx tsx server/database/seed-mediators.ts",
-    "db:seed-cases": "npx tsx server/database/seed-cases.ts"
+    "db:seed-cases": "npx tsx server/database/seed-cases.ts",
+    "kb": "python3 server/kb/server.py 8700"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",

@@ -41,7 +41,7 @@
     <div class="w-72 shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-950">
       <!-- Section 1: 案件列表 -->
       <div class="border-b border-gray-200 dark:border-gray-800">
-        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.cases = !sidebarOpen.cases">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.cases = !sidebarOpen.cases; if(sidebarOpen.cases) rightMode = 'cases-list'">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">📋 案件列表</span>
           <UIcon :name="sidebarOpen.cases ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
         </button>
@@ -66,9 +66,34 @@
         </div>
       </div>
 
-      <!-- Section 2: 近期对话 -->
+      <!-- Section 2: 知识库 -->
       <div class="border-b border-gray-200 dark:border-gray-800">
-        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.history = !sidebarOpen.history">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.kb = !sidebarOpen.kb">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">📚 知识库</span>
+          <UIcon :name="sidebarOpen.kb ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+        </button>
+        <div v-if="sidebarOpen.kb" class="px-2 pb-2 grid grid-cols-3 gap-1">
+          <button class="px-2 py-1.5 text-xs rounded border transition-colors"
+            :class="rightMode === 'kb-upload' ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 text-blue-700' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-600 hover:bg-gray-50'"
+            @click="rightMode = 'kb-upload'">
+            📤 上传
+          </button>
+          <button class="px-2 py-1.5 text-xs rounded border transition-colors"
+            :class="rightMode === 'kb-view' ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 text-blue-700' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-600 hover:bg-gray-50'"
+            @click="rightMode = 'kb-view'; loadKbList()">
+            👁️ 查看
+          </button>
+          <button class="px-2 py-1.5 text-xs rounded border transition-colors"
+            :class="rightMode === 'kb-search' ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 text-blue-700' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-600 hover:bg-gray-50'"
+            @click="rightMode = 'kb-search'">
+            🔍 搜索
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 3: 近期对话 -->
+      <div class="border-b border-gray-200 dark:border-gray-800">
+        <button class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-800" @click="sidebarOpen.history = !sidebarOpen.history; if(sidebarOpen.history) rightMode = 'history'">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">💬 近期对话</span>
           <UIcon :name="sidebarOpen.history ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
         </button>
@@ -96,8 +121,133 @@
       </div>
     </div>
 
-    <!-- Right: Case Detail or Empty -->
-    <div v-if="!selectedCaseId" class="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
+    <!-- Right: KB Upload -->
+    <div v-if="rightMode === 'kb-upload' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-upload" class="w-5 h-5 text-blue-600" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">上传文档</span>
+        <span class="text-xs text-gray-400 ml-auto">仅支持 .md 格式</span>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 space-y-4">
+        <div class="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8 text-center bg-gray-50 dark:bg-gray-950">
+          <UIcon name="i-lucide-file-up" class="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">点击下方按钮选择 .md 文档</p>
+          <input ref="kbFileInput" type="file" accept=".md,text/markdown" class="hidden" @change="onKbFileSelected" />
+          <UButton icon="i-lucide-folder-open" color="primary" @click="kbFileInput?.click()">选择 .md 文件</UButton>
+        </div>
+        <div v-if="kbUploadFile" class="bg-blue-50 dark:bg-blue-950 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ kbUploadFile.name }}</div>
+            <div class="text-xs text-gray-500">{{ (kbUploadFile.size / 1024).toFixed(1) }} KB</div>
+          </div>
+          <UButton size="sm" :loading="kbUploading" @click="uploadKbFile">上传</UButton>
+        </div>
+        <UAlert v-if="kbUploadMsg" :color="kbUploadOk ? 'success' : 'error'" variant="soft" :title="kbUploadMsg" />
+      </div>
+    </div>
+
+    <!-- Right: KB View -->
+    <div v-if="rightMode === 'kb-view' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-library" class="w-5 h-5 text-blue-600" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">知识库列表</span>
+        <span class="text-xs text-gray-400 ml-auto">{{ kbList.length }} 个文档 · {{ kbStats }}</span>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+        <div v-if="kbListLoading" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
+          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载中...
+        </div>
+        <div v-else-if="kbList.length">
+          <div v-for="doc in kbList" :key="doc.path" class="bg-gray-50 dark:bg-gray-950 rounded-lg p-3 border border-gray-200 dark:border-gray-800 flex items-center gap-3">
+            <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500 shrink-0" />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ doc.path.split('/').pop() }}</div>
+              <div class="text-xs text-gray-400 font-mono truncate">{{ doc.path }}</div>
+            </div>
+            <div class="text-xs text-gray-500 shrink-0">{{ doc.chunks }} 块</div>
+          </div>
+        </div>
+        <div v-else class="flex items-center justify-center h-full">
+          <p class="text-sm text-gray-400">知识库为空</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: KB Search -->
+    <div v-if="rightMode === 'kb-search' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-search" class="w-5 h-5 text-blue-600" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">知识库检索</span>
+        <span class="text-xs text-gray-400 ml-auto">{{ kbResults.length }} 条结果</span>
+      </div>
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+        <form @submit.prevent="searchKB" class="flex gap-2">
+          <UInput v-model="kbQuery" placeholder="输入关键词搜索法律知识..." icon="i-lucide-search" size="md" class="flex-1" />
+          <UButton type="submit" :loading="kbSearching" :disabled="!kbQuery.trim()" icon="i-lucide-search">搜索</UButton>
+        </form>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-3">
+        <div v-if="kbSearching" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
+          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 搜索中...
+        </div>
+        <div v-else-if="kbResults.length">
+          <div v-for="(r, i) in kbResults" :key="i" class="bg-gray-50 dark:bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono text-blue-600 dark:text-blue-400">{{ r.path.split('/').pop()?.replace('.md','') }}</span>
+              <span class="text-xs text-gray-400">相关度: {{ (r.score * 100).toFixed(0) }}%</span>
+            </div>
+            <div class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{{ r.content }}</div>
+          </div>
+        </div>
+        <div v-else class="flex items-center justify-center h-full">
+          <p class="text-sm text-gray-400">输入关键词搜索法律知识库（{{ kbStats }}）</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: History List -->
+    <div v-if="rightMode === 'history' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-message-square" class="w-5 h-5 text-blue-600" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">近期对话</span>
+      </div>
+      <div class="flex-1 flex items-center justify-center">
+        <p class="text-sm text-gray-400">绑定案件后将在此显示对话记录</p>
+      </div>
+    </div>
+
+    <!-- Right: Cases List (when no case selected) -->
+    <div v-if="rightMode === 'cases-list' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-folder" class="w-5 h-5 text-blue-600" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">我的案件</span>
+        <span class="text-xs text-gray-400 ml-auto">{{ filteredCases.length }} 个案件</span>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+        <div v-if="casesLoading" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
+          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载中...
+        </div>
+        <div v-else-if="filteredCases.length">
+          <div v-for="c in filteredCases" :key="c.id"
+            class="bg-gray-50 dark:bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-800 cursor-pointer hover:border-blue-300 transition-colors"
+            @click="selectCase(c.id)">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="font-mono text-xs text-blue-600">{{ c.id }}</span>
+              <span class="text-xs text-gray-400">{{ c.phase }}</span>
+            </div>
+            <div class="text-sm font-medium text-gray-900 dark:text-white mb-1">{{ c.title }}</div>
+            <div class="text-xs text-gray-500">{{ c.partyAName }} vs {{ c.partyBName }}</div>
+          </div>
+        </div>
+        <div v-else class="flex items-center justify-center h-full">
+          <p class="text-sm text-gray-400">暂无案件</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Empty State -->
+    <div v-if="!selectedCaseId && rightMode === ''" class="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
       <div class="text-center">
         <UIcon name="i-lucide-scale" class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">调解员工作台</h2>
@@ -106,7 +256,7 @@
     </div>
 
     <!-- Right: Case Detail when selected -->
-    <div v-else class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900">
+    <div v-else-if="selectedCaseId" class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900">
       <!-- Case Info Bar -->
       <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
         <div class="flex items-center justify-between">
@@ -308,7 +458,23 @@ const allMessages = ref<MessageItem[]>([])
 const chat = useChat(computed(() => selectedCaseId.value || ''))
 
 // Sidebar accordion state
-const sidebarOpen = reactive({ cases: true, history: false, settings: false })
+const sidebarOpen = reactive({ cases: true, history: false, settings: false, kb: false })
+
+// Right panel mode: '' | 'cases-list' | 'case-detail' | 'kb-upload' | 'kb-view' | 'kb-search' | 'history' | 'settings'
+const rightMode = ref<string>('cases-list')
+
+// KB state
+const kbQuery = ref('')
+const kbSearching = ref(false)
+const kbResults = ref<Array<{ path: string; content: string; score: number }>>([])
+const kbStats = ref('7569 条记录')
+const kbList = ref<Array<{ path: string; rel_path: string; chunks: number }>>([])
+const kbListLoading = ref(false)
+const kbFileInput = ref<HTMLInputElement | null>(null)
+const kbUploadFile = ref<File | null>(null)
+const kbUploading = ref(false)
+const kbUploadMsg = ref('')
+const kbUploadOk = ref(false)
 
 // Skill state
 const activeSkill = ref<'first-talk' | null>(null)
@@ -482,6 +648,7 @@ function startPolling() {
 
 async function selectCase(id: string) {
   selectedCaseId.value = id
+  rightMode.value = 'case-detail'
   startPolling()
   try {
     const resp = await $fetch<{ success: boolean; data: { messages: MessageItem[] } }>(`/api/cases/${id}`, {
@@ -591,6 +758,74 @@ function parseScriptStages(text: string): Array<{ stage: string; content: string
 
 function copyToInput(text: string) {
   quickMessage.value = text
+}
+
+// ============================================================
+// KB Search
+// ============================================================
+async function searchKB() {
+  const q = kbQuery.value.trim()
+  if (!q) return
+  rightMode.value = 'kb-search'
+  kbSearching.value = true
+  kbResults.value = []
+  try {
+    const resp = await $fetch<{ results: Array<{ path: string; content: string; score: number }> }>('http://localhost:8700/search', {
+      method: 'POST',
+      body: { query: q, top_k: 5 },
+    })
+    if (resp?.results) kbResults.value = resp.results
+  } catch {}
+  kbSearching.value = false
+}
+
+async function loadKbList() {
+  kbListLoading.value = true
+  kbList.value = []
+  try {
+    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }> }>('http://localhost:8700/list', {
+      params: { limit: 200 },
+    })
+    if (resp?.documents) kbList.value = resp.documents
+  } catch {}
+  kbListLoading.value = false
+}
+
+function onKbFileSelected(e: Event) {
+  const target = e.target as HTMLInputElement
+  const f = target.files?.[0]
+  if (!f) return
+  if (!f.name.endsWith('.md')) {
+    kbUploadMsg.value = '仅支持 .md 格式'
+    kbUploadOk.value = false
+    return
+  }
+  kbUploadFile.value = f
+  kbUploadMsg.value = ''
+}
+
+async function uploadKbFile() {
+  if (!kbUploadFile.value) return
+  kbUploading.value = true
+  kbUploadMsg.value = ''
+  const fd = new FormData()
+  fd.append('file', kbUploadFile.value)
+  try {
+    const resp = await $fetch<{ success: boolean; path: string }>('http://localhost:8700/upload', {
+      method: 'POST',
+      body: fd,
+    })
+    if (resp?.success) {
+      kbUploadMsg.value = `上传成功：${kbUploadFile.value.name}`
+      kbUploadOk.value = true
+      kbUploadFile.value = null
+      if (kbFileInput.value) kbFileInput.value.value = ''
+    }
+  } catch (e: any) {
+    kbUploadMsg.value = `上传失败：${e?.message || '未知错误'}`
+    kbUploadOk.value = false
+  }
+  kbUploading.value = false
 }
 
 function senderLabel(msg: { senderType: string; senderName?: string | null }) {
