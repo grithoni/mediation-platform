@@ -115,10 +115,19 @@
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">⚙️ 设置</span>
           <UIcon :name="sidebarOpen.settings ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
         </button>
-        <div v-if="sidebarOpen.settings" class="px-4 py-3 text-xs text-gray-500 space-y-2">
-          <div>当前用户：{{ auth.user.value?.name }}</div>
-          <div>角色：{{ auth.user.value?.role === 'admin' ? '管理员' : '调解员' }}</div>
-          <UButton icon="i-lucide-plus" size="sm" block variant="soft" @click="showCreateDialog = true">新建案件</UButton>
+        <div v-if="sidebarOpen.settings" class="px-4 py-3 text-xs text-gray-500 space-y-1.5">
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-left text-gray-700 dark:text-gray-300 transition-colors" :class="rightMode === 'skills' ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300' : ''" @click="rightMode = 'skills'; loadSkills()">
+            <UIcon name="i-lucide-sparkles" class="w-3.5 h-3.5" /> 技能
+            <span v-if="skills.length" class="ml-auto text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{{ skills.length }}</span>
+          </button>
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-left text-gray-700 dark:text-gray-300 transition-colors" :class="rightMode === 'tools' ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300' : ''" @click="rightMode = 'tools'; loadMcpTools()">
+            <UIcon name="i-lucide-wrench" class="w-3.5 h-3.5" /> 工具 (MCP)
+            <span v-if="mcpTools.length" class="ml-auto text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{{ mcpTools.length }}</span>
+          </button>
+          <div class="pt-2 mt-2 border-t border-gray-200 dark:border-gray-800 space-y-1">
+            <div>{{ auth.user.value?.name }}</div>
+            <div>角色：{{ auth.user.value?.role === 'admin' ? '管理员' : '调解员' }}</div>
+          </div>
         </div>
       </div>
 
@@ -253,6 +262,102 @@
       </div>
     </div>
 
+    <!-- Right: Skills (skill packs) -->
+    <div v-if="rightMode === 'skills' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-sparkles" class="w-5 h-5 text-amber-500" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">技能管理</span>
+        <span class="text-xs text-gray-400 ml-auto">{{ skills.length }} 个技能包</span>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-3">
+        <!-- Upload zone -->
+        <div class="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center hover:border-amber-400 transition-colors">
+          <UIcon name="i-lucide-upload-cloud" class="w-10 h-10 text-gray-400 mx-auto mb-2" />
+          <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">上传技能包</div>
+          <div class="text-xs text-gray-400 mb-3">支持 .zip 格式，文件应包含 manifest.json (name, description, version)</div>
+          <input ref="skillFileInput" type="file" accept=".zip" class="hidden" @change="uploadSkillFile" />
+          <button class="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50" :disabled="skillUploading" @click="($refs.skillFileInput as HTMLInputElement).click()">
+            <UIcon v-if="skillUploading" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <UIcon v-else name="i-lucide-package-plus" class="w-4 h-4" />
+            {{ skillUploading ? '上传中...' : '选择文件' }}
+          </button>
+          <div v-if="skillUploadMsg" class="mt-2 text-xs" :class="skillUploadOk ? 'text-emerald-500' : 'text-red-500'">{{ skillUploadMsg }}</div>
+        </div>
+
+        <!-- Skills list -->
+        <div v-if="skills.length === 0" class="text-center py-8 text-sm text-gray-400">尚未安装任何技能</div>
+        <div v-else class="space-y-2">
+          <div v-for="s in skills" :key="s.id" class="bg-gray-50 dark:bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-lucide-sparkles" class="w-4 h-4 text-amber-500 shrink-0" />
+                  <span class="font-medium text-gray-900 dark:text-white truncate">{{ s.name }}</span>
+                  <span class="text-[10px] text-gray-400 font-mono">v{{ s.version }}</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ s.description }}</p>
+                <div class="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
+                  <span><UIcon name="i-lucide-file" class="w-3 h-3 inline -mt-0.5" /> {{ s.fileCount }} 个文件</span>
+                  <span><UIcon name="i-lucide-calendar" class="w-3 h-3 inline -mt-0.5" /> {{ s.installedAt }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button class="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 rounded transition-colors" title="启用/禁用" @click="toggleSkill(s.id)">
+                  <UIcon :name="s.enabled ? 'i-lucide-toggle-right' : 'i-lucide-toggle-left'" class="w-4 h-4" :class="s.enabled ? 'text-emerald-500' : ''" />
+                </button>
+                <button class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 rounded transition-colors" title="卸载" @click="deleteSkill(s.id)">
+                  <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Tools (MCP) -->
+    <div v-if="rightMode === 'tools' && !selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-wrench" class="w-5 h-5 text-violet-500" />
+        <span class="text-sm font-medium text-gray-900 dark:text-white">工具管理 (MCP)</span>
+        <span class="text-xs text-gray-400 ml-auto">{{ mcpTools.length }} 个工具</span>
+        <button class="px-2.5 py-1 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1" @click="openMcpToolForm()">
+          <UIcon name="i-lucide-plus" class="w-3.5 h-3.5" /> 新增
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+        <div v-if="mcpTools.length === 0" class="text-center py-12 text-sm text-gray-400">
+          尚未配置任何 MCP 工具<br/>
+          <span class="text-xs">点击右上角"新增"配置 stdio 或 http 传输</span>
+        </div>
+        <div v-for="t in mcpTools" :key="t.id" class="bg-gray-50 dark:bg-gray-950 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <UIcon :name="t.transport === 'stdio' ? 'i-lucide-terminal' : 'i-lucide-globe'" class="w-4 h-4 text-violet-500 shrink-0" />
+                <span class="font-medium text-gray-900 dark:text-white truncate">{{ t.name }}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-mono" :class="t.transport === 'stdio' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'">{{ t.transport }}</span>
+                <span v-if="!t.enabled" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">已禁用</span>
+              </div>
+              <div class="text-xs text-gray-500 mt-1 font-mono truncate">{{ t.transport === 'stdio' ? t.command : t.url }}</div>
+              <div v-if="t.description" class="text-xs text-gray-400 mt-1 line-clamp-2">{{ t.description }}</div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button class="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 rounded transition-colors" title="编辑" @click="openMcpToolForm(t)">
+                <UIcon name="i-lucide-pencil" class="w-4 h-4" />
+              </button>
+              <button class="p-1.5 text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded transition-colors" :title="t.enabled ? '禁用' : '启用'" @click="toggleMcpTool(t.id)">
+                <UIcon :name="t.enabled ? 'i-lucide-toggle-right' : 'i-lucide-toggle-left'" class="w-4 h-4" :class="t.enabled ? 'text-emerald-500' : ''" />
+              </button>
+              <button class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 rounded transition-colors" title="删除" @click="deleteMcpTool(t.id)">
+                <UIcon name="i-lucide-trash-2" class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Right: Empty State -->
     <div v-if="!selectedCaseId && rightMode === ''" class="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
       <div class="text-center">
@@ -373,54 +478,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Create Case Dialog -->
-  <UModal v-model:open="showCreateDialog">
-    <template #header>
-      <h3 class="text-base font-semibold text-gray-900 dark:text-white">新建案件</h3>
-    </template>
-    <template #body>
-      <form @submit.prevent="handleCreateCase" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">案件标题</label>
-          <UInput v-model="newCase.title" placeholder="请输入案件标题" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">案件描述</label>
-          <UTextarea v-model="newCase.description" placeholder="请输入案件描述" :rows="3" />
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">甲方名称</label>
-            <UInput v-model="newCase.partyAName" placeholder="甲方" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">乙方名称</label>
-            <UInput v-model="newCase.partyBName" placeholder="乙方" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">甲方联系方式</label>
-            <UInput v-model="newCase.partyAContact" placeholder="选填" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">乙方联系方式</label>
-            <UInput v-model="newCase.partyBContact" placeholder="选填" />
-          </div>
-        </div>
-        <UAlert v-if="createError" color="error" variant="soft" :title="createError" />
-      </form>
-    </template>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <UButton color="neutral" variant="ghost" size="lg" @click="showCreateDialog = false">取消</UButton>
-        <UButton size="lg" class="bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100" :loading="creating" :disabled="!newCase.title || !newCase.partyAName || !newCase.partyBName" @click="handleCreateCase">
-          创建
-        </UButton>
-      </div>
-    </template>
-  </UModal>
 
   <!-- Material Viewer Modal (custom) -->
   <div v-if="viewingMaterial" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="viewingMaterial = null">
@@ -625,6 +682,59 @@
       </div>
     </div>
   </div>
+
+  <!-- MCP Tool Form Modal -->
+  <div v-if="mcpFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="mcpFormOpen = false">
+    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-wrench" class="w-4 h-4 text-violet-500" />
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ mcpEditing?.id ? '编辑 MCP 工具' : '新增 MCP 工具' }}</h3>
+        </div>
+        <button class="text-gray-400 hover:text-gray-600" @click="mcpFormOpen = false">
+          <UIcon name="i-lucide-x" class="w-5 h-5" />
+        </button>
+      </div>
+      <div class="px-5 py-4 overflow-y-auto flex-1 space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">名称 *</label>
+          <input v-model="mcpEditing.name" type="text" placeholder="如：文件系统工具" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">描述</label>
+          <input v-model="mcpEditing.description" type="text" placeholder="工具功能简述" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">传输方式 *</label>
+          <div class="flex gap-2">
+            <button class="flex-1 px-3 py-2 text-sm rounded-md border transition-colors" :class="mcpEditing.transport === 'stdio' ? 'bg-amber-50 border-amber-300 text-amber-700' : 'border-gray-300 dark:border-gray-700 text-gray-600 hover:bg-gray-50'" @click="mcpEditing.transport = 'stdio'">
+              <UIcon name="i-lucide-terminal" class="w-3.5 h-3.5 inline -mt-0.5" /> stdio
+            </button>
+            <button class="flex-1 px-3 py-2 text-sm rounded-md border transition-colors" :class="mcpEditing.transport === 'http' ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-300 dark:border-gray-700 text-gray-600 hover:bg-gray-50'" @click="mcpEditing.transport = 'http'">
+              <UIcon name="i-lucide-globe" class="w-3.5 h-3.5 inline -mt-0.5" /> http
+            </button>
+          </div>
+        </div>
+        <div v-if="mcpEditing.transport === 'stdio'">
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">命令 *</label>
+          <input v-model="mcpEditing.command" type="text" placeholder="如：npx -y @modelcontextprotocol/server-filesystem /tmp" class="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </div>
+        <div v-if="mcpEditing.transport === 'http'">
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">URL *</label>
+          <input v-model="mcpEditing.url" type="text" placeholder="https://example.com/mcp" class="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">环境变量 (JSON, 可选)</label>
+          <textarea v-model="mcpEditing.envJson" rows="3" placeholder='{"API_KEY": "xxx"}' class="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"></textarea>
+        </div>
+        <div v-if="mcpFormError" class="text-xs text-red-500">{{ mcpFormError }}</div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+        <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="mcpFormOpen = false">取消</button>
+        <button class="px-4 py-1.5 text-sm bg-violet-500 hover:bg-violet-600 text-white rounded-lg disabled:opacity-50" :disabled="mcpFormSaving" @click="saveMcpTool()">{{ mcpFormSaving ? '保存中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -634,9 +744,6 @@ const auth = useAuth()
 const authLoading = ref(true)
 const casesLoading = ref(true)
 const searchQuery = ref('')
-const showCreateDialog = ref(false)
-const creating = ref(false)
-const createError = ref('')
 const selectedCaseId = ref<string | null>(null)
 const quickMessage = ref('')
 
@@ -740,6 +847,142 @@ async function previewFile(f: CaseFile) {
   } else {
     previewContent.value = fileUrl(f)
   }
+}
+
+// ============================================================
+// Skills (uploaded skill packs)
+// ============================================================
+interface Skill { id: string; name: string; version: string; description: string; fileCount: number; installedAt: string; enabled: boolean }
+const skills = ref<Skill[]>([])
+const skillUploading = ref(false)
+const skillUploadMsg = ref('')
+const skillUploadOk = ref(false)
+
+async function loadSkills() {
+  try {
+    const resp = await $fetch<{ success: boolean; skills: Skill[] }>('/api/skills', { credentials: 'include' })
+    if (resp?.skills) skills.value = resp.skills
+  } catch { skills.value = [] }
+}
+
+async function uploadSkillFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.name.endsWith('.zip')) {
+    skillUploadMsg.value = '请上传 .zip 格式文件'
+    skillUploadOk.value = false
+    return
+  }
+  skillUploading.value = true
+  skillUploadMsg.value = ''
+  const form = new FormData()
+  form.append('file', file)
+  try {
+    const resp = await $fetch<{ success: boolean; skill?: Skill; error?: string }>('/api/skills', {
+      method: 'POST', body: form, credentials: 'include',
+    })
+    if (resp?.success) {
+      skillUploadMsg.value = `✓ 已安装：${resp.skill?.name || file.name}`
+      skillUploadOk.value = true
+      await loadSkills()
+    } else {
+      skillUploadMsg.value = resp?.error || '上传失败'
+      skillUploadOk.value = false
+    }
+  } catch (err: any) {
+    skillUploadMsg.value = err?.data?.error || err?.message || '上传失败'
+    skillUploadOk.value = false
+  } finally {
+    skillUploading.value = false
+    input.value = ''
+  }
+}
+
+async function toggleSkill(id: string) {
+  await $fetch(`/api/skills/${id}/toggle`, { method: 'POST', credentials: 'include' })
+  await loadSkills()
+}
+
+async function deleteSkill(id: string) {
+  if (!confirm('确认卸载该技能？')) return
+  await $fetch(`/api/skills/${id}`, { method: 'DELETE', credentials: 'include' })
+  await loadSkills()
+}
+
+// ============================================================
+// MCP Tools
+// ============================================================
+interface McpTool { id: string; name: string; description: string; transport: 'stdio' | 'http'; command?: string; url?: string; envJson?: string; enabled: boolean }
+const mcpTools = ref<McpTool[]>([])
+
+async function loadMcpTools() {
+  try {
+    const resp = await $fetch<{ success: boolean; tools: McpTool[] }>('/api/mcp/tools', { credentials: 'include' })
+    if (resp?.tools) mcpTools.value = resp.tools
+  } catch { mcpTools.value = [] }
+}
+
+const mcpFormOpen = ref(false)
+const mcpFormSaving = ref(false)
+const mcpFormError = ref('')
+const mcpEditing = ref<McpTool>({ id: '', name: '', description: '', transport: 'stdio', command: '', url: '', envJson: '', enabled: true })
+
+function openMcpToolForm(tool?: McpTool) {
+  mcpFormError.value = ''
+  if (tool) {
+    mcpEditing.value = { ...tool }
+  } else {
+    mcpEditing.value = { id: '', name: '', description: '', transport: 'stdio', command: '', url: '', envJson: '', enabled: true }
+  }
+  mcpFormOpen.value = true
+}
+
+async function saveMcpTool() {
+  if (!mcpEditing.value.name.trim()) {
+    mcpFormError.value = '请输入名称'
+    return
+  }
+  if (mcpEditing.value.transport === 'stdio' && !mcpEditing.value.command?.trim()) {
+    mcpFormError.value = 'stdio 传输需要命令'
+    return
+  }
+  if (mcpEditing.value.transport === 'http' && !mcpEditing.value.url?.trim()) {
+    mcpFormError.value = 'http 传输需要 URL'
+    return
+  }
+  mcpFormSaving.value = true
+  mcpFormError.value = ''
+  try {
+    if (mcpEditing.value.envJson && mcpEditing.value.envJson.trim()) {
+      try { JSON.parse(mcpEditing.value.envJson) }
+      catch { mcpFormError.value = '环境变量 JSON 格式错误'; mcpFormSaving.value = false; return }
+    }
+    const payload = { ...mcpEditing.value }
+    if (mcpEditing.value.id) {
+      await $fetch(`/api/mcp/tools/${mcpEditing.value.id}`, { method: 'PUT', body: payload, credentials: 'include' })
+    } else {
+      delete (payload as any).id
+      await $fetch('/api/mcp/tools', { method: 'POST', body: payload, credentials: 'include' })
+    }
+    mcpFormOpen.value = false
+    await loadMcpTools()
+  } catch (err: any) {
+    mcpFormError.value = err?.data?.error || err?.message || '保存失败'
+  } finally {
+    mcpFormSaving.value = false
+  }
+}
+
+async function toggleMcpTool(id: string) {
+  await $fetch(`/api/mcp/tools/${id}/toggle`, { method: 'POST', credentials: 'include' })
+  await loadMcpTools()
+}
+
+async function deleteMcpTool(id: string) {
+  if (!confirm('确认删除该工具？')) return
+  await $fetch(`/api/mcp/tools/${id}`, { method: 'DELETE', credentials: 'include' })
+  await loadMcpTools()
 }
 
 // ============================================================
@@ -1060,15 +1303,6 @@ const selectedCaseParties = computed(() => {
   return c ? `${c.partyAName} vs ${c.partyBName}` : ''
 })
 
-const newCase = reactive({
-  title: '',
-  description: '',
-  partyAName: '',
-  partyBName: '',
-  partyAContact: '',
-  partyBContact: '',
-})
-
 onMounted(async () => {
   const user = await auth.fetchUser()
   authLoading.value = false
@@ -1371,31 +1605,6 @@ function getStatusColor(status: string) {
 function getStatusLabel(status: string) {
   const map: Record<string, string> = { pending: '待处理', active: '进行中', resolved: '已解决', closed: '已关闭' }
   return map[status] || status
-}
-
-async function handleCreateCase() {
-  creating.value = true
-  createError.value = ''
-  try {
-    const data = await $fetch<{ success: boolean; data: CaseItem }>('/api/cases', {
-      method: 'POST',
-      body: {
-        title: newCase.title,
-        description: newCase.description,
-        partyAName: newCase.partyAName,
-        partyBName: newCase.partyBName,
-        partyAContact: newCase.partyAContact,
-        partyBContact: newCase.partyBContact,
-      },
-    })
-    if (data?.data) cases.value.unshift(data.data)
-    Object.assign(newCase, { title: '', description: '', partyAName: '', partyBName: '', partyAContact: '', partyBContact: '' })
-    showCreateDialog.value = false
-  } catch (err: any) {
-    createError.value = err?.data?.message || err?.message || '创建失败'
-  } finally {
-    creating.value = false
-  }
 }
 
 onUnmounted(() => {

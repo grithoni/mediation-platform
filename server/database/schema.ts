@@ -137,3 +137,20 @@ export const caseDynamicFiles = sqliteTable('case_dynamic_files', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
+
+// ============================================================
+// MCP 工具配置表
+// ============================================================
+export const mcpTools = sqliteTable('mcp_tools', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  transport: text('transport').notNull(), // 'stdio' | 'http'
+  command: text('command'), // for stdio
+  url: text('url'),         // for http
+  envJson: text('env_json'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
