@@ -39,7 +39,8 @@ def _ensure_deps():
     except ImportError as e:
         msg = (
             f"Local KB dependencies not installed: {e}\n"
-            "Install with: pip install chromadb fastembed"
+            "Install with: pip install -r requirements.txt\n"
+            "Slow download? Use mirror: pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/"
         )
         raise MissingDependencyError(msg) from e
 MAX_CHUNK_CHARS = 2000

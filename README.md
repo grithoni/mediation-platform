@@ -70,9 +70,14 @@ cd mediation-platform
 # Node.js 依赖
 npm install
 
-# Python 知识库依赖（首次启动 kb 时会自动安装，也可以手动安装）
-pip install fastapi uvicorn python-multipart fastembed chromadb
+# Python 知识库依赖（可选，不影响核心功能）
+pip install -r requirements.txt
+
+# 国内下载慢？用阿里云镜像加速：
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
+
+> **注意**：知识库（KB）是可选组件。即使不安装 Python 依赖，平台的核心调解功能（案件管理、AI对话、调解技能等）仍然完全可用。知识库仅提供文档向量搜索功能。
 
 ### 3. 配置环境变量
 
@@ -361,6 +366,21 @@ mediation-platform/
 **Q: 知识库搜不到结果？**
 
 确保先执行 `npm run kb` 启动知识库服务（端口 8700），等待约 15 秒加载完成。然后通过 `curl http://localhost:8700/health` 检查。
+
+**Q: 知识库 /stats 或 /search 返回 503 错误？**
+
+说明 Python 依赖未安装或安装不完整。运行：
+
+```bash
+pip install -r requirements.txt
+
+# 国内下载慢用镜像：
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+```
+
+如果 `chromadb` 的 wheel 下载卡住，可以尝试：1) 使用镜像源；2) 先单独安装 `pip install chromadb`；3) 检查网络代理设置。
+
+> 知识库是可选组件，缺少依赖不会影响平台核心功能。
 
 **Q: 数据库出错怎么办？**
 
