@@ -12,6 +12,9 @@ import { buildSystemPrompt } from '../../utils/agent/system-prompt'
 import type { AgentMessage } from '../../utils/agent/types'
 import { AGENT_TOOLS } from '../../utils/agent/tools'
 import { v4 as uuidv4 } from 'uuid'
+import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
+import { isEndDialogIntent } from '../../utils/dialog-intent'
+import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
 
 // ============================================================
 // LLM call function — wraps the mimo model API with tool calling
@@ -36,7 +39,7 @@ async function* llmCall(
     if (m.role === 'assistant') return { role: 'assistant' as const, content: m.content }
     // If user message has tool_results, convert to assistant + tool messages
     if (m.role === 'user') {
-      const toolResults = (m as any).tool_results as Array<{ tool_call_id: string; content: string }> | undefined
+      const toolResults = (m as unknown as Record<string, unknown>).tool_results as Array<{ tool_call_id: string; content: string }> | undefined
       if (toolResults && toolResults.length > 0) {
         // Return as tool result messages
         return toolResults.map((tr) => ({
@@ -292,75 +295,28 @@ export default defineEventHandler(async (event) => {
 
   // ============================================================
   // Server-side intercept: end-dialog triggers
-  // Condition 1: keyword match (语义检索)
-  // Condition 2: dialog turn >= 5 (自动触发)
+  // Condition 1: keyword match
+  // Condition 2: dialog turn >= MAX_DIALOG_TURNS (auto-trigger)
   // ============================================================
-  const endDialogKeywords = [
-    '分配调解员', '选择调解员', '我要找调解员', '帮我找调解员',
-    '我要联系调解员', '联系调解员',
-    '结束谈话', '结束对话', '结束', '就这样', '可以了',
-    '不用了', '不需要', '无需', '无补充', '我不想聊了',
-    '不需要调解', '找调解员', '推荐调解员', '安排调解员',
-    '帮我联系', '帮我找',
-  ]
-  const msgClean = message.replace(/\s/g, '')
-  const keywordMatch = endDialogKeywords.some(kw => msgClean.includes(kw))
-
-  // Count dialog turns
-  let dialogTurn = 0
-  if (caseId !== 'demo') {
-    try {
-      const db = getDb()
-      // Increment and get turn count
-      const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseId)).get()
-      if (existing) {
-        dialogTurn = (existing.dialogTurnCount || 0) + 1
-        db.update(caseDynamicFiles)
-          .set({ dialogTurnCount: dialogTurn, updatedAt: new Date() } as any)
-          .where(eq(caseDynamicFiles.caseId, caseId))
-          .run()
-      } else {
-        dialogTurn = 1
-        const now = new Date()
-        db.insert(caseDynamicFiles).values({
-          id: caseId, caseId, dialogTurnCount: 1, dialogEnded: false,
-          createdAt: now, updatedAt: now,
-        } as any).run()
-      }
-    } catch {}
-  }
-
-  const turnExceeded = dialogTurn >= 5
+  const keywordMatch = isEndDialogIntent(message)
+  const dialogTurn = incrementDialogTurn(caseId)
+  const turnExceeded = dialogTurn >= MAX_DIALOG_TURNS
   const isEndDialog = keywordMatch || turnExceeded
 
   if (isEndDialog && caseId !== 'demo') {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Immediately end dialog
           controller.enqueue(encoder.encode(sendSSE({ type: 'thinking', turn: 1, content: '结束对话，切换至调解员选择...' })))
           controller.enqueue(encoder.encode(sendSSE({ type: 'tool_call', turn: 1, toolName: 'update_dynamic_file', toolArgs: { dialogEnded: true } })))
 
-          // Directly update DB
-          const now = new Date()
-          const nowUnix = Math.floor(Date.now() / 1000)
-          const db = getDb()
-          const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseId)).get()
-          if (existing) {
-            db.update(caseDynamicFiles).set({ dialogEnded: true, updatedAt: now } as any).where(eq(caseDynamicFiles.caseId, caseId)).run()
-          } else {
-            db.insert(caseDynamicFiles).values({
-              id: caseId, caseId, dialogEnded: true, dialogTurnCount: 0,
-              createdAt: now, updatedAt: now,
-            } as any).run()
-          }
-          db.update(cases).set({ phase: 'mediator_selection', updatedAt: now } as any).where(eq(cases.id, caseId)).run()
+          endDialog(caseId)
 
           controller.enqueue(encoder.encode(sendSSE({ type: 'tool_result', toolName: 'update_dynamic_file', content: '案件已切换至调解员选择阶段', data: '对话已结束，phase = mediator_selection' })))
           const endReason = keywordMatch ? '您已确认结束对话' : '对话轮次已达上限'
           const endContent = keywordMatch
             ? '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。'
-            : '对话已进行了' + dialogTurn + '轮。案件信息已收集充分，请点击页面上方的"选择调解员"按钮选择调解员。'
+            : `对话已进行了${dialogTurn}轮。案件信息已收集充分，请点击页面上方的"选择调解员"按钮选择调解员。`
 
           controller.enqueue(encoder.encode(sendSSE({ type: 'done', content: endContent, data: { exitReason: 'DIALOG_ENDED', reason: endReason, turns: dialogTurn } })))
           controller.enqueue(encoder.encode(sendSSE({ type: 'finished' })))
@@ -391,7 +347,7 @@ export default defineEventHandler(async (event) => {
       caseTitle = caseData.title
       partyAName = caseData.partyAName
       partyBName = caseData.partyBName
-      casePhase = (caseData as any).phase || 'analysis'
+      casePhase = caseData.phase || 'analysis'
     }
 
     // Read dynamic file if exists
@@ -409,10 +365,10 @@ export default defineEventHandler(async (event) => {
         dialogEnded: df.dialogEnded,
       }
     }
-  } catch {}
-
-  // Build system prompt
-  const systemPrompt = buildSystemPrompt({
+  } catch (err) {
+    console.error('[Agent] Failed to load case data:', err)
+  }
+  let systemPrompt = buildSystemPrompt({
     caseId,
     caseTitle,
     partyAName,
@@ -421,6 +377,15 @@ export default defineEventHandler(async (event) => {
     phase: casePhase,
     dynamicFile,
   })
+
+  // ── RAG: Inject relevant legal provisions from KB ──────
+  try {
+    const kbResults = await searchKb(message, 3)
+    if (kbResults.length > 0) {
+      systemPrompt += formatKbResultsForPrompt(kbResults)
+      console.log(`[RAG] Agent: Injected ${kbResults.length} KB results for: "${message.slice(0, 50)}"`)
+    }
+  } catch {}
 
   let userInput = message
   if (caseId !== 'demo') {
@@ -447,13 +412,12 @@ ${message}
         senderId: senderIdentifier || 'unknown',
         senderName: senderName || senderIdentifier || '当事人',
         content: message,
-        visibility: 'private', // AI agent private conversation
-        createdAt: new Date(),
-      } as any)
+        visibility: 'private',
+      })
       .run()
-  } catch {}
-
-  // Run agent loop
+  } catch (err) {
+    console.error('[Agent] Failed to save user message:', err)
+  }
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -483,15 +447,16 @@ ${message}
                   senderId: 'agent',
                   senderName: '调解智能体',
                   content: progress.content,
-                  visibility: 'private', // AI agent private conversation
-                  createdAt: new Date(),
-                } as any)
+                  visibility: 'private',
+                })
                 .run()
-            } catch {}
+            } catch (err) {
+              console.error('[Agent] Failed to save AI message:', err)
+            }
           }
 
           // If agent asked user a question, stop here
-          if (progress.type === 'done' && (progress.data as any)?.exitReason === 'ASK_USER') {
+          if (progress.type === 'done' && (progress.data as { exitReason?: string } | undefined)?.exitReason === 'ASK_USER') {
             break
           }
         }

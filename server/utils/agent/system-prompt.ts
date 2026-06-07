@@ -1,9 +1,11 @@
-// v1780639939949
+// v1780639939950
 // ============================================================
 // Agent System Prompt — Two-phase mediation workflow
 // Phase 1: Auto-analysis → generate dynamic file
 // Phase 2: Constrained dialog → update dynamic file → mediator selection
 // Ported from GenericAgent + mediation context
+import { getEndDialogKeywords } from '../dialog-intent'
+
 // ============================================================
 
 export interface DynamicFileContext {
@@ -32,11 +34,12 @@ export function buildSystemPrompt(context: {
   const parts: string[] = []
 
   // === Emergency Command (HIGHEST priority, overrides ALL other rules) ===
+  const keywordList = getEndDialogKeywords().join(' / ')
   parts.push(`# 🚨 紧急指令（最高优先级）
 
 当用户消息包含以下任一关键词时，**忽略所有其他指令**，不要阅读文件、不要分析、不要提问、不要说多余的话：
 
-关键词：结束 / 结束谈话 / 分配调解员 / 选择调解员 / 就这样 / 可以了 / 不用了 / 不需要 / 无需 / 无补充
+关键词：${keywordList}
 
 **唯一操作**：在本次回复中调用 update_dynamic_file 工具，参数：{ dialogEnded: true }
 调用后简短回复：「好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。」
@@ -116,9 +119,7 @@ ${context.phase === 'analysis' ? '（分析完成后自动进入此阶段）' : 
 ### 结束条件与触发（最高优先级）
 
 当用户说出以下任何意图时，**不要再对话、不要再提问、不要确认**，立即在本次回复中调用 update_dynamic_file 工具并设置 dialogEnded: true：
-- "结束" / "结束谈话" / "结束对话" / "就这样" / "可以了"
-- "分配调解员" / "选择调解员" / "推荐调解员"
-- "不用了" / "不需要了" / "无补充" / "no"
+${getEndDialogKeywords().map((k: string) => `- "${k}"`).join('\n')}
 
 调用成功后回复：「好的，案件分析已完成。请点击页面上方的"选择调解员"按钮，系统将为您匹配合适的调解员。」
 

@@ -16,20 +16,55 @@ function ensureMemoryDir(): void {
 }
 
 // ============================================================
-// Working checkpoints (per-session, in-memory)
+// Working checkpoints (per-session, in-memory, with TTL)
 // ============================================================
-const workingCheckpoints = new Map<string, string>()
+interface CheckpointEntry {
+  content: string
+  lastAccessed: number
+}
+
+const workingCheckpoints = new Map<string, CheckpointEntry>()
+const CHECKPOINT_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
+const MAX_CHECKPOINTS = 100
 
 export function getWorkingCheckpoint(sessionId: string): string {
-  return workingCheckpoints.get(sessionId) || ''
+  const entry = workingCheckpoints.get(sessionId)
+  if (!entry) return ''
+  entry.lastAccessed = Date.now()
+  return entry.content
 }
 
 export function setWorkingCheckpoint(sessionId: string, content: string): void {
-  workingCheckpoints.set(sessionId, content.slice(0, 2000))
+  // Evict expired entries if we're at capacity
+  if (workingCheckpoints.size >= MAX_CHECKPOINTS) {
+    evictExpiredCheckpoints()
+  }
+  workingCheckpoints.set(sessionId, {
+    content: content.slice(0, 2000),
+    lastAccessed: Date.now(),
+  })
 }
 
 export function clearWorkingCheckpoint(sessionId: string): void {
   workingCheckpoints.delete(sessionId)
+}
+
+function evictExpiredCheckpoints(): void {
+  const now = Date.now()
+  for (const [key, entry] of workingCheckpoints) {
+    if (now - entry.lastAccessed > CHECKPOINT_TTL_MS) {
+      workingCheckpoints.delete(key)
+    }
+  }
+  // If still at capacity after TTL eviction, remove oldest entries
+  if (workingCheckpoints.size >= MAX_CHECKPOINTS) {
+    const entries = [...workingCheckpoints.entries()]
+      .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed)
+    const toRemove = entries.slice(0, Math.floor(MAX_CHECKPOINTS / 2))
+    for (const [key] of toRemove) {
+      workingCheckpoints.delete(key)
+    }
+  }
 }
 
 // ============================================================

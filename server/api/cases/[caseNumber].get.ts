@@ -57,24 +57,68 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: '访问验证码无效' })
   }
 
-  // Create a session token for the party
-  const sessionId = uuidv4()
-  db.insert(sessions)
-    .values({
-      id: sessionId,
-      caseId: caseNumber,
-      partyIdentifier: query.party as string || 'party',
-      isActive: true,
-      createdAt: new Date(),
-    })
-    .run()
+  // Reuse existing active session or create a new one
+  const partyIdentifier = query.party as string || 'party'
+  const existingSession = db
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.caseId, caseNumber),
+        eq(sessions.partyIdentifier, partyIdentifier),
+        eq(sessions.isActive, true),
+      )
+    )
+    .get()
 
+  let sessionId: string
+  if (existingSession) {
+    sessionId = existingSession.id
+  } else {
+    sessionId = uuidv4()
+    db.insert(sessions)
+      .values({
+        id: sessionId,
+        caseId: caseNumber,
+        partyIdentifier,
+        isActive: true,
+      })
+      .run()
+  }
+
+  // Party can see: own messages + mediator messages + AI messages
+  // Hide messages from the other party (if any)
   const caseMessages = db
     .select()
     .from(messages)
-    .where(eq(messages.caseId, caseNumber))
+    .where(
+      and(
+        eq(messages.caseId, caseNumber),
+        // Include: own party messages, mediator messages, AI messages
+        // Exclude: messages from other party senders
+        ne(messages.senderType, 'party'),
+      )
+    )
     .orderBy(messages.createdAt)
     .all()
+
+  // Also include this party's own messages
+  const ownMessages = db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.caseId, caseNumber),
+        eq(messages.senderType, 'party'),
+        eq(messages.senderId, partyIdentifier),
+      )
+    )
+    .orderBy(messages.createdAt)
+    .all()
+
+  // Merge and sort by time
+  const allCaseMessages = [...caseMessages, ...ownMessages]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
   const caseDocuments = db
     .select()
@@ -93,10 +137,10 @@ export default defineEventHandler(async (event) => {
         partyBName: caseData.partyBName,
         claimsSummary: caseData.claimsSummary,
         evidenceSummary: caseData.evidenceSummary,
-        phase: (caseData as any).phase || 'analysis',
-        mediatorId: (caseData as any).mediatorId || null,
+        phase: caseData.phase || 'analysis',
+        mediatorId: caseData.mediatorId || null,
         status: caseData.status,
-        messages: caseMessages,
+        messages: allCaseMessages,
         documents: caseDocuments,
       },
       sessionToken: sessionId,

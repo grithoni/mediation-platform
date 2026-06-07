@@ -79,7 +79,8 @@
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
           @click="switchToAI"
         >
-          🤖 与智能体对话
+          <UIcon name="i-lucide-bot" class="w-4 h-4 inline -mt-0.5" />
+          与智能体对话
         </button>
         <button
           class="flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors"
@@ -88,7 +89,8 @@
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
           @click="switchToMediator"
         >
-          👤 与调解员对话
+          <UIcon name="i-lucide-user" class="w-4 h-4 inline -mt-0.5" />
+          与调解员对话
         </button>
       </div>
 
@@ -414,6 +416,7 @@ watch(() => caseData.value?.phase, (phase) => {
 
 onUnmounted(() => {
   if (medPollTimer) clearInterval(medPollTimer)
+  chat.disconnect()
 })
 
 // Auto-scroll when messages change
@@ -508,7 +511,6 @@ async function handleSend() {
   if (result?.dialogEnded) {
     showMediatorBanner.value = true
     if (caseData.value) caseData.value.phase = 'mediator_selection'
-    setTimeout(() => { window.location.reload() }, 500)
   }
 
   nextTick(() => {

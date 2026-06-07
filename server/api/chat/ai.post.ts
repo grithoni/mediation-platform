@@ -2,6 +2,9 @@ import { desc, eq } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { cases, messages, caseDynamicFiles } from '../../database/schema'
+import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
+import { isEndDialogIntent } from '../../utils/dialog-intent'
+import { endDialog } from '../../utils/dialog-manager'
 
 // ============================================================
 // System prompt templates
@@ -48,7 +51,7 @@ function generateMockResponse(message: string): string {
     '感谢您的信任。调解的关键在于双方的沟通意愿，我们可以一起探讨可能的路径。',
     '您提出的问题很有代表性。在调解实践中，我们通常会先了解双方的真实诉求，再寻求平衡点。',
   ]
-  return responses[Math.floor(Math.random() * responses.length)] || responses[0]
+  return responses[Math.floor(Math.random() * responses.length)] || responses[0]!
 }
 
 // ============================================================
@@ -61,27 +64,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少必要参数' })
   }
 
-  // Keyword intercept (same as agent.post.ts)
-  const endDialogKeywords = [
-    '分配调解员', '选择调解员', '我要找调解员', '帮我找调解员',
-    '我要联系调解员', '联系调解员', '结束谈话', '结束对话', '结束',
-    '就这样', '可以了', '不用了', '不需要', '无需', '无补充',
-    '不需要调解', '找调解员', '推荐调解员', '安排调解员', '帮我联系', '帮我找',
-  ]
-  const msgClean = (body.message as string).replace(/\s/g, '')
-  if (endDialogKeywords.some(kw => msgClean.includes(kw)) && body.caseId !== 'demo') {
-    const dbPre = getDb()
-    const nowDate = new Date()
-    const existing = dbPre.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, body.caseId)).get()
-    if (existing) {
-      dbPre.update(caseDynamicFiles).set({ dialogEnded: true, updatedAt: nowDate } as any).where(eq(caseDynamicFiles.caseId, body.caseId)).run()
-    } else {
-      dbPre.insert(caseDynamicFiles).values({
-        id: body.caseId, caseId: body.caseId, dialogEnded: true, dialogTurnCount: 0,
-        createdAt: nowDate, updatedAt: nowDate,
-      } as any).run()
-    }
-    dbPre.update(cases).set({ phase: 'mediator_selection', updatedAt: nowDate } as any).where(eq(cases.id, body.caseId)).run()
+  // Keyword intercept (shared utility)
+  if (isEndDialogIntent(body.message) && body.caseId !== 'demo') {
+    endDialog(body.caseId)
     return {
       success: true,
       data: {
@@ -104,7 +89,9 @@ export default defineEventHandler(async (event) => {
   try {
     const df = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, body.caseId)).get()
     if (df) dynamicFile = { partyAnalysis: df.partyAnalysis ?? undefined, timeline: df.timeline ?? undefined, disputeChecklist: df.disputeChecklist ?? undefined, positions: df.positions ?? undefined }
-  } catch {}
+  } catch (err) {
+    console.error('[AI] Failed to load dynamic file:', err)
+  }
 
   const now = new Date()
   let partyMessageId = 'skill-' + Date.now()
@@ -114,14 +101,24 @@ export default defineEventHandler(async (event) => {
       id: partyMessageId, caseId: body.caseId,
       senderType: 'party', senderId: body.senderIdentifier,
       senderName: body.senderName || body.senderIdentifier,
-      content: body.message, createdAt: now,
-      visibility: 'private', // party→AI messages are private, hidden from mediator
-    } as any).run()
+      content: body.message,
+      visibility: 'private',
+    }).run()
   }
 
   const history = db.select().from(messages)
     .where(eq(messages.caseId, body.caseId))
     .orderBy(desc(messages.createdAt)).limit(20).all().reverse()
+
+  // ── RAG: Search KB for relevant legal provisions ────────
+  let systemPrompt = buildSystemPrompt(caseData, body.senderType || body.senderIdentifier, dynamicFile)
+  try {
+    const kbResults = await searchKb(body.message, 3)
+    if (kbResults.length > 0) {
+      systemPrompt += formatKbResultsForPrompt(kbResults)
+      console.log(`[RAG] Injected ${kbResults.length} KB results for: "${body.message.slice(0, 50)}"`)
+    }
+  } catch {}
 
   let aiContent: string
   const config = useRuntimeConfig()
@@ -138,7 +135,7 @@ export default defineEventHandler(async (event) => {
       }))
       const result = await generateText({
         model: openai(config.openaiModel || 'gpt-4o-mini'),
-        system: buildSystemPrompt(caseData, body.senderType || body.senderIdentifier, dynamicFile),
+        system: systemPrompt,
         messages: chatMessages,
       })
       aiContent = result.text
@@ -157,9 +154,9 @@ export default defineEventHandler(async (event) => {
     db.insert(messages).values({
       id: aiMessageId, caseId: body.caseId,
       senderType: 'ai', senderId: 'mediation-ai', senderName: '调解AI助手',
-      content: aiContent, createdAt: aiCreatedAt,
-      visibility: 'private', // AI responses are private, hidden from mediator
-    } as any).run()
+      content: aiContent,
+      visibility: 'private',
+    }).run()
   }
 
   return {

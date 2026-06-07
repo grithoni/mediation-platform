@@ -8,6 +8,7 @@ import { execSync, spawnSync } from 'node:child_process'
 import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 const _nodeRequire = createRequire(import.meta.url)
 import { resolve, relative } from 'node:path'
+import { searchKb, formatKbResultsForPrompt } from '../kb-search'
 import { getDb } from '../../database'
 import { cases, messages, documents, caseDynamicFiles } from '../../database/schema'
 import { eq, like } from 'drizzle-orm'
@@ -411,13 +412,12 @@ export async function* do_code_run(args: ToolArgs, ctx: AgentContext): AsyncGene
       let evalResult: unknown
 
       try {
-        // Provide fs via a safe wrapper, require for built-in modules only
+        // Provide require for safe built-in modules only (no fs/child_process — use file_read/file_write tools instead)
         const safeRequire = (mod: string) => {
-          // Allow common Node.js built-in modules and docx parsing
-          if (['fs', 'path', 'os', 'util', 'crypto', 'child_process', 'buffer', 'stream', 'url', 'querystring', 'zlib'].includes(mod)) {
+          if (['path', 'os', 'util', 'crypto', 'buffer', 'stream', 'url', 'querystring', 'zlib'].includes(mod)) {
             return _nodeRequire(mod)
           }
-          throw new Error(`Module "${mod}" is not available in this sandbox. Available: fs, path, os, util, crypto, zlib`)
+          throw new Error(`Module "${mod}" is not available in this sandbox. Available: path, os, util, crypto, buffer, stream, url, querystring, zlib. Use file_read/file_write tools for file operations.`)
         }
 
         const fn = new Function(
@@ -443,11 +443,13 @@ export async function* do_code_run(args: ToolArgs, ctx: AgentContext): AsyncGene
           `
         )
 
+        // Minimal process object — no access to env, argv, exit, etc.
+        const safeProcess = { cwd: () => ctx.workDir, platform: process.platform, arch: process.arch }
         const holder: { value: unknown; logs: string[] } = { value: undefined, logs: [] }
         fn(
           { log: (...a: unknown[]) => logs.push(a.map(String).join(' ')) },
           safeRequire,
-          process,
+          safeProcess,
           undefined, // setTimeout blocked
           undefined, // setInterval blocked
           ctx.workDir,
@@ -513,7 +515,7 @@ export async function* do_search_information(args: ToolArgs, ctx: AgentContext):
       results.push(`=== 案件 (${caseRows.length}) ===`)
       for (const c of caseRows.slice(0, 5)) {
         results.push(
-          `- ${c.id}: ${c.title} (${c.partyAName} vs ${c.partyBName}) 状态: ${c.status} 标的额: ${(c as any).amount || '未知'}`
+          `- ${c.id}: ${c.title} (${c.partyAName} vs ${c.partyBName}) 状态: ${c.status}`
         )
       }
     }
@@ -620,15 +622,31 @@ export async function* do_update_working_checkpoint(
 }
 
 /**
- * search_legal_knowledge — 搜索法律知识
+ * search_legal_knowledge — 搜索法律知识（通过知识库 RAG 检索）
  */
 export async function* do_search_legal_knowledge(
   args: ToolArgs,
   _ctx: AgentContext
 ): AsyncGenerator<string, StepOutcome> {
   const query = String(args.query || '')
+  yield `搜索法律知识: ${query}\n`
 
-  // Built-in Chinese commercial law knowledge base (民法典, 商事调解条例 preview)
+  // Use real KB search (RAG)
+  const results = await searchKb(query, 5)
+
+  if (results.length > 0) {
+    const formatted = results.map((r: { path: string; content: string; score: number }, i: number) => {
+      const fileName = r.path.split('/').pop() || r.path
+      return `### ${fileName}\n\n${r.content}`
+    }).join('\n\n---\n\n')
+
+    return {
+      data: formatted,
+      nextPrompt: `法律知识检索完成，找到 ${results.length} 条相关结果。结合上述法律依据继续分析案件。`,
+    }
+  }
+
+  // Fallback: built-in knowledge if KB unavailable or no results
   const knowledge: Record<string, string> = {
     合同解除: `《民法典》第563条：有下列情形之一的，当事人可以解除合同：
 (一) 因不可抗力致使不能实现合同目的；
@@ -666,7 +684,6 @@ export async function* do_search_legal_knowledge(
     ? matchedKeys.map((k) => `### ${k}\n\n${knowledge[k]}`).join('\n\n---\n\n')
     : `未找到与 "${query}" 直接相关的法律知识。基于一般商法原则：\n1. 合同自由原则（民法典第5条）\n2. 公平原则（民法典第6条）\n3. 诚实信用原则（民法典第7条）\n4. 遵守法律与公序良俗原则（民法典第8条）`
 
-  yield `搜索法律知识: ${query}\n`
   return {
     data: result,
     nextPrompt: `法律知识查询完成。结合上述法律依据继续分析案件。`,
@@ -687,16 +704,49 @@ export async function* do_file_patch(args: ToolArgs, ctx: AgentContext): AsyncGe
 
   try {
     const fullText = readFileSync(filePath, 'utf-8')
-    const count = fullText.split(oldContent).length - 1
+
+    // Try exact match first, then trimmed match as fallback
+    let count = fullText.split(oldContent).length - 1
+    let actualOld = oldContent
 
     if (count === 0) {
-      return { data: `未找到匹配的旧文本块。文件: ${relative(ctx.workDir, filePath)}`, nextPrompt: '文件中未找到匹配的旧文本块。请先用 file_read 确认当前内容，再分小段进行 patch。若多次失败则询问用户。' }
-    }
-    if (count > 1) {
-      return { data: `找到 ${count} 处匹配，无法确定唯一位置。`, nextPrompt: `找到 ${count} 处匹配。请提供更长、更具体的旧文本块以确保唯一性，或分小段逐个修改。` }
+      // Fallback: try with normalized whitespace (handles leading/trailing differences)
+      const normalizedOld = oldContent.trim()
+      const normalizedFull = fullText
+      const trimmedCount = normalizedFull.split(normalizedOld).length - 1
+      if (trimmedCount === 1) {
+        count = 1
+        actualOld = normalizedOld
+      }
     }
 
-    const updatedText = fullText.replace(oldContent, newContent)
+    if (count === 0) {
+      // Provide context: show the first 50 chars of oldContent and file length
+      const preview = oldContent.slice(0, 50).replace(/\n/g, '\\n')
+      return {
+        data: `未找到匹配的旧文本块。文件: ${relative(ctx.workDir, filePath)} (${fullText.length} 字符)。查找: "${preview}..."`,
+        nextPrompt: '文件中未找到匹配的旧文本块。请先用 file_read 确认当前内容，确保 oldContent 与文件中的文本完全一致（包括缩进和换行），再分小段进行 patch。',
+      }
+    }
+    if (count > 1) {
+      // Find line numbers of each match for better diagnostics
+      const lines = fullText.split('\n')
+      const matchLines: number[] = []
+      let searchFrom = 0
+      for (let i = 0; i < count && i < 5; i++) {
+        const idx = fullText.indexOf(actualOld, searchFrom)
+        if (idx === -1) break
+        const lineNum = fullText.slice(0, idx).split('\n').length
+        matchLines.push(lineNum)
+        searchFrom = idx + 1
+      }
+      return {
+        data: `找到 ${count} 处匹配（行: ${matchLines.join(', ')}），无法确定唯一位置。`,
+        nextPrompt: `找到 ${count} 处匹配（行: ${matchLines.join(', ')}）。请提供更长、更具体的旧文本块以确保唯一性，或使用行号范围定位。`,
+      }
+    }
+
+    const updatedText = fullText.replace(actualOld, newContent)
     writeFileSync(filePath, updatedText, 'utf-8')
     yield `文件局部修改成功: ${relative(ctx.workDir, filePath)}\n`
     return {
@@ -807,13 +857,26 @@ export async function* do_update_dynamic_file(args: ToolArgs, ctx: AgentContext)
     const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, ctx.caseId)).get()
 
     // Build update data, preferring args but falling back to existing values
-    const updateData: Record<string, unknown> = {
+    const updateData: Partial<{
+      caseId: string
+      partyAnalysis: string
+      timeline: string
+      disputeChecklist: string
+      positions: string
+      potentialInterests: string
+      batna: string
+      agentLog: string
+      dialogEnded: boolean
+      updatedAt: Date
+      createdAt: Date
+      id: string
+    }> = {
       caseId: ctx.caseId,
       updatedAt: now,
     }
 
     // Fields to set (from args if provided, else keep existing)
-    const fields: string[] = ['partyAnalysis', 'timeline', 'disputeChecklist', 'positions', 'potentialInterests', 'batna']
+    const fields = ['partyAnalysis', 'timeline', 'disputeChecklist', 'positions', 'potentialInterests', 'batna'] as const
     for (const f of fields) {
       if (args[f] !== undefined) {
         updateData[f] = String(args[f])
@@ -830,17 +893,28 @@ export async function* do_update_dynamic_file(args: ToolArgs, ctx: AgentContext)
     // dialogEnded
     if (args.dialogEnded === true || args.dialogEnded === 'true') {
       updateData.dialogEnded = true
-      // Also update the cases table phase
       db.update(cases).set({ phase: 'mediator_selection' }).where(eq(cases.id, ctx.caseId)).run()
     }
 
     if (existing) {
-      db.update(caseDynamicFiles).set(updateData as any).where(eq(caseDynamicFiles.caseId, ctx.caseId)).run()
-      db.update(cases).set({ dynamicFileUpdatedAt: nowUnix } as any).where(eq(cases.id, ctx.caseId)).run()
+      db.update(caseDynamicFiles).set(updateData).where(eq(caseDynamicFiles.caseId, ctx.caseId)).run()
+      db.update(cases).set({ dynamicFileUpdatedAt: nowUnix }).where(eq(cases.id, ctx.caseId)).run()
     } else {
-      updateData.id = ctx.caseId
-      updateData.createdAt = now
-      db.insert(caseDynamicFiles).values(updateData as any).run()
+      db.insert(caseDynamicFiles).values({
+        id: ctx.caseId,
+        caseId: ctx.caseId,
+        createdAt: now,
+        updatedAt: now,
+        dialogEnded: updateData.dialogEnded ?? false,
+        dialogTurnCount: 0,
+        partyAnalysis: updateData.partyAnalysis,
+        timeline: updateData.timeline,
+        disputeChecklist: updateData.disputeChecklist,
+        positions: updateData.positions,
+        potentialInterests: updateData.potentialInterests,
+        batna: updateData.batna,
+        agentLog: updateData.agentLog,
+      }).run()
     }
 
     const updatedFields = Object.keys(updateData).filter(k => k !== 'caseId' && k !== 'updatedAt' && k !== 'id' && k !== 'createdAt')

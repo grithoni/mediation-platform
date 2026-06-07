@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '../../../database'
 import { cases, caseDynamicFiles } from '../../../database/schema'
 import { requireAuth } from '../../../middleware/auth'
+import { searchKb, formatKbResultsForPrompt } from '../../../utils/kb-search'
 
 function buildPrompt(caseData: any, df: any): string {
   const safe = (v: any) => (v && String(v).trim()) || '（暂无）'
@@ -145,6 +146,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
   }
 
+  // ── RAG: Search for relevant legal provisions ───────────
+  const searchQuery = `${caseData.title || ''} ${caseData.description || ''}`.slice(0, 200)
+  let systemPrompt = '你是一位拥有 15 年以上经验的商事调解专家，专长"哈佛利益谈判法"。你从利益交换角度设计方案，输出严格遵循用户指定的 10 节结构。'
+  try {
+    const kbResults = await searchKb(searchQuery, 3)
+    if (kbResults.length > 0) {
+      systemPrompt += formatKbResultsForPrompt(kbResults)
+      console.log(`[RAG] recommend-solution: Injected ${kbResults.length} KB results`)
+    }
+  } catch (err) {
+    console.warn('[recommend-solution] KB search failed, continuing without RAG:', err)
+  }
+
   const { generateText } = await import('ai')
   const { createOpenAI } = await import('@ai-sdk/openai')
   const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey }
@@ -153,7 +167,7 @@ export default defineEventHandler(async (event) => {
 
   const result = await generateText({
     model: openai(config.openaiModel || 'gpt-4o-mini'),
-    system: '你是一位拥有 15 年以上经验的商事调解专家，专长"哈佛利益谈判法"。你从利益交换角度设计方案，输出严格遵循用户指定的 10 节结构。',
+    system: systemPrompt,
     prompt: buildPrompt(caseData, df),
     temperature: 0.4,
   })

@@ -14,7 +14,6 @@ export default defineEventHandler(async (event) => {
     return { success: false, error: '缺少 caseId 或 mediatorId' }
   }
 
-  const now = new Date()
   const nowUnix = Math.floor(Date.now() / 1000)
 
   db.update(cases)
@@ -23,10 +22,10 @@ export default defineEventHandler(async (event) => {
       mediatorBoundAt: nowUnix,
       phase: 'active',
       status: 'active',
-      updatedAt: now,
-    } as any)
+      updatedAt: new Date(),
+    })
     .where(eq(cases.id, caseId))
     .run()
 
-  return { success: true, data: { caseId, mediatorId, boundAt: now } }
+  return { success: true, data: { caseId, mediatorId, boundAt: new Date().toISOString() } }
 })

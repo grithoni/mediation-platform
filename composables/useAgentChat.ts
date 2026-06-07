@@ -85,13 +85,18 @@ export function useAgentChat(caseId: Ref<string>) {
       if (!reader) throw new Error('No response body')
 
       const decoder = new TextDecoder()
+      let leftover = '' // Buffer for incomplete lines across chunks
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
         const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
+        const text = leftover + chunk
+        const lines = text.split('\n')
+
+        // Last element may be incomplete (no trailing \n) — save for next chunk
+        leftover = lines.pop() || ''
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
@@ -100,6 +105,17 @@ export function useAgentChat(caseId: Ref<string>) {
 
           try {
             const event: AgentEvent = JSON.parse(jsonStr)
+            handleAgentEvent(event)
+          } catch {}
+        }
+      }
+
+      // Process any remaining data in the buffer
+      if (leftover.trim()) {
+        const line = leftover.trim()
+        if (line.startsWith('data: ')) {
+          try {
+            const event: AgentEvent = JSON.parse(line.slice(6).trim())
             handleAgentEvent(event)
           } catch {}
         }
@@ -163,11 +179,8 @@ export function useAgentChat(caseId: Ref<string>) {
         // Handle dialog ended (from keyword intercept / turn limit)
         if (event.data?.exitReason === 'DIALOG_ENDED') {
           dialogEnded.value = true
-          if (event.content && !messages.value.some(m => m.content === event.content)) {
-            addAgentMessage(event.content)
-          }
-          // Force page reload to show mediator selection banner
-          setTimeout(() => { window.location.reload() }, 1500)
+          // Message already added above — no duplicate needed.
+          // Caller should watch dialogEnded and update UI accordingly
         }
 
         // Handle ask_user

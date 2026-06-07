@@ -134,7 +134,7 @@ export default defineWebSocketHandler({
             senderId: meta.mediatorId || meta.sessionToken || peer.id,
             senderName: meta.name,
             content,
-            createdAt: now,
+            visibility: 'shared',
           })
           .run()
 

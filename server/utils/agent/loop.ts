@@ -58,26 +58,38 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
       messages[0].content = systemPrompt + '\n' + memoryContext
     }
 
-    // Call LLM
+    // Call LLM — iterate generator to forward streaming tokens
     let llmContent = ''
     let toolCalls: ToolCall[] = []
 
     try {
       const gen = llmCall(messages, AGENT_TOOLS)
+      let iterResult = await gen.next()
 
-      // Manual iteration to properly type the return value
-      const iterResult = await advanceGenerator<LLMResult>(gen)
+      // Intermediate yields = streaming text tokens → forward to frontend
+      while (!iterResult.done) {
+        const token = iterResult.value as string
+        if (token) {
+          fullResponse += token
+          yield { type: 'text', content: token }
+        }
+        iterResult = await gen.next()
+      }
 
-      llmContent = iterResult.content
-      toolCalls = iterResult.toolCalls
+      // Final return value = { content, toolCalls }
+      const llmResult = iterResult.value as LLMResult
+      llmContent = llmResult.content
+      toolCalls = llmResult.toolCalls
     } catch (err: any) {
       yield { type: 'error', content: `LLM 调用失败: ${err.message}` }
       exitReason = `LLM_ERROR: ${err.message}`
       break
     }
 
-    if (llmContent) {
-      fullResponse += llmContent
+    // Reconcile: llmContent may contain text not yielded as tokens (e.g. tool_use blocks).
+    // Ensure fullResponse reflects the complete LLM output.
+    if (llmContent && llmContent.length > fullResponse.length) {
+      fullResponse = llmContent
     }
 
     // If no tool calls, task is complete
@@ -176,11 +188,12 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
       }
 
       if (!outcome.nextPrompt) {
+        // Don't break — remaining parallel tool calls still need to execute.
+        // Mark exit condition; it takes effect after all tool calls are processed.
         exitReason = 'CURRENT_TASK_DONE'
-        break
+      } else {
+        nextPrompts.push(outcome.nextPrompt)
       }
-
-      nextPrompts.push(outcome.nextPrompt)
     }
 
     if (exitReason) {
@@ -242,14 +255,4 @@ async function exhaustGenerator<T, R>(
   return result.value as R
 }
 
-/** Advance an async generator, yielding ONLY the final return value */
-async function advanceGenerator<R>(
-  gen: AsyncGenerator<string, R, unknown>
-): Promise<R> {
-  let result: IteratorResult<string, R>
-  do {
-    result = await gen.next()
-  } while (!result.done)
-  return result.value as R
-}
 

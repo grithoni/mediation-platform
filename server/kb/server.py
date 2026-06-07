@@ -77,6 +77,7 @@ app.add_middleware(
 class SearchQuery(BaseModel):
     query: str
     top_k: int = 5
+    mode: str = "hybrid"  # "hybrid" | "vector" | "keyword"
 
 def _deps_error_response(action: str = "此操作"):
     """Return a friendly JSON error when KB deps are missing."""
@@ -118,8 +119,19 @@ def search(body: SearchQuery):
     k = get_kb()
     if k is None:
         return _deps_error_response("知识库搜索")
-    results = k.search(body.query, body.top_k)
-    return {"results": [{"path": r.source_path, "content": r.content, "score": r.score} for r in results]}
+
+    mode = body.mode
+    if mode == "keyword":
+        results = k.search_keyword(body.query, body.top_k)
+    elif mode == "vector":
+        results = k.search(body.query, body.top_k)
+    else:  # "hybrid" (default)
+        results = k.search_hybrid(body.query, body.top_k)
+
+    return {
+        "results": [{"path": r.source_path, "content": r.content, "score": r.score} for r in results],
+        "mode": mode,
+    }
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):

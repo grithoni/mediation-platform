@@ -1,8 +1,11 @@
-"""Local knowledge base engine — ChromaDB + FastEmbed (BAAI/bge-small-zh-v1.5)"""
+"""Local knowledge base engine — ChromaDB + FastEmbed + BM25 hybrid search"""
 from __future__ import annotations
 import os
+import re
+import math
 import hashlib
 import time
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -76,6 +79,126 @@ class SearchResult:
     metadata: dict = field(default_factory=dict)
 
 
+# ── BM25 keyword search ──────────────────────────────────
+
+# Regex: split on non-alphanumeric/non-CJK boundaries
+_TOKEN_RE = re.compile(
+    r'[a-zA-Z0-9]+|[一-鿿㐀-䶿]'  # English words | single CJK chars
+)
+
+def tokenize_zh(text: str) -> list[str]:
+    """Tokenize Chinese/English text into searchable terms.
+    - CJK characters: each char as a token + bigrams for phrase matching
+    - English/numbers: whole words (lowercased)
+    - Also extracts number+unit patterns (e.g., "563条", "第585条")
+    """
+    text = text.lower()
+    tokens = []
+
+    # Extract number+article patterns first (e.g., "第563条", "585条", "第三条")
+    for m in re.finditer(r'第?[\d一二三四五六七八九十百千]+条', text):
+        tokens.append(m.group())
+
+    # Standard tokenization
+    for m in _TOKEN_RE.finditer(text):
+        tok = m.group()
+        tokens.append(tok)
+
+    # Add CJK bigrams for phrase-level matching
+    cjk_chars = [t for t in tokens if len(t) == 1 and '一' <= t <= '鿿']
+    for i in range(len(cjk_chars) - 1):
+        tokens.append(cjk_chars[i] + cjk_chars[i + 1])
+
+    return tokens
+
+
+class BM25Index:
+    """In-memory BM25 inverted index for keyword search."""
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
+        self.k1 = k1
+        self.b = b
+        # doc_id -> (content, source_path, chunk_index, metadata)
+        self._docs: dict[str, tuple[str, str, int, dict]] = {}
+        # term -> {doc_id: tf}
+        self._index: dict[str, dict[str, int]] = defaultdict(dict)
+        # doc_id -> doc length (in tokens)
+        self._doc_lengths: dict[str, int] = {}
+        self._avg_dl: float = 0.0
+        self._doc_count: int = 0
+
+    def add_document(self, doc_id: str, content: str, source_path: str,
+                     chunk_index: int = 0, metadata: dict | None = None):
+        """Add a document to the BM25 index."""
+        tokens = tokenize_zh(content)
+        if not tokens:
+            return
+
+        self._docs[doc_id] = (content, source_path, chunk_index, metadata or {})
+        tf = Counter(tokens)
+        for term, count in tf.items():
+            self._index[term][doc_id] = count
+        self._doc_lengths[doc_id] = len(tokens)
+
+    def build(self):
+        """Recompute derived statistics after adding documents."""
+        self._doc_count = len(self._docs)
+        if self._doc_count > 0:
+            self._avg_dl = sum(self._doc_lengths.values()) / self._doc_count
+        else:
+            self._avg_dl = 0
+
+    def search(self, query: str, top_k: int = 5) -> list[tuple[str, float]]:
+        """Search and return (doc_id, score) pairs sorted by score desc."""
+        if self._doc_count == 0:
+            return []
+
+        query_tokens = tokenize_zh(query)
+        if not query_tokens:
+            return []
+
+        scores: dict[str, float] = defaultdict(float)
+        N = self._doc_count
+        avg_dl = self._avg_dl if self._avg_dl > 0 else 1
+
+        for term in query_tokens:
+            if term not in self._index:
+                continue
+            posting = self._index[term]
+            df = len(posting)
+            # IDF with floor to avoid negative values
+            idf = math.log((N - df + 0.5) / (df + 0.5) + 1.0)
+
+            for doc_id, tf in posting.items():
+                dl = self._doc_lengths.get(doc_id, avg_dl)
+                numerator = tf * (self.k1 + 1)
+                denominator = tf + self.k1 * (1 - self.b + self.b * dl / avg_dl)
+                scores[doc_id] += idf * numerator / denominator
+
+        ranked = sorted(scores.items(), key=lambda x: -x[1])
+        return ranked[:top_k]
+
+    def get_doc(self, doc_id: str) -> tuple[str, str, int, dict] | None:
+        return self._docs.get(doc_id)
+
+
+def rrf_fuse(
+    *ranked_lists: list[tuple[str, float]],
+    k: int = 60,
+    top_k: int = 5,
+) -> list[tuple[str, float]]:
+    """Reciprocal Rank Fusion over multiple ranked lists.
+    Each list is [(doc_id, score), ...] sorted by score desc.
+    Returns [(doc_id, rrf_score), ...] sorted by rrf_score desc.
+    """
+    rrf_scores: dict[str, float] = defaultdict(float)
+    for ranked in ranked_lists:
+        for rank, (doc_id, _) in enumerate(ranked):
+            rrf_scores[doc_id] += 1.0 / (k + rank + 1)
+    merged = sorted(rrf_scores.items(), key=lambda x: -x[1])
+    return merged[:top_k]
+
+
 class LocalKBError(Exception):
     pass
 
@@ -92,6 +215,7 @@ class LocalKB:
         self._collection = None
         self._embed_fn = None
         self._initialized = False
+        self._bm25: BM25Index | None = None
 
     def _ensure_collection(self):
         if self._initialized:
@@ -126,6 +250,29 @@ class LocalKB:
                 metadata={"hnsw:space": "cosine"},
             )
         self._initialized = True
+
+        # Build BM25 index from ChromaDB documents
+        self._build_bm25_index()
+
+    def _build_bm25_index(self):
+        """Load all ChromaDB documents into the BM25 inverted index."""
+        if self._collection.count() == 0:
+            self._bm25 = BM25Index()
+            self._bm25.build()
+            return
+
+        bm25 = BM25Index()
+        all_data = self._collection.get(include=["documents", "metadatas"])
+        for doc_id, doc, meta in zip(all_data['ids'], all_data['documents'], all_data['metadatas']):
+            bm25.add_document(
+                doc_id=doc_id,
+                content=doc,
+                source_path=meta.get('source_path', ''),
+                chunk_index=meta.get('chunk_index', 0),
+                metadata=meta,
+            )
+        bm25.build()
+        self._bm25 = bm25
 
     # ── Indexing ─────────────────────────────────────────
 
@@ -247,6 +394,17 @@ class LocalKB:
             } for c in new_chunks],
         )
 
+        # Also add to BM25 index
+        if self._bm25:
+            for c in new_chunks:
+                self._bm25.add_document(
+                    doc_id=c.doc_id,
+                    content=c.content,
+                    source_path=c.source_path,
+                    chunk_index=c.chunk_index,
+                )
+            self._bm25.build()
+
     # ── Searching ─────────────────────────────────────────
 
     def search(self, query, top_k=5):
@@ -283,6 +441,87 @@ class LocalKB:
             if len(out) >= top_k:
                 break
 
+        return out
+
+    def search_keyword(self, query, top_k=5):
+        """BM25 keyword search — excels at exact term/article matching."""
+        self._ensure_collection()
+        if not self._bm25 or self._collection.count() == 0:
+            return []
+
+        ranked = self._bm25.search(query, top_k=top_k * 3)
+        out = []
+        seen_files = set()
+        for doc_id, bm25_score in ranked:
+            doc_info = self._bm25.get_doc(doc_id)
+            if not doc_info:
+                continue
+            content, source_path, chunk_index, metadata = doc_info
+            if source_path in seen_files:
+                continue
+            seen_files.add(source_path)
+            out.append(SearchResult(
+                content=content[:1500],
+                source_path=source_path,
+                score=round(bm25_score, 4),
+                chunk_index=chunk_index,
+                metadata=metadata,
+            ))
+            if len(out) >= top_k:
+                break
+        return out
+
+    def search_hybrid(self, query, top_k=5):
+        """Hybrid search: vector semantic + BM25 keyword, fused with RRF."""
+        self._ensure_collection()
+        if self._collection.count() == 0:
+            return []
+
+        # Vector search
+        vector_results = self.search(query, top_k=top_k * 2)
+        vector_ranked = [(r.source_path, r.score) for r in vector_results]
+
+        # BM25 keyword search
+        bm25_ranked = []
+        if self._bm25:
+            bm25_ranked = self._bm25.search(query, top_k=top_k * 2)
+
+        # RRF fusion
+        fused = rrf_fuse(vector_ranked, bm25_ranked, top_k=top_k * 2)
+
+        # Build result lookup from both result sets
+        result_map: dict[str, SearchResult] = {}
+        for r in vector_results:
+            result_map[r.source_path] = r
+        for doc_id, bm25_score in (bm25_ranked or []):
+            doc_info = self._bm25.get_doc(doc_id) if self._bm25 else None
+            if doc_info and doc_info[1] not in result_map:
+                content, source_path, chunk_index, metadata = doc_info
+                result_map[source_path] = SearchResult(
+                    content=content[:1500],
+                    source_path=source_path,
+                    score=bm25_score,
+                    chunk_index=chunk_index,
+                    metadata=metadata,
+                )
+
+        # Assemble fused results
+        out = []
+        seen_files = set()
+        for path, rrf_score in fused:
+            if path in seen_files or path not in result_map:
+                continue
+            seen_files.add(path)
+            r = result_map[path]
+            out.append(SearchResult(
+                content=r.content,
+                source_path=r.source_path,
+                score=round(rrf_score, 4),
+                chunk_index=r.chunk_index,
+                metadata=r.metadata,
+            ))
+            if len(out) >= top_k:
+                break
         return out
 
     # ── Management ────────────────────────────────────────
@@ -330,6 +569,8 @@ class LocalKB:
         ]
         if ids_to_remove:
             self._collection.delete(ids=ids_to_remove)
+        # Rebuild BM25 index after removal
+        self._build_bm25_index()
         return {"removed": len(ids_to_remove), "path": path}
 
 

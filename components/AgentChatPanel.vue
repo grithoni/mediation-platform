@@ -160,7 +160,7 @@ const emit = defineEmits<{
 }>()
 
 const { caseId } = toRefs(props)
-const { messages, isStreaming, currentContent, currentToolCalls, error, dialogEnded, sendToAgent } =
+const { messages, isStreaming, currentContent, currentToolCalls, error, dialogEnded, sendToAgent, clear } =
   useAgentChat(caseId)
 
 // When server triggers DIALOG_ENDED or local keyword match, update global state
@@ -239,14 +239,13 @@ watch(() => messages.value.length, () => {
 })
 
 function clearMessages() {
-  const { clear } = useAgentChat(caseId)
   clear()
 }
 
 /** Auto-scroll to bottom on new messages */
 const lastMessageEl = ref<HTMLElement | null>(null)
 
-watch([messages, currentContent, currentThinking, currentToolCalls], () => {
+watch([messages, currentContent, currentToolCalls], () => {
   nextTick(() => {
     if (containerRef.value) {
       containerRef.value.scrollTop = containerRef.value.scrollHeight
