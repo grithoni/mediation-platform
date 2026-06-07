@@ -11,14 +11,14 @@
           <div class="flex items-center gap-2 mb-4">
             <UIcon name="i-lucide-scale" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
             <div>
-              <h1 class="text-4xl font-bold text-gray-900 dark:text-white">全时在线的争议解决专家</h1>
-              <p class="text-sm text-gray-400 dark:text-gray-500 font-mono">Always Online Dispute Resolution Expert</p>
+              <h1 class="text-4xl font-bold text-gray-900 dark:text-white">全时在线的调解专家</h1>
+              <p class="text-sm text-gray-400 dark:text-gray-500 font-mono">Always Online Mediation Expert</p>
             </div>
           </div>
 
           <div class="flex items-center gap-2 mb-5">
             <div class="w-1 h-5 bg-blue-300 dark:bg-blue-600 rounded-full" />
-            <span class="text-sm font-mono text-gray-400 dark:text-gray-500 uppercase tracking-widest">DISPUTE RESOLUTION</span>
+            <span class="text-sm font-mono text-gray-400 dark:text-gray-500 uppercase tracking-widest">MEDIATION PLATFORM</span>
           </div>
 
           <!-- Case Entry Form -->
@@ -122,17 +122,17 @@
     </template>
 
     <!-- ================================================================== -->
-    <!-- Modes: mediation / evaluation / review — 文件上传 + 创建案件 -->
+    <!-- Mode: create-case — 创建新的案件 -->
     <!-- ================================================================== -->
-    <template v-else>
+    <template v-else-if="activeMenu === 'create-case'">
       <div class="flex-1 flex flex-col min-h-0">
         <!-- Header -->
         <div class="shrink-0 p-6 border-b border-gray-200 dark:border-gray-800">
           <div class="flex items-center gap-3">
-            <UIcon :name="modeIcon" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white">{{ modeTitle }}</h2>
+            <UIcon name="i-lucide-plus-circle" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">创建新的案件</h2>
           </div>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">请上传相关材料，我们将为您创建案件并安排调解服务</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">请上传相关材料，系统将为您自动创建案件并推进调解流程</p>
         </div>
 
         <!-- Upload Area or Success -->
@@ -219,6 +219,115 @@
         </template>
       </div>
     </template>
+
+    <!-- ================================================================== -->
+    <!-- Mode: guide — 流程指引 -->
+    <!-- ================================================================== -->
+    <template v-else-if="activeMenu === 'guide'">
+      <div class="flex-1 flex flex-col min-h-0">
+        <!-- Header -->
+        <div class="shrink-0 p-6 border-b border-gray-200 dark:border-gray-800">
+          <div class="flex items-center gap-3">
+            <UIcon name="i-lucide-book-open" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">流程指引</h2>
+          </div>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">当事人使用本平台的操作指南</p>
+        </div>
+
+        <!-- Guide Content -->
+        <div class="flex-1 overflow-y-auto p-6">
+          <div class="max-w-3xl mx-auto space-y-8">
+
+            <!-- Step 1 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">1</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 咨询</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>在首页 <strong>进入我的案件</strong> 页面底部，您可以直接与 AI 助手对话，描述您遇到的商事纠纷。</p>
+                <p>AI 会采用分阶段心理咨询模式（倾听 → 共情 → 重塑 → 协商），前 3-4 轮以倾听和了解情况为主，不会直接提供解决方案。</p>
+                <p>当您确认需要正式申请调解时，点击左侧菜单 <strong>创建新的案件</strong> 上传材料。</p>
+              </div>
+            </section>
+
+            <!-- Step 2 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">2</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">上传材料并创建案件</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>点击左侧菜单 <strong>创建新的案件</strong>，在右侧上传相关证据材料。</p>
+                <p>支持 PDF、Word、图片、文本文件，单文件最大 50MB。可通过拖拽或点击选择文件。</p>
+                <p>上传完成后点击 <strong>创建案件</strong> 按钮，系统将自动生成案件编号和访问验证码，请妥善保存。</p>
+              </div>
+            </section>
+
+            <!-- Step 3 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">3</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">查看案件</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>点击左侧菜单 <strong>进入我的案件</strong>，输入案件编号和访问验证码即可进入案件详情页。</p>
+                <p>在案件详情页，您可以查看案件信息、与 AI 智能体继续对话，或选择调解员进行人工调解。</p>
+              </div>
+            </section>
+
+            <!-- Step 4 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">4</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">选择调解员</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>在案件详情页点击 <strong>与调解员对话</strong>，浏览可用的调解员信息（专长、学历、单位）。</p>
+                <p>选择一位调解员后，案件状态将变为"进行中"，您可以与调解员实时交流。</p>
+              </div>
+            </section>
+
+            <!-- Step 5 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">5</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 智能体对话</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>在案件页面点击 <strong>与智能体对话</strong>，AI 会基于案件动态文件（争议焦点、时间线、立场等）提供专业的调解建议。</p>
+                <p>AI 智能体的回答基于知识库中的法律条文进行检索增强，确保建议的专业性和准确性。</p>
+              </div>
+            </section>
+
+            <!-- Step 6 -->
+            <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">6</span>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">结束对话</h3>
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
+                <p>在对话框中输入 "我要找调解员"、"结束"、"不用了" 等关键词，系统会自动转入调解员选择流程。</p>
+                <p>连续对话 5 轮以上也会自动提示选择调解员，确保您的纠纷能够得到专业处理。</p>
+              </div>
+            </section>
+
+            <!-- Privacy Notice -->
+            <section class="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <UIcon name="i-lucide-shield-check" class="w-5 h-5 text-blue-500 dark:text-blue-400" />
+                <h3 class="text-base font-semibold text-blue-900 dark:text-blue-100">隐私保护</h3>
+              </div>
+              <div class="text-sm text-blue-700 dark:text-blue-300 space-y-2 leading-relaxed">
+                <p>您与 AI 的私聊内容对调解员不可见，只有您主动发送的消息和调解员的消息才会在调解员端显示。</p>
+                <p>全程加密传输，保护您的商业秘密和隐私。</p>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -237,16 +346,6 @@ const features = [
   { icon: 'i-lucide-brain', label: 'AI 智能辅助', desc: '人工智能辅助分析，提供专业调解建议' },
   { icon: 'i-lucide-users', label: '专业调解员', desc: '经验丰富的商事调解员，高效化解纠纷' },
 ]
-
-// ---- Mode info ----
-const modeInfo: Record<string, { title: string; icon: string }> = {
-  mediation: { title: '申请调解', icon: 'i-lucide-handshake' },
-  evaluation: { title: '申请中立评估', icon: 'i-lucide-target' },
-  review: { title: '申请争议评审', icon: 'i-lucide-file-search' },
-}
-
-const modeTitle = computed(() => modeInfo[activeMenu.value]?.title || '')
-const modeIcon = computed(() => modeInfo[activeMenu.value]?.icon || 'i-lucide-file')
 
 // ---- Case Entry ----
 const caseNumber = ref('')
@@ -353,7 +452,7 @@ async function createCase() {
   creatingCase.value = true
   try {
     const formData = new FormData()
-    formData.append('caseType', activeMenu.value)
+    formData.append('caseType', 'mediation')
     for (const file of uploadedFiles.value) {
       formData.append('files', file)
     }

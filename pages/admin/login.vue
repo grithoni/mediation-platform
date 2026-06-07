@@ -7,7 +7,8 @@
           <UIcon name="i-lucide-scale" class="w-6 h-6 text-[#1e3a5f] dark:text-gray-400" />
           <span class="text-3xl font-semibold text-gray-900 dark:text-white">全时在线的调解专家</span>
         </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">mediator sign in</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">Always Online Mediation Expert</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 font-mono mt-1">mediator sign in</p>
       </div>
 
       <!-- Login Card -->

@@ -1,4 +1,4 @@
-export type ActiveMenu = 'case-entry' | 'mediation' | 'evaluation' | 'review'
+export type ActiveMenu = 'case-entry' | 'create-case' | 'guide'
 
 export const useActiveMenu = () => {
   const activeMenu = useState<ActiveMenu>('party-active-menu', () => 'case-entry')

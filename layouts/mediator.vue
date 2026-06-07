@@ -24,8 +24,8 @@ const showNavbar = computed(() => auth.isAuthenticated.value && !isLoginPage.val
     <header v-if="showNavbar" class="h-12 shrink-0 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
       <div class="flex items-center gap-2.5">
         <UIcon name="i-lucide-scale" class="w-4 h-4 text-blue-500 dark:text-blue-400" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white truncate">全时在线的争议解决专家</span>
-        <span class="text-xs text-gray-400 dark:text-gray-500 font-mono hidden sm:inline ml-1.5">Always Online Dispute Resolution Expert</span>
+        <span class="text-lg font-semibold text-gray-900 dark:text-white truncate">全时在线的调解专家</span>
+        <span class="text-xs text-gray-400 dark:text-gray-500 font-mono hidden sm:inline ml-1.5">Always Online Mediation Expert</span>
         <span class="text-xs text-gray-400 dark:text-gray-500 font-mono ml-1.5 hidden sm:inline">| 调解员工作台 | Mediator Workstation</span>
       </div>
       <div class="flex items-center gap-2">

@@ -17,9 +17,8 @@ const menuItems: Array<{
   label: string
 }> = [
   { key: 'case-entry', icon: 'i-lucide-folder-open', label: '进入我的案件' },
-  { key: 'mediation', icon: 'i-lucide-handshake', label: '申请调解' },
-  { key: 'evaluation', icon: 'i-lucide-target', label: '申请中立评估' },
-  { key: 'review', icon: 'i-lucide-file-search', label: '申请争议评审' },
+  { key: 'create-case', icon: 'i-lucide-plus-circle', label: '创建新的案件' },
+  { key: 'guide', icon: 'i-lucide-book-open', label: '流程指引' },
 ]
 </script>
 
@@ -33,8 +32,8 @@ const menuItems: Array<{
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-scale" class="w-5 h-5 text-blue-500 dark:text-blue-400" />
             <div>
-              <div class="text-xl font-bold text-gray-900 dark:text-white">全时在线的争议解决专家</div>
-              <div class="text-xs text-gray-400 dark:text-gray-500 font-mono">Always Online Dispute Resolution Expert</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">全时在线的调解专家</div>
+              <div class="text-xs text-gray-400 dark:text-gray-500 font-mono">Always Online Mediation Expert</div>
             </div>
           </div>
           <button
