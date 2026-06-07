@@ -1,6 +1,7 @@
 // ============================================================
 // POST /api/cases/:caseNumber/recommend-solution
 // 基于案件资料 + 案件动态文件，生成 2-3 个利益重构方案
+// 优先读取已有动态文件，为空时才全量分析，结果写回动态文件
 // ============================================================
 import { eq } from 'drizzle-orm'
 import { getDb } from '../../../database'
@@ -8,7 +9,16 @@ import { cases, caseDynamicFiles } from '../../../database/schema'
 import { requireAuth } from '../../../middleware/auth'
 import { searchKb, formatKbResultsForPrompt } from '../../../utils/kb-search'
 
-function buildPrompt(caseData: any, df: any): string {
+/** 检查动态文件是否有实质性内容（至少2个核心字段非空） */
+function hasSubstantiveData(df: any): boolean {
+  if (!df) return false
+  const fields = [df.positions, df.potentialInterests, df.batna, df.partyAnalysis, df.disputeChecklist, df.timeline]
+  const filled = fields.filter(f => f && String(f).trim().length > 30).length
+  return filled >= 2
+}
+
+/** 全量分析 prompt（原始版本） */
+function buildFullPrompt(caseData: any, df: any): string {
   const safe = (v: any) => (v && String(v).trim()) || '（暂无）'
   return `## 角色
 你是一位拥有 15 年以上经验的商事调解专家，专长"哈佛利益谈判法"。你不评判对错，也不只重复法律立场；你从双方**真实利益**出发，重构可交换的方案，把蛋糕做大、把分歧缩小。
@@ -56,7 +66,46 @@ ${safe(df?.potentialInterests)}
 ### 各方 BATNA（动态文件）
 ${safe(df?.batna)}
 
-## 任务
+${OUTPUT_FORMAT}`
+}
+
+/** 增量分析 prompt（动态文件已有数据时使用，更轻量） */
+function buildLightPrompt(caseData: any, df: any): string {
+  const safe = (v: any) => (v && String(v).trim()) || '（暂无）'
+  return `## 角色
+你是一位拥有 15 年以上经验的商事调解专家，专长"哈佛利益谈判法"。基于已有的分析结果，直接生成利益重构方案。
+
+## 已有分析结果
+
+### 案件标题
+${safe(caseData.title)}
+
+### 当事人
+- 甲方：${safe(caseData.partyAName)}
+- 乙方：${safe(caseData.partyBName)}
+
+### 各方立场分析
+${safe(df.positions)}
+
+### 潜在利益点
+${safe(df.potentialInterests)}
+
+### BATNA 分析
+${safe(df.batna)}
+
+### 当事人特征分析
+${safe(df.partyAnalysis)}
+
+### 争议清单
+${safe(df.disputeChecklist)}
+
+### 时间线
+${safe(df.timeline)}
+
+${OUTPUT_FORMAT}`
+}
+
+const OUTPUT_FORMAT = `## 任务
 基于以上全部材料，按以下 **10 节固定格式** 输出。每个方案必须可执行，不要列空话。
 
 ---
@@ -127,6 +176,30 @@ ${safe(df?.batna)}
 - 每个小节必须有内容，禁止"略"或留空
 - 总长度控制在 2000-3500 字
 `
+
+/** 从报告文本中提取关键段落，写回动态文件 */
+function extractForDynamicFile(reportText: string): Partial<{
+  positions: string
+  potentialInterests: string
+  batna: string
+  partyAnalysis: string
+  disputeChecklist: string
+}> {
+  const result: Record<string, string> = {}
+
+  // 一、案件关键信息摘要 → positions
+  const sec1 = reportText.match(/一[、.]案件关键信息摘要([\s\S]*?)(?=二[、.]|$)/)
+  if (sec1?.[1]) result.positions = sec1[1].trim()
+
+  // 六、BATNA / WATNA → batna
+  const sec6 = reportText.match(/六[、.]BATNA[\s\S]*?对比([\s\S]*?)(?=七[、.]|$)/)
+  if (sec6?.[1]) result.batna = sec6[1].trim()
+
+  // 七、推荐方案与理由 → potentialInterests
+  const sec7 = reportText.match(/七[、.]推荐方案与理由([\s\S]*?)(?=八[、.]|$)/)
+  if (sec7?.[1]) result.potentialInterests = sec7[1].trim()
+
+  return result
 }
 
 export default defineEventHandler(async (event) => {
@@ -145,6 +218,10 @@ export default defineEventHandler(async (event) => {
   if (!config.openaiApiKey) {
     throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
   }
+
+  // ── 判断：动态文件是否有足够数据？──────────────────────
+  const useLightMode = hasSubstantiveData(df)
+  console.log(`[recommend-solution] case=${caseNumber} mode=${useLightMode ? 'LIGHT(动态文件)' : 'FULL(全量分析)'}`)
 
   // ── RAG: Search for relevant legal provisions ───────────
   const searchQuery = `${caseData.title || ''} ${caseData.description || ''}`.slice(0, 200)
@@ -165,12 +242,50 @@ export default defineEventHandler(async (event) => {
   if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl
   const openai = createOpenAI(openaiOptions)
 
+  // ── 选择 prompt 模式 ────────────────────────────────────
+  const prompt = useLightMode ? buildLightPrompt(caseData, df) : buildFullPrompt(caseData, df)
+
   const result = await generateText({
     model: openai(config.openaiModel || 'gpt-4o-mini'),
     system: systemPrompt,
-    prompt: buildPrompt(caseData, df),
+    prompt,
     temperature: 0.4,
   })
+
+  // ── 写回动态文件（增量更新） ────────────────────────────
+  try {
+    const extracted = extractForDynamicFile(result.text)
+    if (Object.keys(extracted).length > 0) {
+      const now = new Date()
+      if (df) {
+        // 只更新空字段，不覆盖已有数据
+        const updates: Record<string, string> = {}
+        for (const [key, val] of Object.entries(extracted)) {
+          if (val && (!df[key as keyof typeof df] || String(df[key as keyof typeof df]).trim().length < 30)) {
+            updates[key] = val
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          db.update(caseDynamicFiles).set({ ...updates, updatedAt: now }).where(eq(caseDynamicFiles.caseId, caseNumber)).run()
+          console.log(`[recommend-solution] 写回动态文件: ${Object.keys(updates).join(', ')}`)
+        }
+      } else {
+        // 创建新的动态文件
+        db.insert(caseDynamicFiles).values({
+          id: caseNumber,
+          caseId: caseNumber,
+          ...extracted,
+          createdAt: now,
+          updatedAt: now,
+          dialogEnded: false,
+          dialogTurnCount: 0,
+        }).run()
+        console.log(`[recommend-solution] 创建动态文件: ${Object.keys(extracted).join(', ')}`)
+      }
+    }
+  } catch (err) {
+    console.warn('[recommend-solution] 写回动态文件失败:', err)
+  }
 
   return {
     success: true,
@@ -178,6 +293,7 @@ export default defineEventHandler(async (event) => {
       caseId: caseNumber,
       content: result.text,
       generatedAt: new Date().toISOString(),
+      mode: useLightMode ? 'light' : 'full',
     },
   }
 })

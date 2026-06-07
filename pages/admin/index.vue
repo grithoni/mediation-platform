@@ -720,16 +720,54 @@ async function generateScript() {
   if (!selectedCaseId.value) return
   showScriptModal.value = true; scriptLoading.value = true; scriptStages.value = []; scriptError.value = ''; scriptGeneratedAt.value = null
   try {
-    const cd: any = caseDetail.value || {}
-    const ctx = [cd.description && `【案件描述】\n${cd.description}`, cd.claimsSummary && `【请求和答辩】\n${cd.claimsSummary}`, cd.evidenceSummary && `【证据和质证】\n${cd.evidenceSummary}`].filter(Boolean).join('\n\n')
-    const prompt = `你是一个经验丰富的商事调解专家。请根据以下案件信息，为调解员生成 3-5 步"首轮沟通话术"。\n\n要求：\n1. 每步聚焦一个目标（破冰/倾听/共情/聚焦利益/探索选项/推进共识/收尾确认）\n2. 语气专业、温和、不评判\n3. 每步 80-200 字，使用完整话术（可直接对当事人说）\n4. 不要使用 Markdown 标题/加粗/列表符号\n5. 对敏感法律点（合同效力、违约责任、诉讼时效）显式标注："需律师复核"\n\n返回严格的 JSON 数组（不要其他说明、不要包裹代码块）：\n[\n  {"stage": "步骤名称", "content": "完整话术内容..."},\n  ...\n]\n\n案件信息：\n${ctx || '（暂无）'}`
+    // ── 优先读取动态文件 ──────────────────────────────────
+    let df: any = null
+    try {
+      const dfResp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${selectedCaseId.value}/dynamic-files`, { credentials: 'include' })
+      df = dfResp?.data || null
+    } catch {}
+
+    const hasDfData = df && [df.positions, df.potentialInterests, df.partyAnalysis, df.disputeChecklist].filter((f: any) => f && String(f).trim().length > 30).length >= 2
+
+    let ctx: string
+    let useLightPrompt = false
+
+    if (hasDfData) {
+      // 增量模式：基于已有分析结果生成话术
+      useLightPrompt = true
+      ctx = [
+        df.positions && `【各方立场分析】\n${df.positions}`,
+        df.potentialInterests && `【潜在利益点】\n${df.potentialInterests}`,
+        df.partyAnalysis && `【当事人特征】\n${df.partyAnalysis}`,
+        df.disputeChecklist && `【争议清单】\n${df.disputeChecklist}`,
+      ].filter(Boolean).join('\n\n')
+      console.log('[generateScript] 增量模式：基于动态文件')
+    } else {
+      // 全量模式：基于案件原始材料
+      const cd: any = caseDetail.value || {}
+      ctx = [cd.description && `【案件描述】\n${cd.description}`, cd.claimsSummary && `【请求和答辩】\n${cd.claimsSummary}`, cd.evidenceSummary && `【证据和质证】\n${cd.evidenceSummary}`].filter(Boolean).join('\n\n')
+      console.log('[generateScript] 全量模式：基于案件材料')
+    }
+
+    const prompt = `你是一个经验丰富的商事调解专家。请根据以下${useLightPrompt ? '分析结果' : '案件信息'}，为调解员生成 3-5 步"首轮沟通话术"。\n\n要求：\n1. 每步聚焦一个目标（破冰/倾听/共情/聚焦利益/探索选项/推进共识/收尾确认）\n2. 语气专业、温和、不评判\n3. 每步 80-200 字，使用完整话术（可直接对当事人说）\n4. 不要使用 Markdown 标题/加粗/列表符号\n5. 对敏感法律点（合同效力、违约责任、诉讼时效）显式标注："需律师复核"\n\n返回严格的 JSON 数组（不要其他说明、不要包裹代码块）：\n[\n  {"stage": "步骤名称", "content": "完整话术内容..."},\n  ...\n]\n\n${useLightPrompt ? '分析结果' : '案件信息'}：\n${ctx || '（暂无）'}`
     const resp = await $fetch<{ success: boolean; data: { content: string; generatedAt: string } }>('/api/ai/oneshot', { method: 'POST', credentials: 'include', body: { system: '你是一个经验丰富的商事调解专家，擅长利益导向调解和温和沟通。请严格按要求格式返回。', prompt, temperature: 0.5 } })
     const text = resp?.data?.content || ''
     const match = text.match(/\[[\s\S]*\]/)
     if (match) {
       try {
         const arr = JSON.parse(match[0])
-        if (Array.isArray(arr) && arr.length) { scriptStages.value = arr.map((x: any) => ({ stage: String(x?.stage || '').slice(0, 40), content: String(x?.content || '') })).filter(s => s.content); scriptGeneratedAt.value = resp.data.generatedAt }
+        if (Array.isArray(arr) && arr.length) {
+          scriptStages.value = arr.map((x: any) => ({ stage: String(x?.stage || '').slice(0, 40), content: String(x?.content || '') })).filter(s => s.content)
+          scriptGeneratedAt.value = resp.data.generatedAt
+          // ── 写回动态文件：话术摘要存入 positions（补充立场信息） ──
+          if (!df?.positions) {
+            try {
+              const summary = arr.map((s: any) => `${s.stage}: ${s.content.slice(0, 80)}`).join('\n')
+              await $fetch(`/api/cases/${selectedCaseId.value}/dynamic-files`, { method: 'PUT', credentials: 'include', body: { positions: `【调解话术摘要】\n${summary}` } })
+              console.log('[generateScript] 话术摘要已写回动态文件')
+            } catch {}
+          }
+        }
         else { scriptError.value = 'AI 返回格式异常' }
       } catch { scriptError.value = '解析 AI 返回失败' }
     } else { scriptError.value = 'AI 未返回有效内容' }

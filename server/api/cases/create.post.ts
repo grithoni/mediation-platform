@@ -109,6 +109,9 @@ export default defineEventHandler(async (event) => {
     }).run()
   }
 
+  // 异步生成动态文件（不阻塞响应）
+  triggerDynamicFileGeneration(caseNumber)
+
   return {
     success: true,
     caseNumber,
@@ -116,3 +119,16 @@ export default defineEventHandler(async (event) => {
     fileCount: files.length,
   }
 })
+
+// 异步生成动态文件（不阻塞响应）
+async function triggerDynamicFileGeneration(caseNumber: string) {
+  try {
+    const { generateDynamicFile } = await import('../../utils/generate-dynamic-file')
+    const result = await generateDynamicFile(caseNumber)
+    if (result.generated.length > 0) {
+      console.log(`[create-case] ${caseNumber}: 动态文件已生成 ${result.generated.join(', ')}`)
+    }
+  } catch (err: any) {
+    console.warn(`[create-case] ${caseNumber}: 动态文件生成失败 — ${err.message}`)
+  }
+}
