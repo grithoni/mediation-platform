@@ -178,7 +178,7 @@ async function seedCases() {
 
   console.log(`\nDone! ${imported} cases imported.`)
   console.log('Access code for all cases: 123')
-  console.log('Access via: http://localhost:3000/case/{案号}')
+  console.log('Access via: http://localhost:3000/party/case/{案号}')
 }
 
 seedCases().catch(console.error)

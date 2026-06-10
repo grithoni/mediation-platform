@@ -452,7 +452,7 @@ const selectedCaseId = ref<string | null>(null)
 const allMessages = ref<MessageItem[]>([])
 const chat = useChat(computed(() => selectedCaseId.value || ''))
 const rightMode = ref<string>('cases-list')
-const caseDetailRef = ref<InstanceType<typeof import('./components/admin/CaseDetailView.vue')['default']> | null>(null)
+const caseDetailRef = ref<InstanceType<typeof import('../../components/admin/CaseDetailView.vue')['default']> | null>(null)
 
 const isKbMode = computed(() => ['kb-upload', 'kb-view', 'kb-search'].includes(rightMode.value))
 const isSettingsMode = computed(() => ['skills', 'tools'].includes(rightMode.value))

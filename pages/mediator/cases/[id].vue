@@ -216,7 +216,7 @@ const chat = useChat(computed(() => caseId))
 onMounted(async () => {
   const user = await auth.fetchUser()
   if (!user) {
-    navigateTo('/admin/login')
+    navigateTo('/mediator/login')
     return
   }
   authLoading.value = false
@@ -274,7 +274,7 @@ async function fetchCaseDetail() {
     }
   }
   catch {
-    navigateTo('/admin')
+    navigateTo('/mediator')
   }
 }
 

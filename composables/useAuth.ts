@@ -72,7 +72,7 @@ export function useAuth() {
     finally {
       user.value = null
       isLoading.value = false
-      await navigateTo('/admin')
+      await navigateTo('/mediator')
     }
   }
 

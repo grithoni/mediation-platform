@@ -10,11 +10,11 @@ function toggleTheme() {
 
 async function handleLogout() {
   await auth.logout()
-  router.push('/admin')
+  router.push('/mediator')
 }
 
 const route = useRoute()
-const isLoginPage = computed(() => route.path === '/admin/login')
+const isLoginPage = computed(() => route.path === '/mediator/login')
 const showNavbar = computed(() => auth.isAuthenticated.value && !isLoginPage.value)
 </script>
 

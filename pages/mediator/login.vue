@@ -91,7 +91,7 @@ async function handleLogin() {
 
   try {
     await auth.login(username.value.trim(), password.value)
-    router.push('/admin')
+    router.push('/mediator')
   }
   catch (err: any) {
     errorMessage.value = err.message || '登录失败，请检查用户名和密码'

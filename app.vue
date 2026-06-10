@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-const layout = computed(() => route.path.startsWith('/admin') ? 'mediator' : 'party')
+const layout = computed(() => route.path.startsWith('/mediator') ? 'mediator' : 'party')
 
 // Sync colorMode to <html> class so Tailwind's `dark:` variants work.
 // Direct DOM manipulation is more reliable than useHead because

@@ -37,3 +37,4 @@ uploads/*
 # Logs
 *.log
 logs
+.claude/launch.json

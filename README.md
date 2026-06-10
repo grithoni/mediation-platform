@@ -23,7 +23,7 @@
 本系统面向商事调解场景，提供统一 Web 界面 + 小程序 API：
 
 - **当事人端**（`/`） — 案件申请、AI 分阶段咨询、调解员匹配、与调解员实时对话
-- **调解员工作站**（`/admin`） — 案件管理、AI 调解技能、知识库 RAG 检索、对话保存、技能包/工具管理
+- **调解员工作站**（`/mediator`） — 案件管理、AI 调解技能、知识库 RAG 检索、对话保存、技能包/工具管理
 - **小程序 API**（端口 3001） — 微信登录、JWT 认证、案件/消息/AI 对话接口
 
 AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模式（倾听→共情→重塑→协商），调解员端采用专业辅助模式。
@@ -134,27 +134,27 @@ npm run kb
 
 首次启动约需 15 秒（加载 embedding 模型），看到输出 `Starting KB server on port 8700...` 即就绪。
 
-### 终端 2：当事人端（端口 3000）
+### 终端 2：Web 服务（端口 3000）
 
 ```bash
-npm run dev:party
+npm run dev
 ```
 
-### 终端 3：调解员工作站（端口 3001）
+### 终端 3：小程序 API（端口 3001，可选）
 
 ```bash
-npm run dev:mediator
+npm run dev:mp
 ```
 
 ---
 
 ## 测试流程
 
-### ▶️ 当事人端 [http://localhost:3000](http://localhost:3000)
+### ▶️ 当事人端 [http://localhost:3000/party](http://localhost:3000/party)
 
 **1. AI 咨询 → 创建案件**
 
-1. 打开浏览器访问 `http://localhost:3000`
+1. 打开浏览器访问 `http://localhost:3000/party`
 2. 在首页底部输入框与 AI 对话（机器人会引导您陈述纠纷）
 3. AI 会先倾听您的诉求（前 3-4 轮不提供解决方案）
 4. 当您确认需要正式申请调解时，点击 **申请调解** 按钮
@@ -179,7 +179,7 @@ npm run dev:mediator
 - 在对话框中输入 "我要找调解员"、"结束"、"不用了" 等关键词，系统自动转入调解员选择
 - 连续对话 5 轮以上也会自动提示选择调解员
 
-### ▶️ 调解员工作站 [http://localhost:3001](http://localhost:3001)
+### ▶️ 调解员工作站 [http://localhost:3000/mediator](http://localhost:3000/mediator)
 
 **1. 登录**
 
@@ -288,11 +288,14 @@ mediation-platform/
 │   ├── party.vue              # 当事人端布局（左侧案件表单 + 右侧信息/AI 对话）
 │   └── mediator.vue           # 调解员布局（顶部导航栏 + 暗色模式切换）
 ├── pages/
-│   ├── index.vue              # 当事人首页（AI 咨询 + 导航菜单）
-│   ├── case/[caseNumber].vue  # 当事人案件详情
-│   └── admin/
+│   ├── index.vue              # 根路由（重定向到 /party）
+│   ├── party/
+│   │   ├── index.vue          # 当事人首页（AI 咨询 + 导航菜单）
+│   │   └── case/[caseNumber].vue  # 当事人案件详情
+│   └── mediator/
 │       ├── index.vue          # 调解员工作站（侧边栏 + 多面板状态机）
-│       └── login.vue          # 调解员登录
+│       ├── login.vue          # 调解员登录
+│       └── cases/[id].vue     # 调解员案件详情
 ├── composables/
 │   ├── useAuth.ts             # 认证（credentials:include）
 │   └── useChat.ts             # HTTP 轮询消息
@@ -402,7 +405,7 @@ node -e "require('fs').rmSync('.nuxt',{recursive:true,force:true})"
 
 **Q: 当事人端怎么测试 AI 对话？**
 
-无需登录，访问 `http://localhost:3000`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
+无需登录，访问 `http://localhost:3000/party`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
 
 **Q: 小程序 API 怎么测试？**
 
