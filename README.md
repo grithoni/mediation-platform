@@ -20,10 +20,11 @@
 
 ## 项目简介
 
-本系统面向商事调解场景，提供双端独立界面：
+本系统面向商事调解场景，提供统一 Web 界面 + 小程序 API：
 
-- **当事人端**（端口 3000） — 案件申请、AI 分阶段咨询、调解员匹配、与调解员实时对话
-- **调解员工作站**（端口 3001） — 案件管理、AI 调解技能、知识库 RAG 检索、对话保存、技能包/工具管理
+- **当事人端**（`/`） — 案件申请、AI 分阶段咨询、调解员匹配、与调解员实时对话
+- **调解员工作站**（`/admin`） — 案件管理、AI 调解技能、知识库 RAG 检索、对话保存、技能包/工具管理
+- **小程序 API**（端口 3001） — 微信登录、JWT 认证、案件/消息/AI 对话接口
 
 AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模式（倾听→共情→重塑→协商），调解员端采用专业辅助模式。
 
@@ -42,7 +43,8 @@ AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模�
 | 数据库 | SQLite + Drizzle ORM |
 | AI SDK | Vercel AI SDK (`@ai-sdk/openai`) |
 | 知识库 | ChromaDB + fastembed (Python, 端口 8700) |
-| 实时通信 | HTTP 轮询（跨端口消息同步） |
+| 小程序 API | H3 standalone + JWT (端口 3001) |
+| 实时通信 | HTTP 轮询（消息同步） |
 
 ---
 
@@ -269,17 +271,9 @@ npm run dev:mediator
 | `NUXT_OPENAI_API_KEY` | 是 | AI 模型 API Key | `sk-xxx` |
 | `NUXT_OPENAI_BASE_URL` | 是 | API 兼容端点 | `https://api.openai.com/v1` |
 | `NUXT_OPENAI_MODEL` | 是 | 模型名称 | `gpt-4o-mini` |
-| `NUXT_PUBLIC_APP_MODE` | 自动 | 运行模式 (`party`/`mediator`) | 由 `package.json` 脚本设置 |
-
-可以通过 `.env.party` 和 `.env.mediator` 为不同端口单独配置：
-
-```bash
-# .env.party
-NUXT_PUBLIC_APP_MODE=party
-
-# .env.mediator
-NUXT_PUBLIC_APP_MODE=mediator
-```
+| `WX_APPID` | 否 | 微信小程序 AppID（小程序登录需要） | `wx123456` |
+| `WX_APP_SECRET` | 否 | 微信小程序 AppSecret（小程序登录需要） | `secret` |
+| `MP_JWT_SECRET` | 否 | 小程序 API JWT 密钥 | `your-secret` |
 
 ---
 
@@ -343,9 +337,17 @@ mediation-platform/
 │   │   └── index.ts           # Drizzle 实例
 │   ├── middleware/auth.ts     # 认证中间件
 │   ├── utils/agent/           # Agent 循环、工具 (12个)、记忆 L1/L2
-│   └── kb/
-│       ├── server.py          # FastAPI 知识库服务（端口 8700）
-│       └── engine.py          # ChromaDB + fastembed RAG 引擎
+│   ├── kb/
+│   │   ├── server.py          # FastAPI 知识库服务（端口 8700）
+│   │   └── engine.py          # ChromaDB + fastembed RAG 引擎
+│   └── mp/                    # 小程序 API 服务（端口 3001）
+│       ├── index.ts           # H3 standalone 入口
+│       ├── middleware/auth.ts # JWT 认证
+│       └── routes/
+│           ├── auth.ts        # 微信登录 + demo 登录
+│           ├── cases.ts       # 案件列表/详情/文件
+│           ├── messages.ts    # 消息列表/发送
+│           └── chat.ts        # AI 对话（RAG 增强）
 ├── uploads/
 │   ├── cases/                 # 案件上传文件（不提交 Git）
 │   └── skills/                # 技能包存储（不提交 Git）
@@ -401,6 +403,20 @@ node -e "require('fs').rmSync('.nuxt',{recursive:true,force:true})"
 **Q: 当事人端怎么测试 AI 对话？**
 
 无需登录，访问 `http://localhost:3000`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
+
+**Q: 小程序 API 怎么测试？**
+
+```bash
+npm run dev:mp  # 启动小程序 API（端口 3001）
+
+# 登录获取 token
+curl -X POST http://localhost:3001/api/mp/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"caseNumber":"2026-1","accessCode":"123"}'
+
+# 用 token 访问接口
+curl http://localhost:3001/api/mp/cases -H "Authorization: Bearer <token>"
+```
 
 **Q: 调解员怎么看不到当事人的 AI 私聊？**
 

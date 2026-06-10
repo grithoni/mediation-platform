@@ -1,7 +1,6 @@
 <script setup lang="ts">
-const config = useRuntimeConfig()
-const appMode = config.public.appMode as 'party' | 'mediator'
-const layout = appMode === 'mediator' ? 'mediator' : 'party'
+const route = useRoute()
+const layout = computed(() => route.path.startsWith('/admin') ? 'mediator' : 'party')
 
 // Sync colorMode to <html> class so Tailwind's `dark:` variants work.
 // Direct DOM manipulation is more reliable than useHead because

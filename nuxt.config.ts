@@ -32,7 +32,6 @@ export default defineNuxtConfig({
     // Public (exposed to client)
     public: {
       appName: '全时在线的调解专家',
-      appMode: 'party',
     },
   },
 

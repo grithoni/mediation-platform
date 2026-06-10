@@ -11,8 +11,8 @@
           <div class="flex items-center gap-2 mb-4">
             <UIcon name="i-lucide-scale" class="w-6 h-6 text-blue-500 dark:text-blue-400" />
             <div>
-              <h1 class="text-4xl font-bold text-gray-900 dark:text-white">全时在线的调解专家</h1>
-              <p class="text-sm text-gray-400 dark:text-gray-500 font-mono">Always Online Mediation Expert</p>
+              <h1 class="text-4xl font-bold text-blue-600 dark:text-blue-400">努力为每一起纠纷提供最佳解决方案</h1>
+              <p class="text-base text-blue-500 dark:text-blue-400 font-mono">The best solution for every dispute</p>
             </div>
           </div>
 
@@ -332,11 +332,6 @@
 </template>
 
 <script setup lang="ts">
-const config = useRuntimeConfig()
-if (config.public.appMode === 'mediator') {
-  navigateTo('/admin', { replace: true })
-}
-
 const { activeMenu } = useActiveMenu()
 const router = useRouter()
 
