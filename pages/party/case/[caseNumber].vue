@@ -1,4 +1,4 @@
-// v1780639939948
+// v1780639939949 - Taobao-style unified chat
 <template>
   <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900">
 
@@ -47,84 +47,70 @@
         </div>
       </div>
 
-      <!-- Phase Banner -->
+      <!-- Status bar: mediator bound + request status -->
       <div
-        v-if="showMediatorBanner || caseData.phase === 'mediator_selection' || caseData.phase === 'active'"
-        class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800"
-        :class="caseData.phase === 'active' ? 'bg-green-50 dark:bg-green-950' : 'bg-blue-50 dark:bg-blue-950'"
+        v-if="chatState === 'waiting_mediator'"
+        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-amber-50 dark:bg-amber-950 flex items-center gap-2"
       >
-        <div class="flex items-center gap-2">
-          <UIcon :name="caseData.phase === 'active' ? 'i-lucide-check-circle' : 'i-lucide-user-check'"
-            :class="caseData.phase === 'active' ? 'text-green-600' : 'text-blue-600'" class="w-5 h-5" />
-          <span class="text-sm font-medium" :class="caseData.phase === 'active' ? 'text-green-800' : 'text-blue-800'">
-            {{ caseData.phase === 'active' ? '调解员已就位，对话开始' : '请选择调解员' }}
-          </span>
-          <UButton
-            v-if="caseData.phase !== 'active'"
-            size="lg"
-            @click="openMediatorModal"
-            class="ml-auto bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100"
-          >
-            选择调解员
-          </UButton>
-        </div>
+        <UIcon name="i-lucide-bell-ring" class="w-4 h-4 text-amber-600 dark:text-amber-400 animate-pulse" />
+        <span class="text-sm text-amber-800 dark:text-amber-200">已通知调解员，请等待回复...</span>
+      </div>
+      <div
+        v-else-if="chatState === 'mediator_active'"
+        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-green-50 dark:bg-green-950 flex items-center gap-2"
+      >
+        <UIcon name="i-lucide-user-check" class="w-4 h-4 text-green-600 dark:text-green-400" />
+        <span class="text-sm text-green-800 dark:text-green-200">调解员已介入对话</span>
       </div>
 
-      <!-- Mode Toggle (hide when active) -->
-      <div v-if="caseData.phase !== 'active'" class="shrink-0 flex border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+      <!-- Call mediator prompt (after 3 rounds, mediator already bound) -->
+      <div
+        v-if="showCallMediatorPrompt && chatState === 'ai' && caseData.mediatorId"
+        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-blue-50 dark:bg-blue-950 flex items-center justify-between"
+      >
+        <span class="text-sm text-blue-800 dark:text-blue-200">
+          <UIcon name="i-lucide-info" class="w-4 h-4 inline -mt-0.5 mr-1" />
+          已进行 {{ sessionTurnCount }} 轮咨询，如需调解员帮助可点击右侧按钮
+        </span>
         <button
-          class="flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors"
-          :class="chatMode === 'ai'
-            ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
-            : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
-          @click="switchToAI"
+          class="px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+          @click="callMediator"
         >
-          <UIcon name="i-lucide-bot" class="w-4 h-4 inline -mt-0.5" />
-          与智能体对话
-        </button>
-        <button
-          class="flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors"
-          :class="chatMode === 'mediator'
-            ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30'
-            : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
-          @click="switchToMediator"
-        >
-          <UIcon name="i-lucide-user" class="w-4 h-4 inline -mt-0.5" />
-          与调解员对话
+          <UIcon name="i-lucide-phone-call" class="w-4 h-4 inline -mt-0.5 mr-1" />
+          联系调解员
         </button>
       </div>
 
-      <!-- 5-turn prompt -->
-      <div
-        v-if="aiTurnCount >= 5 && !turnPromptShown"
-        class="shrink-0 px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-yellow-50 dark:bg-yellow-950 flex items-center justify-between"
-      >
-        <span class="text-xs text-yellow-800 dark:text-yellow-200">已进行 {{ aiTurnCount }} 轮对话，建议切换到调解员</span>
-        <UButton size="xs" @click="switchToMediator">选择调解员</UButton>
-      </div>
-
-      <!-- Chat Messages (single chat, no tabs) -->
+      <!-- Chat Messages -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3">
-        <template v-if="aiMessages.length">
-          <div
-            v-for="msg in aiMessages"
-            :key="msg.id"
-            class="flex"
-            :class="msg.senderType === 'party' ? 'justify-end' : 'justify-start'"
-          >
-            <div
-              class="max-w-[80%] rounded-lg px-3 py-2"
-              :class="bubbleClass(msg.senderType)"
-            >
-              <div v-if="msg.senderType !== 'party'" class="text-xs font-medium mb-1 opacity-60">
-                {{ msg.senderName || 'AI助手' }}
-              </div>
-              <div class="text-base whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
-              <div class="text-xs mt-1 opacity-40 text-right font-mono">
-                {{ formatTime(msg.createdAt) }}
+        <template v-if="allMessages.length">
+          <template v-for="msg in allMessages" :key="msg.id">
+            <!-- System message -->
+            <div v-if="msg.senderType === 'system'" class="flex justify-center">
+              <div class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                {{ msg.content }}
               </div>
             </div>
-          </div>
+            <!-- Regular message -->
+            <div
+              v-else
+              class="flex"
+              :class="msg.senderType === 'party' ? 'justify-end' : 'justify-start'"
+            >
+              <div
+                class="max-w-[80%] rounded-lg px-3 py-2"
+                :class="bubbleClass(msg.senderType)"
+              >
+                <div v-if="msg.senderType !== 'party'" class="text-xs font-medium mb-1 opacity-60">
+                  {{ msg.senderName || (msg.senderType === 'ai' ? 'AI助手' : '调解员') }}
+                </div>
+                <div class="text-base whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
+                <div class="text-xs mt-1 opacity-40 text-right font-mono">
+                  {{ formatTime(msg.createdAt) }}
+                </div>
+              </div>
+            </div>
+          </template>
         </template>
         <div v-else class="flex-1 flex items-center justify-center h-full">
           <div class="text-center py-20">
@@ -150,7 +136,7 @@
         <form @submit.prevent="handleSend" class="flex gap-2">
           <UTextarea
             v-model="inputMessage"
-            :placeholder="caseData?.phase === 'active' ? '与调解员对话...' : '输入消息...'"
+            :placeholder="chatState === 'mediator_active' ? '与调解员对话...' : '输入您的问题...'"
             :rows="1"
             autoresize
             :maxrows="4"
@@ -170,17 +156,15 @@
       </div>
     </template>
 
-    <!-- Mediator Selection Overlay (plain div, no UModal) -->
+    <!-- Mediator Selection Overlay -->
     <div v-if="showMediatorModal" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.4)" @click.self="showMediatorModal = false">
       <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-y-auto" @click.stop>
-        <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 class="text-lg font-bold text-gray-900 dark:text-white">选择调解员</h2>
           <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" @click="showMediatorModal = false">
             <UIcon name="i-lucide-x" class="w-5 h-5" />
           </button>
         </div>
-        <!-- Body -->
         <div class="p-4">
           <div v-if="matchingMediators" class="flex items-center justify-center py-12">
             <UIcon name="i-lucide-loader-2" class="w-6 h-6 text-blue-400 animate-spin" />
@@ -247,6 +231,7 @@ interface CaseResponse {
     evidenceSummary: string | null
     phase: string
     mediatorId: string | null
+    mediatorRequestedAt: number | null
     status: string
     messages: Array<{
       id: string
@@ -262,38 +247,61 @@ interface CaseResponse {
   sessionToken?: string
 }
 
+// ── Intent keywords for semantic detection ──────────────────
+const MEDIATOR_KEYWORDS = ['调解员', '人工', '联系', '找调解员', '呼叫', '转人工', '真人']
+
 const route = useRoute()
 const caseNumber = route.params.caseNumber as string
 const accessCode = route.query.code as string
 
-const showSidebar = ref(false)
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const pending = ref(true)
 const fetchError = ref(false)
 const sessionToken = ref<string | undefined>()
-const tabItems: { label: string }[] = [] // unused, kept for compatibility
 
 const caseData = ref<CaseResponse['data'] | null>(null)
 const chat = useChat(computed(() => caseNumber))
 
-// Chat mode: 'ai' | 'mediator'
-const chatMode = ref<'ai' | 'mediator'>('ai')
-const aiTurnCount = ref(0)
-const turnPromptShown = ref(false)
+// ── Session state machine ──────────────────────────────────
+// 'ai' | 'waiting_mediator' | 'mediator_active'
+const chatState = ref<'ai' | 'waiting_mediator' | 'mediator_active'>('ai')
+const sessionTurnCount = ref(0)
+const showCallMediatorPrompt = ref(false)
+let idleTimer: ReturnType<typeof setTimeout> | null = null
 
-function switchToAI() {
-  chatMode.value = 'ai'
-  turnPromptShown.value = false
+// All messages (party + ai + mediator + system)
+const allMessages = computed(() => chat.messages.value)
+
+// ── Semantic intent detection ──────────────────────────────
+function hasMediatorIntent(text: string): boolean {
+  return MEDIATOR_KEYWORDS.some(kw => text.includes(kw))
 }
 
-function switchToMediator() {
-  chatMode.value = 'mediator'
-  openMediatorModal()
+// ── Idle timer management ──────────────────────────────────
+function startIdleTimer() {
+  clearIdleTimer()
+  idleTimer = setTimeout(() => {
+    if (chatState.value === 'ai' && sessionTurnCount.value >= 3) {
+      showCallMediatorPrompt.value = true
+    }
+  }, 60_000) // 1 minute
 }
 
-// Mediator selection state
+function clearIdleTimer() {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null }
+}
+
+// ── Mediator selection (first-time binding) ────────────────
 const showMediatorModal = ref(false)
+const matchingMediators = ref(false)
+const bindingMediator = ref(false)
+const selectedMediatorId = ref<string | null>(null)
+const matchedMediatorList = ref<Array<{
+  id: string; name: string; score: number; specialties: string[]
+  appointmentType?: string; education?: string; university?: string
+  organization?: string; position?: string
+}>>([])
 
 async function openMediatorModal() {
   showMediatorModal.value = true
@@ -307,16 +315,7 @@ async function openMediatorModal() {
   } catch {}
   matchingMediators.value = false
 }
-const matchingMediators = ref(false)
-const bindingMediator = ref(false)
-const selectedMediatorId = ref<string | null>(null)
-const matchedMediatorList = ref<Array<{
-  id: string; name: string; score: number; specialties: string[]
-  appointmentType?: string; education?: string; university?: string
-  organization?: string; position?: string
-}>>([])
 
-// Bind mediator to case
 async function bindMediator() {
   if (!selectedMediatorId.value) return
   bindingMediator.value = true
@@ -326,100 +325,127 @@ async function bindMediator() {
       body: { caseId: caseNumber, mediatorId: selectedMediatorId.value },
     })
     showMediatorModal.value = false
-    // Update local state: mark as active, hide buttons
     if (caseData.value) {
       caseData.value.phase = 'active'
       caseData.value.mediatorId = selectedMediatorId.value
     }
-    showMediatorBanner.value = true
+    // After binding, show the "联系调解员" prompt so party can call mediator
+    showCallMediatorPrompt.value = true
   } catch {} finally {
     bindingMediator.value = false
   }
 }
 
-// End dialog → show mediator selection
-async function handleEndDialog() {
+// ── Call mediator (request intervention) ───────────────────
+async function callMediator() {
+  if (!caseData.value?.mediatorId) {
+    // No mediator bound yet → show selection
+    await openMediatorModal()
+    return
+  }
   try {
-    await $fetch('/api/cases/end-dialog', {
-      method: 'POST',
-      body: { caseId: caseNumber },
+    await $fetch(`/api/cases/${caseNumber}/call-mediator`, { method: 'POST' })
+    chatState.value = 'waiting_mediator'
+    showCallMediatorPrompt.value = false
+    clearIdleTimer()
+
+    // Add local system message
+    chat.messages.value.push({
+      id: `sys-${Date.now()}`,
+      caseId: caseNumber,
+      senderType: 'system',
+      senderName: '系统',
+      content: '已通知调解员，请等待回复...',
+      createdAt: new Date().toISOString(),
     })
-    // Refresh to get new phase
-    if (caseData.value) {
-      caseData.value.phase = 'mediator_selection'
-    }
-  } catch {}
+  } catch (err: any) {
+    console.error('call-mediator failed:', err)
+  }
 }
 
-// Messages from AI tab (filtered from all messages)
-const aiMessages = computed(() => {
-  // Active phase: show all messages (party + mediator + ai)
-  if (caseData.value?.phase === 'active') {
-    return chat.messages.value
+// ── Mediator message polling ──────────────────────────────
+let medPollTimer: ReturnType<typeof setInterval> | null = null
+
+function startMediatorPolling() {
+  if (medPollTimer) return
+  medPollTimer = setInterval(async () => {
+    try {
+      const resp = await $fetch<{ success: boolean; data: any[] }>(`/api/chat/messages/${caseNumber}`, {
+        query: { sessionToken: sessionToken.value || accessCode },
+      })
+      if (resp?.data) {
+        const prevLen = chat.messages.value.length
+        chat.messages.value = resp.data.map((m: any) => ({
+          ...m,
+          senderType: m.senderType as 'party' | 'mediator' | 'ai' | 'system',
+        }))
+        // Check if mediator has responded
+        if (chatState.value === 'waiting_mediator') {
+          const hasMediatorMsg = resp.data.some((m: any) => m.senderType === 'mediator')
+          if (hasMediatorMsg) {
+            chatState.value = 'mediator_active'
+          }
+        }
+      }
+    } catch {}
+  }, 1500)
+}
+
+function stopMediatorPolling() {
+  if (medPollTimer) { clearInterval(medPollTimer); medPollTimer = null }
+}
+
+// ── Watch chatState to start/stop polling ──────────────────
+watch(chatState, (state) => {
+  if (state === 'waiting_mediator' || state === 'mediator_active') {
+    startMediatorPolling()
   }
-  return chat.messages.value.filter(m => m.senderType === 'party' || m.senderType === 'ai')
 })
 
-// Messages from mediator tab (all messages)
-const mediatorMessages = computed(() => chat.messages.value)
-
-// Fetch case data
+// ── Fetch case data ───────────────────────────────────────
 onMounted(async () => {
   try {
     const resp = await $fetch<CaseResponse>(`/api/cases/${caseNumber}`, {
       query: { code: accessCode },
     })
-
     caseData.value = resp.data
     sessionToken.value = resp.sessionToken
 
     if (resp.data.messages) {
       chat.messages.value = resp.data.messages.map(m => ({
         ...m,
-        senderType: m.senderType as 'party' | 'mediator' | 'ai',
+        senderType: m.senderType as 'party' | 'mediator' | 'ai' | 'system',
       }))
     }
-  }
-  catch {
+
+    // Determine initial chatState based on case data
+    if (resp.data.phase === 'active' && resp.data.mediatorId) {
+      // Mediator already bound — check if there are mediator messages
+      const hasMediatorMsgs = resp.data.messages?.some(m => m.senderType === 'mediator')
+      if (hasMediatorMsgs) {
+        chatState.value = 'mediator_active'
+      } else {
+        // Mediator bound but hasn't responded yet; start in AI mode
+        chatState.value = 'ai'
+        showCallMediatorPrompt.value = true
+      }
+    }
+  } catch {
     fetchError.value = true
-  }
-  finally {
+  } finally {
     pending.value = false
   }
 
-  // Connect WebSocket for human mediator chat
   chat.connectWebSocket(sessionToken.value || accessCode, 'party')
 })
 
-// Polling for mediator messages when active
-let medPollTimer: ReturnType<typeof setInterval> | null = null
-
-watch(() => caseData.value?.phase, (phase) => {
-  if (phase === 'active') {
-    medPollTimer = setInterval(async () => {
-      try {
-        const resp = await $fetch<{ success: boolean; data: any[] }>(`/api/chat/messages/${caseNumber}`, {
-          query: { sessionToken: sessionToken.value || accessCode },
-        })
-        if (resp?.data) {
-          chat.messages.value = resp.data.map((m: any) => ({
-            ...m,
-            senderType: m.senderType as 'party' | 'mediator' | 'ai',
-          }))
-        }
-      } catch {}
-    }, 1000)
-  } else {
-    if (medPollTimer) { clearInterval(medPollTimer); medPollTimer = null }
-  }
-})
-
 onUnmounted(() => {
-  if (medPollTimer) clearInterval(medPollTimer)
+  stopMediatorPolling()
+  clearIdleTimer()
   chat.disconnect()
 })
 
-// Auto-scroll when messages change
+// ── Auto-scroll ───────────────────────────────────────────
 watch([() => chat.messages.value.length, () => chat.aiStreamContent.value], () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -428,27 +454,7 @@ watch([() => chat.messages.value.length, () => chat.aiStreamContent.value], () =
   })
 })
 
-const statusColor = computed(() => {
-  const map: Record<string, string> = {
-    pending: 'warning',
-    active: 'success',
-    resolved: 'info',
-    closed: 'neutral',
-  }
-  return (map[caseData.value?.status || ''] || 'neutral') as any
-})
-
-const statusLabel = computed(() => {
-  const map: Record<string, string> = {
-    pending: '待处理',
-    active: '进行中',
-    resolved: '已解决',
-    closed: '已关闭',
-  }
-  return map[caseData.value?.status || ''] || caseData.value?.status
-})
-
-// Extract amount from description or claimsSummary
+// ── Helpers ───────────────────────────────────────────────
 const amountDisplay = computed(() => {
   if (!caseData.value) return '—'
   const text = caseData.value.claimsSummary || caseData.value.description || ''
@@ -458,15 +464,9 @@ const amountDisplay = computed(() => {
 })
 
 function bubbleClass(senderType: string) {
-  if (senderType === 'party') {
-    return 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-  }
-  if (senderType === 'ai') {
-    return 'bg-blue-50 dark:bg-blue-950/30 text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-900'
-  }
-  if (senderType === 'mediator') {
-    return 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100'
-  }
+  if (senderType === 'party') return 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+  if (senderType === 'ai') return 'bg-blue-50 dark:bg-blue-950/30 text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-900'
+  if (senderType === 'mediator') return 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100'
   return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
 }
 
@@ -475,16 +475,14 @@ function formatTime(date: string | Date) {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-const showMediatorBanner = ref(false)
-
+// ── Send message ──────────────────────────────────────────
 async function handleSend() {
   const text = inputMessage.value.trim()
   if (!text) return
-
   inputMessage.value = ''
 
-  // Active phase: send to mediator via HTTP
-  if (caseData.value?.phase === 'active') {
+  // ── Mediator active: send to mediator via HTTP ──────────
+  if (chatState.value === 'mediator_active') {
     await $fetch('/api/chat/messages', {
       method: 'POST',
       body: {
@@ -494,9 +492,25 @@ async function handleSend() {
         senderName: '当事人',
       },
     })
+    // Re-fetch messages to show the new one
+    try {
+      const resp = await $fetch<{ success: boolean; data: any[] }>(`/api/chat/messages/${caseNumber}`, {
+        query: { sessionToken: sessionToken.value || accessCode },
+      })
+      if (resp?.data) {
+        chat.messages.value = resp.data.map((m: any) => ({
+          ...m,
+          senderType: m.senderType as 'party' | 'mediator' | 'ai' | 'system',
+        }))
+      }
+    } catch {}
     return
   }
 
+  // ── Waiting for mediator: can still chat with AI ────────
+  // (Allow party to continue talking to AI while waiting)
+
+  // ── AI mode: send to AI ─────────────────────────────────
   chat.messages.value.push({
     id: `party-${Date.now()}`,
     caseId: caseNumber,
@@ -505,12 +519,28 @@ async function handleSend() {
     content: text,
     createdAt: new Date().toISOString(),
   })
-  const result = await chat.sendAiMessage(text, 'party', '当事人')
 
-  aiTurnCount.value++
-  if (result?.dialogEnded) {
-    showMediatorBanner.value = true
-    if (caseData.value) caseData.value.phase = 'mediator_selection'
+  await chat.sendAiMessage(text, 'party', '当事人')
+  sessionTurnCount.value++
+
+  // Check semantic intent
+  if (sessionTurnCount.value >= 3 && hasMediatorIntent(text)) {
+    if (!caseData.value?.mediatorId) {
+      // No mediator → show selection
+      openMediatorModal()
+    } else {
+      // Has mediator → show call button immediately
+      showCallMediatorPrompt.value = true
+      clearIdleTimer()
+    }
+  } else if (sessionTurnCount.value >= 3 && !showCallMediatorPrompt.value) {
+    // Start idle timer after 3rd round
+    startIdleTimer()
+  }
+
+  // First time: after 3 rounds, no mediator → show selection
+  if (sessionTurnCount.value >= 3 && !caseData.value?.mediatorId && !showMediatorModal.value) {
+    openMediatorModal()
   }
 
   nextTick(() => {

@@ -19,7 +19,13 @@
             class="w-full text-left px-3 py-2 rounded-md transition-colors border text-sm"
             :class="selectedCaseId === c.id ? 'bg-blue-50 dark:bg-blue-950 border-blue-200' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:bg-gray-50'"
             @click="emit('selectCase', c.id)">
-            <div class="font-mono text-xs text-gray-400 mb-0.5">{{ c.id }}</div>
+            <div class="flex items-center justify-between">
+              <div class="font-mono text-xs text-gray-400">{{ c.id }}</div>
+              <span v-if="c.mediatorRequestedAt" class="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                请求介入
+              </span>
+            </div>
             <div class="font-medium text-gray-900 dark:text-white truncate">{{ c.title }}</div>
             <div class="text-xs text-gray-500 mt-0.5">{{ c.partyAName }} vs {{ c.partyBName }}</div>
           </button>
@@ -109,7 +115,7 @@
 
 <script setup lang="ts">
 interface CaseItem {
-  id: string; title: string; partyAName: string; partyBName: string; status: string; phase: string
+  id: string; title: string; partyAName: string; partyBName: string; status: string; phase: string; mediatorRequestedAt?: number | null
 }
 interface SavedConversation {
   id: string; caseId: string; caseTitle?: string; title: string; messageCount: number; createdAt: string

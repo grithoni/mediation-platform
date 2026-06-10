@@ -37,6 +37,11 @@ export default defineEventHandler(async (event) => {
     } as any)
     .run()
 
+  // If mediator sends a message, clear the notification flag
+  if (senderType === 'mediator' && caseData.mediatorRequestedAt) {
+    db.update(cases).set({ mediatorRequestedAt: null }).where(eq(cases.id, caseId)).run()
+  }
+
   return {
     success: true,
     data: {

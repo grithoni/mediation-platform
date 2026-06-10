@@ -440,7 +440,7 @@ async function handleLogin() {
 interface CaseItem {
   id: string; title: string; description: string | null; partyAName: string; partyBName: string
   partyAContact: string | null; partyBContact: string | null; status: string; phase: string
-  mediatorId: string | null; mediatorName: string | null; accessCode: string; createdAt: string; updatedAt: string
+  mediatorId: string | null; mediatorName: string | null; mediatorRequestedAt: number | null; accessCode: string; createdAt: string; updatedAt: string
 }
 interface MessageItem {
   id: string; caseId: string; senderType: string; senderId?: string | null; senderName?: string | null; content: string; createdAt: string

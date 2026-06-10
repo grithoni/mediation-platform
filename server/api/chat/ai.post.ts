@@ -3,8 +3,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { cases, messages, caseDynamicFiles } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
-import { isEndDialogIntent } from '../../utils/dialog-intent'
-import { endDialog } from '../../utils/dialog-manager'
 
 // ============================================================
 // System prompt templates
@@ -62,20 +60,6 @@ export default defineEventHandler(async (event) => {
 
   if (!body?.caseId || !body?.message || !body?.senderIdentifier) {
     throw createError({ statusCode: 400, message: '缺少必要参数' })
-  }
-
-  // Keyword intercept (shared utility)
-  if (isEndDialogIntent(body.message) && body.caseId !== 'demo') {
-    endDialog(body.caseId)
-    return {
-      success: true,
-      data: {
-        id: 'keyword-' + body.caseId, caseId: body.caseId,
-        senderType: 'ai' as const, senderId: 'mediation-ai', senderName: 'AI助手',
-        content: '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。',
-        createdAt: new Date().toISOString(), dialogEnded: true,
-      },
-    }
   }
 
   const db = getDb()

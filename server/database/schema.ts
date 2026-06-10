@@ -18,6 +18,7 @@ export const cases = sqliteTable('cases', {
   status: text('status').notNull().default('pending'), // pending | active | resolved | closed
   mediatorId: text('mediator_id').references(() => mediators.id),
   mediatorBoundAt: integer('mediator_bound_at'), // 调解员绑定时间
+  mediatorRequestedAt: integer('mediator_requested_at'), // 当事人请求调解员介入时间
   accessCode: text('access_code').notNull(), // 当事人访问验证码（密码）
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
