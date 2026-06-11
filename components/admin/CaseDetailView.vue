@@ -159,8 +159,8 @@
       </div>
       <!-- Chat Input -->
       <div class="border-t border-gray-200 dark:border-gray-800 p-3">
-        <form @submit.prevent="emit('sendMessage', quickMessage)" class="flex gap-2">
-          <UTextarea v-model="quickMessage" placeholder="输入消息..." class="flex-1" :rows="1" autoresize :maxrows="4" @keydown.enter.exact.prevent="emit('sendMessage', quickMessage)" />
+        <form @submit.prevent="doSend" class="flex gap-2">
+          <UTextarea v-model="quickMessage" placeholder="输入消息..." class="flex-1" :rows="1" autoresize :maxrows="4" @keydown.enter.exact.prevent="doSend" />
           <UButton type="submit" icon="i-lucide-send" size="lg" :disabled="!quickMessage.trim()" class="self-end bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100" />
         </form>
       </div>
@@ -207,6 +207,13 @@ const quickMessage = ref('')
 const materialsOpen = ref(true)
 
 defineExpose({ quickMessage })
+
+function doSend() {
+  const text = quickMessage.value.trim()
+  if (!text) return
+  emit('sendMessage', text)
+  quickMessage.value = ''
+}
 
 const materialCount = computed(() => {
   if (!props.caseDetail) return 0
