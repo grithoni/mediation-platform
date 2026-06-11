@@ -270,8 +270,8 @@ const sessionTurnCount = ref(0)
 const showCallMediatorPrompt = ref(false)
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
-// All messages (party + ai + mediator + system)
-const allMessages = computed(() => chat.messages.value)
+// All messages (party + ai + mediator) — system messages hidden
+const allMessages = computed(() => chat.messages.value.filter(m => m.senderType !== 'system'))
 
 // ── Semantic intent detection ──────────────────────────────
 function hasMediatorIntent(text: string): boolean {

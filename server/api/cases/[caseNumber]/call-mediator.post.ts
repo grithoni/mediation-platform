@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid'
 import { eq, and } from 'drizzle-orm'
 import { getDb } from '../../../database'
 import { cases, messages } from '../../../database/schema'
@@ -37,18 +36,6 @@ export default defineEventHandler(async (event) => {
     .where(and(eq(messages.caseId, caseNumber), eq(messages.visibility, 'private')))
     .run()
   console.log(`[call-mediator] case=${caseNumber} converted ${updated.changes || 0} private→shared`)
-
-  // 3. Insert system message
-  const systemMsgId = uuidv4()
-  db.insert(messages).values({
-    id: systemMsgId,
-    caseId: caseNumber,
-    senderType: 'system',
-    senderId: 'system',
-    senderName: '系统',
-    content: '当事人请求调解员介入，AI咨询记录已对调解员可见。',
-    visibility: 'shared',
-  }).run()
 
   return {
     success: true,

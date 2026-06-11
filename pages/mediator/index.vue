@@ -149,14 +149,19 @@
       :messages="selectedMessages"
       :file-count="caseFiles.length"
       :saving="savingConversation"
-      :script-loading="scriptLoading"
       :recommend-loading="recommendLoading"
+      :reply-mode="replyMode"
+      :suggestion="currentSuggestion"
+      :auto-replying="autoReplying"
       @save-conversation="saveCurrentConversation"
       @view-material="viewMaterial($event)"
       @open-files="openFileList"
-      @generate-script="generateScript"
       @generate-solution="generateSolution"
       @send-message="handleSendMessage"
+      @change-reply-mode="changeReplyMode"
+      @use-suggestion="useSuggestion"
+      @edit-suggestion="editSuggestion"
+      @dismiss-suggestion="dismissSuggestion"
     />
   </div>
 
@@ -311,50 +316,6 @@
     </div>
   </div>
 
-  <!-- Script Recommendation Modal -->
-  <div v-if="showScriptModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showScriptModal = false">
-    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] flex flex-col">
-      <div class="shrink-0 px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 flex items-center gap-2">
-        <UIcon name="i-lucide-message-circle" class="w-5 h-5 text-blue-600" />
-        <h3 class="text-base font-semibold text-gray-900 dark:text-white">沟通话术推荐</h3>
-        <span v-if="scriptGeneratedAt" class="text-xs text-gray-400 ml-1">{{ formatDateTime(scriptGeneratedAt) }}</span>
-        <div class="ml-auto flex items-center gap-2">
-          <button class="px-2.5 py-1 text-xs text-gray-500 hover:bg-white/60 dark:hover:bg-gray-800/60 rounded transition-colors" @click="copyScript">
-            <UIcon name="i-lucide-copy" class="w-3.5 h-3.5 inline -mt-0.5" /> 复制
-          </button>
-          <button class="text-gray-400 hover:text-gray-600" @click="showScriptModal = false">
-            <UIcon name="i-lucide-x" class="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-      <div class="px-5 py-4 overflow-y-auto flex-1">
-        <div v-if="scriptLoading" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
-          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 正在生成话术...
-        </div>
-        <div v-else-if="scriptError" class="text-sm text-red-500 py-4">{{ scriptError }}</div>
-        <div v-else-if="scriptStages.length === 0" class="text-sm text-gray-400 py-12 text-center">暂无内容</div>
-        <div v-else class="space-y-3">
-          <div v-for="(s, i) in scriptStages" :key="i" class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-2 border-b border-blue-200 dark:border-blue-900 bg-blue-100/60 dark:bg-blue-900/30">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-mono font-semibold text-blue-600 dark:text-blue-400">第{{ i + 1 }}步</span>
-                <span class="text-sm font-medium text-blue-900 dark:text-blue-200">{{ s.stage }}</span>
-              </div>
-              <button class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200" @click="useScript(s.content)">
-                <UIcon name="i-lucide-send" class="w-3.5 h-3.5 inline -mt-0.5" /> 填入输入框
-              </button>
-            </div>
-            <div class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ s.content }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
-        <p class="text-xs text-gray-400">AI 生成仅供参考，需调解员根据实际情况调整；敏感法律点已标注"需律师复核"</p>
-        <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="showScriptModal = false">关闭</button>
-      </div>
-    </div>
-  </div>
-
   <!-- MCP Tool Form Modal -->
   <div v-if="mcpFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="mcpFormOpen = false">
     <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
@@ -453,6 +414,12 @@ const allMessages = ref<MessageItem[]>([])
 const chat = useChat(computed(() => selectedCaseId.value || ''))
 const rightMode = ref<string>('cases-list')
 const caseDetailRef = ref<InstanceType<typeof import('../../components/admin/CaseDetailView.vue')['default']> | null>(null)
+
+// Reply mode state
+const replyMode = ref<'auto' | 'manual'>('manual')
+const currentSuggestion = ref<string | null>(null)
+const autoReplying = ref(false)
+let lastPartyMsgId = '' // Track last party message to avoid duplicate suggestions
 
 const isKbMode = computed(() => ['kb-upload', 'kb-view', 'kb-search'].includes(rightMode.value))
 const isSettingsMode = computed(() => ['skills', 'tools'].includes(rightMode.value))
@@ -562,7 +529,98 @@ async function handleSendMessage(text: string) {
       body: { caseId: selectedCaseId.value, content: text, senderType: 'mediator', senderId: auth.user.value?.id, senderName: auth.user.value?.name || '调解员' },
       credentials: 'include',
     })
+    currentSuggestion.value = null // Clear suggestion after sending
   } catch {}
+}
+
+// ============================================================
+// Reply mode management
+// ============================================================
+function changeReplyMode(mode: 'auto' | 'manual') {
+  replyMode.value = mode
+  if (mode === 'auto') {
+    currentSuggestion.value = null // Clear any pending suggestion
+  }
+}
+
+function useSuggestion(text: string) {
+  if (caseDetailRef.value) {
+    caseDetailRef.value.quickMessage = text
+  }
+  currentSuggestion.value = null
+}
+
+function editSuggestion(text: string) {
+  if (caseDetailRef.value) {
+    caseDetailRef.value.quickMessage = text
+  }
+  // Keep suggestion visible until they send
+}
+
+function dismissSuggestion() {
+  currentSuggestion.value = null
+}
+
+// ============================================================
+// Detect new party messages and trigger suggestion/auto-reply
+// ============================================================
+watch(() => selectedMessages.value, async (msgs) => {
+  if (!selectedCaseId.value || !msgs.length) return
+
+  // Find the latest party message
+  const partyMsgs = msgs.filter(m => m.senderType === 'party')
+  if (!partyMsgs.length) return
+
+  const latestPartyMsg = partyMsgs[partyMsgs.length - 1]
+  if (latestPartyMsg.id === lastPartyMsgId) return // Already processed
+  lastPartyMsgId = latestPartyMsg.id
+
+  // Don't generate if mediator just sent a message (avoid loops)
+  const lastMsg = msgs[msgs.length - 1]
+  if (lastMsg.senderType === 'mediator') return
+
+  // Generate suggestion or auto-reply based on mode
+  if (replyMode.value === 'auto') {
+    await generateAutoReply(latestPartyMsg.content)
+  } else {
+    await generateSuggestion(latestPartyMsg.content)
+  }
+}, { deep: true })
+
+async function generateSuggestion(partyMessage: string) {
+  if (!selectedCaseId.value) return
+  try {
+    const resp = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/suggest-reply', {
+      method: 'POST',
+      body: { caseId: selectedCaseId.value, partyMessage, autoMode: false },
+      credentials: 'include',
+    })
+    if (resp?.success) {
+      currentSuggestion.value = resp.data.content
+    }
+  } catch (err) {
+    console.error('[suggest] Failed:', err)
+  }
+}
+
+async function generateAutoReply(partyMessage: string) {
+  if (!selectedCaseId.value) return
+  autoReplying.value = true
+  try {
+    const resp = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/suggest-reply', {
+      method: 'POST',
+      body: { caseId: selectedCaseId.value, partyMessage, autoMode: true },
+      credentials: 'include',
+    })
+    if (resp?.success) {
+      // Auto-send as mediator message
+      await handleSendMessage(resp.data.content)
+    }
+  } catch (err) {
+    console.error('[auto-reply] Failed:', err)
+  } finally {
+    autoReplying.value = false
+  }
 }
 
 // ============================================================
@@ -706,80 +764,6 @@ async function generateSolution() {
 }
 
 async function copySolution() { if (solutionContent.value) try { await navigator.clipboard.writeText(solutionContent.value) } catch {} }
-
-// ============================================================
-// AI Script Recommendation
-// ============================================================
-const showScriptModal = ref(false)
-const scriptLoading = ref(false)
-const scriptStages = ref<Array<{ stage: string; content: string }>>([])
-const scriptError = ref('')
-const scriptGeneratedAt = ref<string | null>(null)
-
-async function generateScript() {
-  if (!selectedCaseId.value) return
-  showScriptModal.value = true; scriptLoading.value = true; scriptStages.value = []; scriptError.value = ''; scriptGeneratedAt.value = null
-  try {
-    // ── 优先读取动态文件 ──────────────────────────────────
-    let df: any = null
-    try {
-      const dfResp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${selectedCaseId.value}/dynamic-files`, { credentials: 'include' })
-      df = dfResp?.data || null
-    } catch {}
-
-    const hasDfData = df && [df.positions, df.potentialInterests, df.partyAnalysis, df.disputeChecklist].filter((f: any) => f && String(f).trim().length > 30).length >= 2
-
-    let ctx: string
-    let useLightPrompt = false
-
-    if (hasDfData) {
-      // 增量模式：基于已有分析结果生成话术
-      useLightPrompt = true
-      ctx = [
-        df.positions && `【各方立场分析】\n${df.positions}`,
-        df.potentialInterests && `【潜在利益点】\n${df.potentialInterests}`,
-        df.partyAnalysis && `【当事人特征】\n${df.partyAnalysis}`,
-        df.disputeChecklist && `【争议清单】\n${df.disputeChecklist}`,
-      ].filter(Boolean).join('\n\n')
-      console.log('[generateScript] 增量模式：基于动态文件')
-    } else {
-      // 全量模式：基于案件原始材料
-      const cd: any = caseDetail.value || {}
-      ctx = [cd.description && `【案件描述】\n${cd.description}`, cd.claimsSummary && `【请求和答辩】\n${cd.claimsSummary}`, cd.evidenceSummary && `【证据和质证】\n${cd.evidenceSummary}`].filter(Boolean).join('\n\n')
-      console.log('[generateScript] 全量模式：基于案件材料')
-    }
-
-    const prompt = `你是一个经验丰富的商事调解专家。请根据以下${useLightPrompt ? '分析结果' : '案件信息'}，为调解员生成 3-5 步"首轮沟通话术"。\n\n要求：\n1. 每步聚焦一个目标（破冰/倾听/共情/聚焦利益/探索选项/推进共识/收尾确认）\n2. 语气专业、温和、不评判\n3. 每步 80-200 字，使用完整话术（可直接对当事人说）\n4. 不要使用 Markdown 标题/加粗/列表符号\n5. 对敏感法律点（合同效力、违约责任、诉讼时效）显式标注："需律师复核"\n\n返回严格的 JSON 数组（不要其他说明、不要包裹代码块）：\n[\n  {"stage": "步骤名称", "content": "完整话术内容..."},\n  ...\n]\n\n${useLightPrompt ? '分析结果' : '案件信息'}：\n${ctx || '（暂无）'}`
-    const resp = await $fetch<{ success: boolean; data: { content: string; generatedAt: string } }>('/api/ai/oneshot', { method: 'POST', credentials: 'include', body: { system: '你是一个经验丰富的商事调解专家，擅长利益导向调解和温和沟通。请严格按要求格式返回。', prompt, temperature: 0.5 } })
-    const text = resp?.data?.content || ''
-    const match = text.match(/\[[\s\S]*\]/)
-    if (match) {
-      try {
-        const arr = JSON.parse(match[0])
-        if (Array.isArray(arr) && arr.length) {
-          scriptStages.value = arr.map((x: any) => ({ stage: String(x?.stage || '').slice(0, 40), content: String(x?.content || '') })).filter(s => s.content)
-          scriptGeneratedAt.value = resp.data.generatedAt
-          // ── 写回动态文件：话术摘要存入 positions（补充立场信息） ──
-          if (!df?.positions) {
-            try {
-              const summary = arr.map((s: any) => `${s.stage}: ${s.content.slice(0, 80)}`).join('\n')
-              await $fetch(`/api/cases/${selectedCaseId.value}/dynamic-files`, { method: 'PUT', credentials: 'include', body: { positions: `【调解话术摘要】\n${summary}` } })
-              console.log('[generateScript] 话术摘要已写回动态文件')
-            } catch {}
-          }
-        }
-        else { scriptError.value = 'AI 返回格式异常' }
-      } catch { scriptError.value = '解析 AI 返回失败' }
-    } else { scriptError.value = 'AI 未返回有效内容' }
-  } catch (err: any) { scriptError.value = err?.data?.message || err?.message || '生成失败，请稍后重试' }
-  finally { scriptLoading.value = false }
-}
-
-async function copyScript() { if (!scriptStages.value.length) return; const text = scriptStages.value.map((s, i) => `第${i + 1}步 · ${s.stage}\n${s.content}`).join('\n\n---\n\n'); try { await navigator.clipboard.writeText(text) } catch {} }
-function useScript(text: string) {
-  if (caseDetailRef.value) caseDetailRef.value.quickMessage = text
-  showScriptModal.value = false
-}
 
 // ============================================================
 // Saved conversations
