@@ -292,11 +292,12 @@
             <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
               <div class="flex items-center gap-2 mb-3">
                 <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">5</span>
-                <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 智能体对话</h3>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 智能体咨询与调解员介入</h3>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
-                <p>在案件页面点击 <strong>与智能体对话</strong>，AI 会基于案件动态文件（争议焦点、时间线、立场等）提供专业的调解建议。</p>
-                <p>AI 智能体的回答基于知识库中的法律条文进行检索增强，确保建议的专业性和准确性。</p>
+                <p>进入案件后，AI助手会自动为您提供初步咨询，采用分阶段心理咨询模式（倾听 → 共情 → 重塑 → 协商）。</p>
+                <p>咨询 3 轮后，系统会为您匹配调解员。如需调解员帮助，点击 <strong>联系调解员</strong> 按钮，调解员将接管对话。</p>
+                <p>调解员介入后，您可与调解员直接沟通，AI助手将停止回复。</p>
               </div>
             </section>
 
@@ -304,11 +305,60 @@
             <section class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
               <div class="flex items-center gap-2 mb-3">
                 <span class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center text-sm font-bold">6</span>
-                <h3 class="text-base font-semibold text-gray-900 dark:text-white">结束对话</h3>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">调解结果与费用说明</h3>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
-                <p>在对话框中输入 "我要找调解员"、"结束"、"不用了" 等关键词，系统会自动转入调解员选择流程。</p>
-                <p>连续对话 5 轮以上也会自动提示选择调解员，确保您的纠纷能够得到专业处理。</p>
+                <p>调解成功后，您可以根据实际情况选择以下路径：</p>
+                <ul class="list-disc pl-5 space-y-1">
+                  <li><strong>撤回仲裁申请</strong>：调解达成和解 → 撤回仲裁申请 → 退回仲裁费用</li>
+                  <li><strong>调解 + 仲裁</strong>：调解达成协议 → 仲裁庭出具调解书/裁决书 → 仲裁费用按 <strong>50%</strong> 收取</li>
+                  <li><strong>继续仲裁</strong>：调解未果 → 正式立案进入仲裁程序</li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- Fee Comparison -->
+            <section class="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <UIcon name="i-lucide-badge-dollar-sign" class="w-5 h-5 text-green-600 dark:text-green-400" />
+                <h3 class="text-base font-semibold text-green-900 dark:text-green-100">费用优势对比</h3>
+              </div>
+              <div class="text-sm text-green-800 dark:text-green-200 space-y-2 leading-relaxed">
+                <p>依据《广州仲裁委员会仲裁收费、退费指引》，通过调解解决纠纷可显著降低费用：</p>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm border-collapse">
+                    <thead>
+                      <tr class="border-b border-green-300 dark:border-green-700">
+                        <th class="text-left py-2 pr-4 font-medium">解决路径</th>
+                        <th class="text-left py-2 pr-4 font-medium">仲裁费用</th>
+                        <th class="text-left py-2 font-medium">说明</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-green-200 dark:divide-green-800">
+                      <tr>
+                        <td class="py-2 pr-4">立案前调解成功撤回</td>
+                        <td class="py-2 pr-4 font-medium text-green-700 dark:text-green-300">全额退回</td>
+                        <td class="py-2">受理前撤回，费用全部退还</td>
+                      </tr>
+                      <tr>
+                        <td class="py-2 pr-4">受理后组庭前调解撤回</td>
+                        <td class="py-2 pr-4 font-medium text-green-700 dark:text-green-300">退全部受理费 + 50%处理费</td>
+                        <td class="py-2">已交费用大部分退还</td>
+                      </tr>
+                      <tr>
+                        <td class="py-2 pr-4">调解达成协议 → 仲裁出具调解书</td>
+                        <td class="py-2 pr-4 font-medium text-green-700 dark:text-green-300">按标准 50% 收取</td>
+                        <td class="py-2">调解和解后仲裁确认，费用减半</td>
+                      </tr>
+                      <tr>
+                        <td class="py-2 pr-4">直接进入仲裁程序</td>
+                        <td class="py-2 pr-4 text-gray-500">按标准全额收取</td>
+                        <td class="py-2">正常仲裁流程</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="text-xs text-green-600 dark:text-green-400 mt-2">* 以上依据《广州仲裁委员会仲裁收费、退费指引》（2025年1月1日施行）</p>
               </div>
             </section>
 

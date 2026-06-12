@@ -112,10 +112,18 @@
             </div>
           </template>
         </template>
-        <div v-else class="flex-1 flex items-center justify-center h-full">
-          <div class="text-center py-20">
-            <UIcon name="i-lucide-message-circle" class="w-10 h-10 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-            <p class="text-sm text-gray-400 dark:text-gray-500">AI助手已就绪，请输入您的问题</p>
+        <!-- First-time welcome banner -->
+        <div v-if="allMessages.length === 0 && !chat.aiStreaming.value" class="flex justify-center">
+          <div class="max-w-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-5 py-4">
+            <div class="flex items-start gap-3">
+              <UIcon name="i-lucide-scale" class="w-5 h-5 text-blue-500 dark:text-blue-400 mt-0.5 shrink-0" />
+              <div class="text-sm text-blue-800 dark:text-blue-200 leading-relaxed space-y-2">
+                <p class="font-medium">{{ caseData.partyAName }} 您好：</p>
+                <p>依据《广州仲裁委员会仲裁规则》第19条第4款，本会在收到仲裁申请后，可以根据纠纷的实际情况引导当事人通过其他争议解决方式解决争议。</p>
+                <p>为节约您的时间和经济成本，在仲裁案件正式立案前，我们将努力为您找到解决纠纷的最佳路径。</p>
+                <p class="text-blue-600 dark:text-blue-400 font-medium">请在下方输入框描述您的情况，AI助手将为您提供初步咨询。</p>
+              </div>
+            </div>
           </div>
         </div>
 
