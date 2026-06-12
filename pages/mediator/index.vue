@@ -1008,7 +1008,7 @@ async function searchKB(query: string, mode = 'hybrid') {
 async function loadKbList() {
   kbListLoading.value = true; kbList.value = []; kbTree.value = []
   try {
-    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('/api/kb/list', { params: { limit: 200 } })
+    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('/api/kb/list', { params: { limit: 1000 } })
     if (resp?.documents) kbList.value = resp.documents
     if (resp?.tree) kbTree.value = resp.tree
   } catch (e: any) {

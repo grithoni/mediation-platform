@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const resp = await $fetch(`${kbUrl}/list`, {
-      params: { limit: query.limit || 200 },
+      params: { limit: query.limit || 1000 },
       timeout: 10000,
     })
     return resp
