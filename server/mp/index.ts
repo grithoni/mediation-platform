@@ -6,7 +6,7 @@ import { messageRoutes } from './routes/messages'
 import { chatRoutes } from './routes/chat'
 import { verifyMpToken } from './middleware/auth'
 
-const PORT = Number(process.env.MP_PORT || 3001)
+const PORT = Number(process.env.MP_PORT || 6081)
 
 const app = createApp({
   onError: (error) => {

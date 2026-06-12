@@ -825,7 +825,7 @@ const kbUploadOk = ref(false)
 async function searchKB(query: string, mode = 'hybrid') {
   rightMode.value = 'kb-search'; kbSearching.value = true; kbResults.value = []
   try {
-    const resp = await $fetch<{ results: Array<{ path: string; content: string; score: number }> }>('http://localhost:8700/search', { method: 'POST', body: { query, top_k: 5, mode } })
+    const resp = await $fetch<{ results: Array<{ path: string; content: string; score: number }> }>('/api/kb/search', { method: 'POST', body: { query, top_k: 5, mode } })
     if (resp?.results) kbResults.value = resp.results
   } catch (e: any) { if ((e?.response?.status || e?.status) === 503) kbResults.value = [{ path: '知识库不可用', content: 'Python 依赖未安装。请运行：pip install -r requirements.txt', score: 0 }] }
   kbSearching.value = false
@@ -834,7 +834,7 @@ async function searchKB(query: string, mode = 'hybrid') {
 async function loadKbList() {
   kbListLoading.value = true; kbList.value = []; kbTree.value = []
   try {
-    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('http://localhost:8700/list', { params: { limit: 200 } })
+    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('/api/kb/list', { params: { limit: 200 } })
     if (resp?.documents) kbList.value = resp.documents
     if (resp?.tree) kbTree.value = resp.tree
   } catch (e: any) { if ((e?.response?.status || e?.status) === 503) kbList.value = [{ path: '知识库依赖未安装', rel_path: '请运行 pip install -r requirements.txt', chunks: 0 }] }
@@ -845,7 +845,7 @@ async function uploadKbFile(file: File) {
   kbUploading.value = true; kbUploadMsg.value = ''
   const fd = new FormData(); fd.append('file', file)
   try {
-    const resp = await $fetch<{ success: boolean; path: string }>('http://localhost:8700/upload', { method: 'POST', body: fd })
+    const resp = await $fetch<{ success: boolean; path: string }>('/api/kb/upload', { method: 'POST', body: fd })
     if (resp?.success) { kbUploadMsg.value = `上传成功：${file.name}`; kbUploadOk.value = true }
   } catch (e: any) { kbUploadMsg.value = (e?.response?.status || e?.status) === 503 ? '知识库依赖未安装。请运行：pip install -r requirements.txt' : `上传失败：${e?.message || '未知错误'}`; kbUploadOk.value = false }
   kbUploading.value = false

@@ -34,7 +34,7 @@
 
 - **当事人端**（`/party`） — 进入案件、创建案件、AI 分阶段咨询、调解员匹配介入、与调解员实时对话
 - **调解员工作站**（`/mediator`） — 案件管理、AI 调解技能（实时建议话术、智能/人工应答）、知识库 RAG 检索、技能包/工具管理
-- **小程序 API**（端口 3001） — 微信登录、JWT 认证、案件/消息/AI 对话接口
+- **小程序 API**（端口 6081） — 微信登录、JWT 认证、案件/消息/AI 对话接口
 
 AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模式（倾听→共情→重塑→协商），调解员端采用专业辅助模式。
 
@@ -53,7 +53,7 @@ AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模�
 | 数据库 | SQLite + Drizzle ORM |
 | AI SDK | Vercel AI SDK (`@ai-sdk/openai`) |
 | 知识库 | ChromaDB + fastembed (Python, 端口 8700) |
-| 小程序 API | H3 standalone + JWT (端口 3001) |
+| 小程序 API | H3 standalone + JWT (端口 6081) |
 | 实时通信 | HTTP 轮询（消息同步） |
 
 ---
@@ -144,13 +144,13 @@ npm run kb
 
 首次启动约需 15 秒（加载 embedding 模型），看到输出 `Starting KB server on port 8700...` 即就绪。
 
-### 终端 2：Web 服务（端口 3000）
+### 终端 2：Web 服务（端口 6080）
 
 ```bash
 npm run dev
 ```
 
-### 终端 3：小程序 API（端口 3001，可选）
+### 终端 3：小程序 API（端口 6081，可选）
 
 ```bash
 npm run dev:mp
@@ -160,11 +160,11 @@ npm run dev:mp
 
 ## 测试流程
 
-### ▶️ 当事人端 [http://localhost:3000/party](http://localhost:3000/party)
+### ▶️ 当事人端 [http://localhost:6080/party](http://localhost:6080/party)
 
 **1. AI 咨询 → 创建案件**
 
-1. 打开浏览器访问 `http://localhost:3000/party`
+1. 打开浏览器访问 `http://localhost:6080/party`
 2. 在首页底部输入框与 AI 对话（机器人会引导您陈述纠纷）
 3. AI 会先倾听您的诉求（前 3-4 轮不提供解决方案）
 4. 当您确认需要正式申请调解时，点击 **申请调解** 按钮
@@ -189,7 +189,7 @@ npm run dev:mp
 - 在对话框中输入 "我要找调解员"、"结束"、"不用了" 等关键词，系统自动转入调解员选择
 - 连续对话 5 轮以上也会自动提示选择调解员
 
-### ▶️ 调解员工作站 [http://localhost:3000/mediator](http://localhost:3000/mediator)
+### ▶️ 调解员工作站 [http://localhost:6080/mediator](http://localhost:6080/mediator)
 
 **1. 登录**
 
@@ -353,7 +353,7 @@ mediation-platform/
 │   ├── kb/
 │   │   ├── server.py          # FastAPI 知识库服务（端口 8700）
 │   │   └── engine.py          # ChromaDB + fastembed RAG 引擎
-│   └── mp/                    # 小程序 API 服务（端口 3001）
+│   └── mp/                    # 小程序 API 服务（端口 6081）
 │       ├── index.ts           # H3 standalone 入口
 │       ├── middleware/auth.ts # JWT 认证
 │       └── routes/
@@ -415,20 +415,20 @@ node -e "require('fs').rmSync('.nuxt',{recursive:true,force:true})"
 
 **Q: 当事人端怎么测试 AI 对话？**
 
-无需登录，访问 `http://localhost:3000/party`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
+无需登录，访问 `http://localhost:6080/party`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
 
 **Q: 小程序 API 怎么测试？**
 
 ```bash
-npm run dev:mp  # 启动小程序 API（端口 3001）
+npm run dev:mp  # 启动小程序 API（端口 6081）
 
 # 登录获取 token
-curl -X POST http://localhost:3001/api/mp/auth/login \
+curl -X POST http://localhost:6081/api/mp/auth/login \
   -H "Content-Type: application/json" \
   -d '{"caseNumber":"2026-1","accessCode":"123"}'
 
 # 用 token 访问接口
-curl http://localhost:3001/api/mp/cases -H "Authorization: Bearer <token>"
+curl http://localhost:6081/api/mp/cases -H "Authorization: Bearer <token>"
 ```
 
 **Q: 调解员怎么看不到当事人的 AI 私聊？**
