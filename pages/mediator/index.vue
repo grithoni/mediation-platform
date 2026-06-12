@@ -54,6 +54,26 @@
       @logout="auth.logout()"
     />
 
+    <!-- Notification Banner: party requesting mediator -->
+    <div
+      v-if="pendingRequestCases.length > 0 && !selectedCaseId"
+      class="fixed top-0 left-0 right-0 z-40 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center gap-3 shadow-sm"
+      style="left: 280px;"
+    >
+      <UIcon name="i-lucide-bell-ring" class="w-5 h-5 text-amber-600 dark:text-amber-400 animate-pulse shrink-0" />
+      <span class="text-sm text-amber-800 dark:text-amber-200">
+        <strong>{{ pendingRequestCases.length }}</strong> 个案件的当事人请求介入：
+      </span>
+      <button
+        v-for="c in pendingRequestCases"
+        :key="c.id"
+        class="px-3 py-1 text-sm font-medium rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+        @click="selectCase(c.id)"
+      >
+        {{ c.id }}
+      </button>
+    </div>
+
     <!-- Right: KB panels (when no case selected) -->
     <AdminKnowledgePanel
       v-if="isKbMode && !selectedCaseId"
@@ -422,6 +442,7 @@ const autoReplying = ref(false)
 let lastPartyMsgId = '' // Track last party message to avoid duplicate suggestions
 
 const isKbMode = computed(() => ['kb-upload', 'kb-view', 'kb-search'].includes(rightMode.value))
+const pendingRequestCases = computed(() => cases.value.filter(c => c.mediatorRequestedAt))
 const isSettingsMode = computed(() => ['skills', 'tools'].includes(rightMode.value))
 
 const selectedCaseTitle = computed(() => cases.value.find(c => c.id === selectedCaseId.value)?.title || '')
