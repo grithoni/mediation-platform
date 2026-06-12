@@ -63,15 +63,11 @@
         <span class="text-sm text-green-800 dark:text-green-200">调解员已介入对话</span>
       </div>
 
-      <!-- Call mediator prompt (after 3 rounds, mediator already bound) -->
+      <!-- Call mediator prompt (after 3 rounds) -->
       <div
-        v-if="showCallMediatorPrompt && chatState === 'ai' && caseData.mediatorId"
-        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-blue-50 dark:bg-blue-950 flex items-center justify-between"
+        v-if="showCallMediatorPrompt && chatState === 'ai'"
+        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-blue-50 dark:bg-blue-950 flex items-center justify-end"
       >
-        <span class="text-sm text-blue-800 dark:text-blue-200">
-          <UIcon name="i-lucide-info" class="w-4 h-4 inline -mt-0.5 mr-1" />
-          已进行 {{ sessionTurnCount }} 轮咨询，如需调解员帮助可点击右侧按钮
-        </span>
         <button
           class="px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
           @click="callMediator"
@@ -533,22 +529,16 @@ async function handleSend() {
 
   // Check semantic intent
   if (sessionTurnCount.value >= 3 && hasMediatorIntent(text)) {
-    if (!caseData.value?.mediatorId) {
-      // No mediator → show selection
-      openMediatorModal()
-    } else {
-      // Has mediator → show call button immediately
-      showCallMediatorPrompt.value = true
-      clearIdleTimer()
-    }
+    showCallMediatorPrompt.value = true
+    clearIdleTimer()
   } else if (sessionTurnCount.value >= 3 && !showCallMediatorPrompt.value) {
     // Start idle timer after 3rd round
     startIdleTimer()
   }
 
-  // First time: after 3 rounds, no mediator → show selection
-  if (sessionTurnCount.value >= 3 && !caseData.value?.mediatorId && !showMediatorModal.value) {
-    openMediatorModal()
+  // First time: after 3 rounds, no mediator → show "联系调解员" button (not auto-open modal)
+  if (sessionTurnCount.value >= 3 && !caseData.value?.mediatorId && !showCallMediatorPrompt.value) {
+    showCallMediatorPrompt.value = true
   }
 
   nextTick(() => {
