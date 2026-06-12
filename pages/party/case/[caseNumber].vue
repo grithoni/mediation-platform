@@ -117,7 +117,7 @@
                 <p class="font-medium">{{ caseData.partyAName }} 您好：</p>
                 <p>依据《广州仲裁委员会仲裁规则》第19条第4款，本会在收到仲裁申请后，可以根据纠纷的实际情况引导当事人通过其他争议解决方式解决争议。</p>
                 <p>为节约您的时间和经济成本，在仲裁案件正式立案前，我们将努力为您找到解决纠纷的最佳路径。</p>
-                <p class="text-blue-600 dark:text-blue-400 font-medium">请在下方输入框描述您的情况，AI助手将为您提供初步咨询。</p>
+                <p class="text-blue-600 dark:text-blue-400 font-medium">AI助手将审查您提交的材料，并逐一提出需要补充或确认的问题，请耐心回答。</p>
               </div>
             </div>
           </div>
