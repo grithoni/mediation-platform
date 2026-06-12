@@ -81,6 +81,7 @@
       :kb-list="kbList"
       :kb-list-loading="kbListLoading"
       :kb-stats="kbStats"
+      :kb-tree="kbTree"
       :results="kbResults"
       :searching="kbSearching"
       :uploading="kbUploading"
@@ -815,6 +816,7 @@ const kbSearching = ref(false)
 const kbResults = ref<Array<{ path: string; content: string; score: number }>>([])
 const kbStats = ref('7569 条记录')
 const kbList = ref<Array<{ path: string; rel_path: string; chunks: number }>>([])
+const kbTree = ref<Array<any>>([])
 const kbListLoading = ref(false)
 const kbUploading = ref(false)
 const kbUploadMsg = ref('')
@@ -830,10 +832,11 @@ async function searchKB(query: string, mode = 'hybrid') {
 }
 
 async function loadKbList() {
-  kbListLoading.value = true; kbList.value = []
+  kbListLoading.value = true; kbList.value = []; kbTree.value = []
   try {
-    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }> }>('http://localhost:8700/list', { params: { limit: 200 } })
+    const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('http://localhost:8700/list', { params: { limit: 200 } })
     if (resp?.documents) kbList.value = resp.documents
+    if (resp?.tree) kbTree.value = resp.tree
   } catch (e: any) { if ((e?.response?.status || e?.status) === 503) kbList.value = [{ path: '知识库依赖未安装', rel_path: '请运行 pip install -r requirements.txt', chunks: 0 }] }
   kbListLoading.value = false
 }

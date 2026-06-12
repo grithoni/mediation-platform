@@ -33,20 +33,13 @@
         <span class="text-sm font-medium text-gray-900 dark:text-white">知识库列表</span>
         <span class="text-xs text-gray-400 ml-auto">{{ kbList.length }} 个文档 · {{ kbStats }}</span>
       </div>
-      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+      <div class="flex-1 overflow-y-auto p-4 space-y-1">
         <div v-if="kbListLoading" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
           <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载中...
         </div>
-        <div v-else-if="kbList.length">
-          <div v-for="doc in kbList" :key="doc.path" class="bg-gray-50 dark:bg-gray-950 rounded-lg p-3 border border-gray-200 dark:border-gray-800 flex items-center gap-3">
-            <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500 shrink-0" />
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ doc.path.split('/').pop() }}</div>
-              <div class="text-xs text-gray-400 font-mono truncate">{{ doc.path }}</div>
-            </div>
-            <div class="text-xs text-gray-500 shrink-0">{{ doc.chunks }} 块</div>
-          </div>
-        </div>
+        <template v-else-if="kbTree.length">
+          <KbTreeNode v-for="node in kbTree" :key="node.path" :node="node" :depth="0" />
+        </template>
         <div v-else class="flex items-center justify-center h-full">
           <p class="text-sm text-gray-400">知识库为空</p>
         </div>
@@ -100,12 +93,23 @@
 <script setup lang="ts">
 interface KbDoc { path: string; rel_path: string; chunks: number }
 interface KbResult { path: string; content: string; score: number }
+interface KbTreeNode {
+  name: string
+  path: string
+  type: 'dir' | 'file'
+  children?: KbTreeNode[]
+  file_count?: number
+  chunk_count?: number
+  rel_path?: string
+  chunks?: number
+}
 
 const props = defineProps<{
   mode: string
   kbList: KbDoc[]
   kbListLoading: boolean
   kbStats: string
+  kbTree: KbTreeNode[]
   results: KbResult[]
   searching: boolean
   uploading: boolean

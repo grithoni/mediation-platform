@@ -544,7 +544,7 @@ class LocalKB:
     def list_documents(self, limit=100):
         self._ensure_collection()
         if self._collection.count() == 0:
-            return {"documents": []}
+            return {"documents": [], "tree": []}
 
         all_meta = self._collection.get(include=["metadatas"])
         from collections import Counter
@@ -557,7 +557,71 @@ class LocalKB:
                 "rel_path": os.path.relpath(path_val, os.getcwd()),
                 "chunks": count,
             })
-        return {"documents": docs}
+
+        # Build tree structure
+        tree = self._build_tree(source_counts)
+
+        return {"documents": docs, "tree": tree}
+
+    def _build_tree(self, source_counts):
+        """Build a hierarchical tree from source file paths."""
+        # Determine the docs root directory
+        if not source_counts:
+            return []
+        first_path = next(iter(source_counts))
+        # Find the 'docs' directory in the path
+        parts = first_path.split(os.sep)
+        docs_idx = -1
+        for i, p in enumerate(parts):
+            if p == 'docs':
+                docs_idx = i
+                break
+        if docs_idx < 0:
+            return []
+
+        docs_root = os.sep.join(parts[:docs_idx + 1])
+
+        # Build tree
+        tree = []
+        dir_map = {}  # dir_path -> node
+
+        for fpath, count in sorted(source_counts.items()):
+            rel = os.path.relpath(fpath, docs_root)
+            rel_parts = rel.split(os.sep)
+
+            # Navigate/create directory nodes
+            current_children = tree
+            current_path = docs_root
+
+            for i, part in enumerate(rel_parts[:-1]):
+                current_path = os.path.join(current_path, part)
+                if current_path not in dir_map:
+                    dir_node = {
+                        "name": part,
+                        "path": current_path,
+                        "type": "dir",
+                        "children": [],
+                        "file_count": 0,
+                        "chunk_count": 0,
+                    }
+                    dir_map[current_path] = dir_node
+                    current_children.append(dir_node)
+                dir_node = dir_map[current_path]
+                dir_node["file_count"] += 1
+                dir_node["chunk_count"] += count
+                current_children = dir_node["children"]
+
+            # Add file node
+            file_name = rel_parts[-1]
+            current_children.append({
+                "name": file_name,
+                "path": fpath,
+                "rel_path": os.path.relpath(fpath, os.getcwd()),
+                "type": "file",
+                "chunks": count,
+            })
+
+        return tree
 
     def remove(self, path):
         self._ensure_collection()
