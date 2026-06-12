@@ -91,6 +91,8 @@
 </template>
 
 <script setup lang="ts">
+import KbTreeNode from './KbTreeNode.vue'
+
 interface KbDoc { path: string; rel_path: string; chunks: number }
 interface KbResult { path: string; content: string; score: number }
 interface KbTreeNode {

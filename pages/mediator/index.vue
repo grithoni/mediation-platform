@@ -835,9 +835,14 @@ async function loadKbList() {
   kbListLoading.value = true; kbList.value = []; kbTree.value = []
   try {
     const resp = await $fetch<{ documents: Array<{ path: string; rel_path: string; chunks: number }>, tree: Array<any> }>('/api/kb/list', { params: { limit: 200 } })
+    console.log('[KB] resp:', JSON.stringify(resp).substring(0, 200))
     if (resp?.documents) kbList.value = resp.documents
     if (resp?.tree) kbTree.value = resp.tree
-  } catch (e: any) { if ((e?.response?.status || e?.status) === 503) kbList.value = [{ path: '知识库依赖未安装', rel_path: '请运行 pip install -r requirements.txt', chunks: 0 }] }
+    console.log('[KB] kbList:', kbList.value.length, 'kbTree:', kbTree.value.length)
+  } catch (e: any) {
+    console.error('[KB] loadKbList error:', e)
+    if ((e?.response?.status || e?.status) === 503) kbList.value = [{ path: '知识库依赖未安装', rel_path: '请运行 pip install -r requirements.txt', chunks: 0 }]
+  }
   kbListLoading.value = false
 }
 

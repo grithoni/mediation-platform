@@ -34,11 +34,13 @@
 </template>
 
 <script setup lang="ts">
-interface KbTreeNode {
+import KbTreeNode from './KbTreeNode.vue'
+
+interface KbTreeNodeType {
   name: string
   path: string
   type: 'dir' | 'file'
-  children?: KbTreeNode[]
+  children?: KbTreeNodeType[]
   file_count?: number
   chunk_count?: number
   rel_path?: string
@@ -46,7 +48,7 @@ interface KbTreeNode {
 }
 
 defineProps<{
-  node: KbTreeNode
+  node: KbTreeNodeType
   depth: number
 }>()
 
