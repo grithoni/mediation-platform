@@ -73,6 +73,20 @@
           <UIcon :name="recommendLoading ? 'i-lucide-loader-2' : 'i-lucide-lightbulb'" :class="recommendLoading ? 'animate-spin' : ''" class="w-3.5 h-3.5" />
           {{ recommendLoading ? '生成中...' : '利益重构方案推荐' }}
         </button>
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950 hover:border-blue-400 transition-colors disabled:opacity-50"
+          :disabled="lawSearchLoading"
+          @click="emit('searchLaw')">
+          <UIcon :name="lawSearchLoading ? 'i-lucide-loader-2' : 'i-lucide-book-open'" :class="lawSearchLoading ? 'animate-spin' : ''" class="w-3.5 h-3.5" />
+          {{ lawSearchLoading ? '检索中...' : '法条检索' }}
+        </button>
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:border-emerald-400 transition-colors disabled:opacity-50"
+          :disabled="caseSearchLoading"
+          @click="emit('searchCases')">
+          <UIcon :name="caseSearchLoading ? 'i-lucide-loader-2' : 'i-lucide-file-search'" :class="caseSearchLoading ? 'animate-spin' : ''" class="w-3.5 h-3.5" />
+          {{ caseSearchLoading ? '检索中...' : '类案推荐' }}
+        </button>
       </div>
     </div>
 
@@ -195,6 +209,8 @@ const props = defineProps<{
   fileCount: number
   saving: boolean
   recommendLoading: boolean
+  lawSearchLoading: boolean
+  caseSearchLoading: boolean
   replyMode: 'auto' | 'manual'
   suggestion: string | null
   autoReplying: boolean
@@ -205,6 +221,8 @@ const emit = defineEmits<{
   viewMaterial: [type: string]
   openFiles: []
   generateSolution: []
+  searchLaw: []
+  searchCases: []
   sendMessage: [text: string]
   changeReplyMode: [mode: 'auto' | 'manual']
   useSuggestion: [text: string]

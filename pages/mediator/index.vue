@@ -171,6 +171,8 @@
       :file-count="caseFiles.length"
       :saving="savingConversation"
       :recommend-loading="recommendLoading"
+      :law-search-loading="lawSearchLoading"
+      :case-search-loading="caseSearchLoading"
       :reply-mode="replyMode"
       :suggestion="currentSuggestion"
       :auto-replying="autoReplying"
@@ -178,6 +180,8 @@
       @view-material="viewMaterial($event)"
       @open-files="openFileList"
       @generate-solution="generateSolution"
+      @search-law="searchLaw"
+      @search-cases="searchCases"
       @send-message="handleSendMessage"
       @change-reply-mode="changeReplyMode"
       @use-suggestion="useSuggestion"
@@ -337,6 +341,111 @@
     </div>
   </div>
 
+  <!-- Law Search Modal (法条检索) -->
+  <div v-if="showLawSearchModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showLawSearchModal = false">
+    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-book-open" class="w-5 h-5 text-blue-600" />
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">法条检索</h3>
+          <span v-if="lawSearchResults.length" class="text-xs text-gray-400">找到 {{ lawSearchResults.length }} 条</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button v-if="lawSearchResults.length" class="text-xs px-2 py-1 text-gray-600 hover:bg-white/60 dark:hover:bg-gray-800 rounded" @click="copyAllLawResults">
+            <UIcon name="i-lucide-copy" class="w-3.5 h-3.5 inline" /> 复制全部
+          </button>
+          <button class="text-gray-400 hover:text-gray-600 ml-1" @click="showLawSearchModal = false">
+            <UIcon name="i-lucide-x" class="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      <div class="px-5 py-4 overflow-y-auto flex-1">
+        <div v-if="lawSearchLoading" class="flex flex-col items-center justify-center py-16 gap-3">
+          <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-blue-500 animate-spin" />
+          <p class="text-sm text-gray-500">正在检索相关法条...</p>
+        </div>
+        <div v-else-if="lawSearchError" class="text-center py-12">
+          <UIcon name="i-lucide-alert-circle" class="w-10 h-10 text-amber-400 mx-auto mb-2" />
+          <p class="text-sm text-amber-600">{{ lawSearchError }}</p>
+        </div>
+        <div v-else-if="lawSearchResults.length" class="space-y-4">
+          <div v-for="(r, i) in lawSearchResults" :key="i"
+            class="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 bg-blue-50 dark:bg-blue-950/30 border-b border-gray-200 dark:border-gray-800">
+              <div class="flex items-center gap-2 min-w-0">
+                <UIcon name="i-lucide-scale" class="w-4 h-4 text-blue-600 shrink-0" />
+                <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ r.fileName }}</span>
+                <span v-if="r.dirName" class="text-xs text-gray-400 shrink-0">/ {{ r.dirName }}</span>
+                <span class="text-xs text-gray-400 shrink-0 font-mono">score: {{ r.score }}</span>
+              </div>
+              <button class="shrink-0 text-xs px-2 py-1 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors" @click="copyLawContent(r.content)">
+                <UIcon name="i-lucide-copy" class="w-3.5 h-3.5 inline" /> 复制
+              </button>
+            </div>
+            <div class="px-4 py-3">
+              <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed select-text">{{ r.content }}</div>
+              <div class="mt-2 text-xs text-gray-400">来源：{{ r.path }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <p class="text-xs text-gray-400">法条检索结果仅供参考，以官方法律文本为准</p>
+        <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="showLawSearchModal = false">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case Search Modal (类案推荐) -->
+  <div v-if="showCaseSearchModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showCaseSearchModal = false">
+    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/50 dark:to-teal-950/50">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-file-search" class="w-5 h-5 text-emerald-600" />
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">类案推荐</h3>
+          <span v-if="caseSearchResults.length" class="text-xs text-gray-400">找到 {{ caseSearchResults.length }} 个相似案例</span>
+        </div>
+        <button class="text-gray-400 hover:text-gray-600" @click="showCaseSearchModal = false">
+          <UIcon name="i-lucide-x" class="w-5 h-5" />
+        </button>
+      </div>
+      <div class="px-5 py-4 overflow-y-auto flex-1">
+        <div v-if="caseSearchLoading" class="flex flex-col items-center justify-center py-16 gap-3">
+          <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-emerald-500 animate-spin" />
+          <p class="text-sm text-gray-500">正在检索相似案例并生成摘要...</p>
+          <p class="text-xs text-gray-400">约需 10-20 秒</p>
+        </div>
+        <div v-else-if="caseSearchError" class="text-center py-12">
+          <UIcon name="i-lucide-alert-circle" class="w-10 h-10 text-amber-400 mx-auto mb-2" />
+          <p class="text-sm text-amber-600">{{ caseSearchError }}</p>
+        </div>
+        <div v-else-if="caseSearchResults.length" class="space-y-4">
+          <div v-for="(c, i) in caseSearchResults" :key="i"
+            class="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border-b border-gray-200 dark:border-gray-800">
+              <div class="flex items-center gap-2 min-w-0">
+                <UIcon name="i-lucide-file-text" class="w-4 h-4 text-emerald-600 shrink-0" />
+                <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ c.fileName }}</span>
+                <span v-if="c.dirName" class="text-xs text-gray-400 shrink-0">/ {{ c.dirName }}</span>
+              </div>
+              <button class="shrink-0 text-xs px-2.5 py-1 text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-800 rounded transition-colors font-medium" @click="downloadCaseFile(c.path)">
+                <UIcon name="i-lucide-download" class="w-3.5 h-3.5 inline -mt-0.5" /> 下载裁决书
+              </button>
+            </div>
+            <div class="px-4 py-3">
+              <div class="text-xs text-gray-400 mb-2">来源：{{ c.path }}</div>
+              <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ c.summary }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <p class="text-xs text-gray-400">类案推荐仅供参考，具体裁决以原文为准</p>
+        <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="showCaseSearchModal = false">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MCP Tool Form Modal -->
   <div v-if="mcpFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="mcpFormOpen = false">
     <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
@@ -442,6 +551,18 @@ const currentSuggestion = ref<string | null>(null)
 const autoReplying = ref(false)
 let lastPartyMsgId = '' // Track last party message to avoid duplicate suggestions
 
+// Law search state
+const lawSearchLoading = ref(false)
+const lawSearchResults = ref<Array<{ path: string; fileName: string; dirName: string; content: string; score: number }>>([])
+const showLawSearchModal = ref(false)
+const lawSearchError = ref('')
+
+// Case search state
+const caseSearchLoading = ref(false)
+const caseSearchResults = ref<Array<{ path: string; fileName: string; dirName: string; summary: string }>>([])
+const showCaseSearchModal = ref(false)
+const caseSearchError = ref('')
+
 const isKbMode = computed(() => ['kb-upload', 'kb-view', 'kb-search'].includes(rightMode.value))
 const pendingRequestCases = computed(() => cases.value.filter(c => c.mediatorRequestedAt))
 const isSettingsMode = computed(() => ['skills', 'tools'].includes(rightMode.value))
@@ -524,6 +645,10 @@ async function selectCase(id: string) {
       solutionContent.value = ''
       solutionError.value = ''
       solutionGeneratedAt.value = null
+      lawSearchResults.value = []
+      lawSearchError.value = ''
+      caseSearchResults.value = []
+      caseSearchError.value = ''
     }
   } catch {}
   loadSavedConversations()
@@ -786,6 +911,55 @@ async function generateSolution() {
 }
 
 async function copySolution() { if (solutionContent.value) try { await navigator.clipboard.writeText(solutionContent.value) } catch {} }
+
+// ============================================================
+// AI Law Search (法条检索)
+// ============================================================
+async function searchLaw() {
+  if (!selectedCaseId.value) return
+  showLawSearchModal.value = true; lawSearchLoading.value = true; lawSearchResults.value = []; lawSearchError.value = ''
+  try {
+    const resp = await $fetch<{ success: boolean; data: { results: Array<{ path: string; fileName: string; dirName: string; content: string; score: number }>; message?: string } }>(
+      `/api/cases/${selectedCaseId.value}/search-law`, { method: 'POST', credentials: 'include' }
+    )
+    if (resp?.success) {
+      lawSearchResults.value = resp.data.results || []
+      if (!lawSearchResults.value.length) lawSearchError.value = resp.data.message || '未找到相关法条'
+    }
+  } catch (err: any) { lawSearchError.value = err?.data?.message || err?.message || '检索失败' }
+  finally { lawSearchLoading.value = false }
+}
+
+async function copyLawContent(content: string) {
+  try { await navigator.clipboard.writeText(content) } catch {}
+}
+
+async function copyAllLawResults() {
+  const text = lawSearchResults.value.map(r => `【${r.fileName}】来源：${r.path}\n${r.content}`).join('\n\n---\n\n')
+  try { await navigator.clipboard.writeText(text) } catch {}
+}
+
+// ============================================================
+// AI Case Search (类案推荐)
+// ============================================================
+async function searchCases() {
+  if (!selectedCaseId.value) return
+  showCaseSearchModal.value = true; caseSearchLoading.value = true; caseSearchResults.value = []; caseSearchError.value = ''
+  try {
+    const resp = await $fetch<{ success: boolean; data: { cases: Array<{ path: string; fileName: string; dirName: string; summary: string }>; message?: string } }>(
+      `/api/cases/${selectedCaseId.value}/search-cases`, { method: 'POST', credentials: 'include' }
+    )
+    if (resp?.success) {
+      caseSearchResults.value = resp.data.cases || []
+      if (!caseSearchResults.value.length) caseSearchError.value = resp.data.message || '未找到相似案例'
+    }
+  } catch (err: any) { caseSearchError.value = err?.data?.message || err?.message || '检索失败' }
+  finally { caseSearchLoading.value = false }
+}
+
+function downloadCaseFile(path: string) {
+  window.open(`/api/kb/file?path=${encodeURIComponent(path)}`, '_blank')
+}
 
 // ============================================================
 // Saved conversations
