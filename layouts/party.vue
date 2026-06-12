@@ -32,8 +32,8 @@ const menuItems: Array<{
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-scale" class="w-5 h-5 text-blue-500 dark:text-blue-400" />
             <div>
-              <div class="text-xl font-bold text-gray-900 dark:text-white">全时在线的调解专家</div>
-              <div class="text-xs text-gray-400 dark:text-gray-500 font-mono">Always Online Mediation Expert</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">全时在线的纠纷解决专家</div>
+              <div class="text-xs text-gray-400 dark:text-gray-500 font-mono">Always Online Dispute Resolution Expert</div>
             </div>
           </div>
           <button

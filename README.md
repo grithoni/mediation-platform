@@ -1,4 +1,4 @@
-# 全时在线的调解专家 · Always Online Mediation Expert
+# 全时在线的纠纷解决专家 · Always Online Dispute Resolution Expert
 
 > 一个基于 AI 的商事调解平台，包含当事人端（案件申请、AI 咨询）和调解员工作台（案件管理、知识库检索、AI 调解技能、技能包/工具管理）。
 
