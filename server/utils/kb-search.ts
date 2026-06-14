@@ -26,9 +26,9 @@ let kbUnavailableUntil = 0 // Backoff timestamp when KB is down
  *
  * @param query - Search query
  * @param topK - Number of results to return
- * @param mode - Search mode: "hybrid" (vector+BM25, default), "vector" (semantic only), "keyword" (BM25 only)
+ * @param mode - Search mode: "hybrid" (vector+BM25, default), "vector" (semantic only), "keyword" (BM25 only), "rerank" (hybrid + cross-encoder refinement)
  */
-export async function searchKb(query: string, topK = 3, mode: 'hybrid' | 'vector' | 'keyword' = 'hybrid'): Promise<KbSearchResult[]> {
+export async function searchKb(query: string, topK = 3, mode: 'hybrid' | 'vector' | 'keyword' | 'rerank' = 'rerank'): Promise<KbSearchResult[]> {
   const cacheKey = `${query}::${topK}::${mode}`
 
   // Check cache

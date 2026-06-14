@@ -1,4 +1,4 @@
-"""Local knowledge base engine — ChromaDB + FastEmbed + BM25 hybrid search"""
+"""Local knowledge base engine — ChromaDB + FastEmbed + BM25 hybrid search + Reranker"""
 from __future__ import annotations
 import os
 import re
@@ -8,6 +8,13 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Import reranker module (lazy model loading)
+try:
+    from reranker import rerank as _rerank_fn, is_available as _reranker_available
+except ImportError:
+    _rerank_fn = None
+    _reranker_available = lambda: False
 
 # ── Constants ───────────────────────────────────────────
 
@@ -522,6 +529,46 @@ class LocalKB:
             ))
             if len(out) >= top_k:
                 break
+        return out
+
+    def search_hybrid_rerank(self, query, top_k=5):
+        """Hybrid search with reranker refinement.
+
+        Pipeline: vector + BM25 → RRF fusion (top 15) → BGE-reranker cross-encoder → top_k.
+        Falls back to regular search_hybrid if reranker is unavailable.
+        """
+        if not _reranker_available():
+            # Reranker not available, fall back to regular hybrid
+            return self.search_hybrid(query, top_k)
+
+        # Step 1: Get more candidates from hybrid search (3x for reranking pool)
+        pool_size = max(top_k * 3, 15)
+        candidates = self.search_hybrid(query, top_k=pool_size)
+
+        if len(candidates) <= top_k:
+            return candidates
+
+        # Step 2: Rerank candidates using cross-encoder
+        documents = [c.content for c in candidates]
+        reranked = _rerank_fn(query, documents, top_n=top_k)
+
+        if not reranked:
+            # Reranker failed, fall back
+            return candidates[:top_k]
+
+        # Step 3: Map reranked results back to SearchResult objects
+        out = []
+        for r in reranked:
+            idx = r["index"]
+            if idx < len(candidates):
+                orig = candidates[idx]
+                out.append(SearchResult(
+                    content=orig.content,
+                    source_path=orig.source_path,
+                    score=round(r["score"], 4),
+                    chunk_index=orig.chunk_index,
+                    metadata={**orig.metadata, "reranked": True},
+                ))
         return out
 
     # ── Management ────────────────────────────────────────

@@ -77,7 +77,7 @@ app.add_middleware(
 class SearchQuery(BaseModel):
     query: str
     top_k: int = 5
-    mode: str = "hybrid"  # "hybrid" | "vector" | "keyword"
+    mode: str = "hybrid"  # "hybrid" | "vector" | "keyword" | "rerank"
 
 def _deps_error_response(action: str = "此操作"):
     """Return a friendly JSON error when KB deps are missing."""
@@ -125,6 +125,8 @@ def search(body: SearchQuery):
         results = k.search_keyword(body.query, body.top_k)
     elif mode == "vector":
         results = k.search(body.query, body.top_k)
+    elif mode == "rerank":
+        results = k.search_hybrid_rerank(body.query, body.top_k)
     else:  # "hybrid" (default)
         results = k.search_hybrid(body.query, body.top_k)
 
@@ -132,6 +134,17 @@ def search(body: SearchQuery):
         "results": [{"path": r.source_path, "content": r.content, "score": r.score} for r in results],
         "mode": mode,
     }
+
+
+@app.get("/rerank-status")
+def rerank_status():
+    """Check if reranker model is available."""
+    try:
+        from reranker import is_available
+        available = is_available()
+    except ImportError:
+        available = False
+    return {"available": available}
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
