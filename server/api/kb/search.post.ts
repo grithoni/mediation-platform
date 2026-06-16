@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   try {
     const resp = await $fetch(`${kbUrl}/search`, {
       method: 'POST',
-      body: { query: body.query, top_k: body.top_k || 5, mode: body.mode },
+      body: { query: body.query, top_k: body.top_k || 5, mode: body.mode || 'rerank' },
       timeout: 15000,
     })
     return resp
