@@ -107,7 +107,7 @@ export const sessions = sqliteTable('sessions', {
 export const savedConversations = sqliteTable('saved_conversations', {
   id: text('id').primaryKey(),
   caseId: text('case_id').notNull().references(() => cases.id),
-  mediatorId: text('mediator_id').notNull().references(() => mediators.id),
+  mediatorId: text('mediator_id'), // nullable: party saves have no mediator
   title: text('title').notNull(),
   messagesJson: text('messages_json').notNull(),
   messageCount: integer('message_count').notNull().default(0),

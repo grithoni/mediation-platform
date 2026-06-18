@@ -33,12 +33,45 @@
         <span class="text-sm font-medium text-gray-900 dark:text-white">知识库列表</span>
         <span class="text-xs text-gray-400 ml-auto">{{ kbList.length }} 个文档 · {{ kbStats }}</span>
       </div>
+      <!-- Selection toolbar -->
+      <div class="shrink-0 px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 bg-white dark:bg-gray-900">
+        <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            :indeterminate="someSelected"
+            class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            @change="toggleSelectAll"
+          />
+          全选
+        </label>
+        <span v-if="selectedPaths.size > 0" class="text-xs text-blue-600 dark:text-blue-400">已选 {{ selectedPaths.size }} 个</span>
+        <div class="ml-auto">
+          <button
+            v-if="selectedPaths.size > 0"
+            class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-colors"
+            :disabled="deleting"
+            @click="confirmDelete"
+          >
+            <UIcon :name="deleting ? 'i-lucide-loader-2' : 'i-lucide-trash-2'" class="w-3.5 h-3.5" :class="{ 'animate-spin': deleting }" />
+            {{ deleting ? '删除中...' : '删除所选' }}
+          </button>
+        </div>
+      </div>
       <div class="flex-1 overflow-y-auto p-4 space-y-1">
         <div v-if="kbListLoading" class="flex items-center justify-center py-12 gap-2 text-sm text-blue-500">
           <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载中...
         </div>
         <template v-else-if="kbTree.length">
-          <KbTreeNode v-for="node in kbTree" :key="node.path" :node="node" :depth="0" />
+          <KbTreeNode
+            v-for="node in kbTree"
+            :key="node.path"
+            :node="node"
+            :depth="0"
+            :selectable="true"
+            :selected="isPathSelected(node.path)"
+            @toggle="togglePath"
+          />
         </template>
         <div v-else class="flex items-center justify-center h-full">
           <p class="text-sm text-gray-400">知识库为空</p>
@@ -122,7 +155,62 @@ const props = defineProps<{
 const emit = defineEmits<{
   search: [query: string, mode: string]
   upload: [file: File]
+  delete: [paths: string[]]
+  refresh: []
 }>()
+
+// ── Selection state ──────────────────────────────────────
+const selectedPaths = ref(new Set<string>())
+const deleting = ref(false)
+
+// Collect all file paths from tree recursively
+function collectFilePaths(nodes: KbTreeNode[]): string[] {
+  const paths: string[] = []
+  for (const n of nodes) {
+    if (n.type === 'file' && n.path) paths.push(n.path)
+    if (n.children?.length) paths.push(...collectFilePaths(n.children))
+  }
+  return paths
+}
+
+const allFilePaths = computed(() => collectFilePaths(props.kbTree))
+const allSelected = computed(() => allFilePaths.value.length > 0 && allFilePaths.value.every(p => selectedPaths.value.has(p)))
+const someSelected = computed(() => !allSelected.value && allFilePaths.value.some(p => selectedPaths.value.has(p)))
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedPaths.value.clear()
+  } else {
+    selectedPaths.value = new Set(allFilePaths.value)
+  }
+}
+
+function isPathSelected(path: string): boolean {
+  return selectedPaths.value.has(path)
+}
+
+function togglePath(path: string) {
+  const s = new Set(selectedPaths.value)
+  if (s.has(path)) s.delete(path)
+  else s.add(path)
+  selectedPaths.value = s
+}
+
+function confirmDelete() {
+  if (selectedPaths.value.size === 0) return
+  const count = selectedPaths.value.size
+  if (!confirm(`确认删除选中的 ${count} 个文档？此操作不可撤销。`)) return
+  deleting.value = true
+  emit('delete', [...selectedPaths.value])
+}
+
+// Expose for parent to reset
+function resetSelection() {
+  selectedPaths.value = new Set()
+  deleting.value = false
+}
+
+defineExpose({ resetSelection })
 
 const query = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)

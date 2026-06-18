@@ -77,6 +77,7 @@
     <!-- Right: KB panels (when no case selected) -->
     <AdminKnowledgePanel
       v-if="isKbMode && !selectedCaseId"
+      ref="kbPanelRef"
       :mode="rightMode"
       :kb-list="kbList"
       :kb-list-loading="kbListLoading"
@@ -89,6 +90,7 @@
       :upload-ok="kbUploadOk"
       @search="searchKB"
       @upload="uploadKbFile"
+      @delete="deleteKbFiles"
     />
 
     <!-- Right: Settings panels (when no case selected) -->
@@ -1025,6 +1027,31 @@ async function uploadKbFile(file: File) {
     if (resp?.success) { kbUploadMsg.value = `上传成功：${file.name}`; kbUploadOk.value = true }
   } catch (e: any) { kbUploadMsg.value = (e?.response?.status || e?.status) === 503 ? '知识库依赖未安装。请运行：pip install -r requirements.txt' : `上传失败：${e?.message || '未知错误'}`; kbUploadOk.value = false }
   kbUploading.value = false
+}
+
+// ── KB Delete ────────────────────────────────────────────
+const kbPanelRef = ref<InstanceType<typeof import('../../components/admin/KnowledgePanel.vue')['default']> | null>(null)
+
+async function deleteKbFiles(paths: string[]) {
+  try {
+    const resp = await $fetch<{ success: boolean; removed_chunks: number; errors: any[] }>('http://localhost:8700/delete', {
+      method: 'POST',
+      body: { paths },
+    })
+    if (resp?.success) {
+      const msg = `已删除 ${paths.length} 个文档（${resp.removed_chunks} 个向量块）`
+      kbUploadMsg.value = msg
+      kbUploadOk.value = true
+      // Refresh the list
+      await loadKbList()
+      // Reset selection
+      kbPanelRef.value?.resetSelection()
+    }
+  } catch (e: any) {
+    kbUploadMsg.value = `删除失败：${e?.message || '未知错误'}`
+    kbUploadOk.value = false
+    kbPanelRef.value?.resetSelection()
+  }
 }
 
 // ============================================================

@@ -166,6 +166,28 @@ async def upload_key(file: UploadFile = File(...)):
         f.write(await file.read())
     return {"success": True}
 
+class DeleteRequest(BaseModel):
+    paths: list[str]
+
+@app.post("/delete")
+def delete_documents(body: DeleteRequest):
+    """Delete documents from the knowledge base by file paths."""
+    k = get_kb()
+    if k is None:
+        return _deps_error_response("文档删除")
+    removed = 0
+    errors = []
+    for path in body.paths:
+        try:
+            result = k.remove(path)
+            removed += result.get("removed", 0)
+            # Also delete the physical file if it exists
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception as e:
+            errors.append({"path": path, "error": str(e)})
+    return {"success": True, "removed_chunks": removed, "errors": errors}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8700

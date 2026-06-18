@@ -16,16 +16,23 @@
         <span class="text-xs text-gray-400 ml-auto shrink-0">{{ node.file_count }} 文件 · {{ node.chunk_count }} 块</span>
       </button>
       <div v-if="expanded && node.children" class="border-l border-gray-200 dark:border-gray-700 ml-4">
-        <KbTreeNode v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" />
+        <KbTreeNode v-for="child in node.children" :key="child.path" :node="child" :depth="depth + 1" :selectable="selectable" :selected="false" @toggle="$emit('toggle', $event)" />
       </div>
     </div>
 
     <!-- File -->
     <div
       v-else
-      class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
       :style="{ paddingLeft: (depth * 16 + 8) + 'px' }"
     >
+      <input
+        v-if="selectable"
+        type="checkbox"
+        :checked="selected"
+        class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 shrink-0 cursor-pointer"
+        @change="$emit('toggle', node.path)"
+      />
       <UIcon name="i-lucide-file-text" class="w-4 h-4 text-blue-500 shrink-0" />
       <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ node.name }}</span>
       <span class="text-xs text-gray-400 ml-auto shrink-0">{{ node.chunks }} 块</span>
@@ -50,6 +57,12 @@ interface KbTreeNodeType {
 defineProps<{
   node: KbTreeNodeType
   depth: number
+  selectable?: boolean
+  selected?: boolean
+}>()
+
+defineEmits<{
+  toggle: [path: string]
 }>()
 
 const expanded = ref(true)

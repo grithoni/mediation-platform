@@ -22,8 +22,8 @@
     <!-- Main Content -->
     <template v-else>
       <!-- Case Info Header -->
-      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
-        <div class="grid grid-cols-5 gap-3 text-base">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-4">
+        <div class="flex-1 grid grid-cols-5 gap-3 text-base">
           <div>
             <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">案号</span>
             <div class="font-mono font-medium text-gray-900 dark:text-white mt-0.5">{{ caseData.id }}</div>
@@ -45,6 +45,14 @@
             <div class="font-medium text-gray-900 dark:text-white mt-0.5">{{ amountDisplay }}</div>
           </div>
         </div>
+        <button
+          class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
+          :disabled="exiting"
+          @click="exitCase"
+        >
+          <UIcon :name="exiting ? 'i-lucide-loader-2' : 'i-lucide-log-out'" class="w-4 h-4" :class="{ 'animate-spin': exiting }" />
+          {{ exiting ? '保存中...' : '退出案件' }}
+        </button>
       </div>
 
       <!-- Status bar: mediator bound + request status -->
@@ -266,6 +274,40 @@ const sessionToken = ref<string | undefined>()
 
 const caseData = ref<CaseResponse['data'] | null>(null)
 const chat = useChat(computed(() => caseNumber))
+const exiting = ref(false)
+
+// ── Exit case: save conversation then navigate back ──────
+async function exitCase() {
+  if (exiting.value) return
+  exiting.value = true
+
+  // Save conversation if there are messages
+  if (chat.messages.value.length > 0) {
+    try {
+      await $fetch(`/api/cases/${caseNumber}/conversations`, {
+        method: 'POST',
+        body: {
+          messages: chat.messages.value.map(m => ({
+            senderType: m.senderType,
+            senderName: m.senderName,
+            content: m.content,
+            createdAt: m.createdAt,
+          })),
+          savedBy: 'party',
+          partyIdentifier: sessionToken.value || accessCode || 'party',
+        },
+      })
+    } catch (err) {
+      console.error('Failed to save conversation on exit:', err)
+    }
+  }
+
+  // Clean up and navigate back
+  stopMediatorPolling()
+  clearIdleTimer()
+  chat.disconnect()
+  navigateTo('/party')
+}
 
 // ── Session state machine ──────────────────────────────────
 // 'ai' | 'waiting_mediator' | 'mediator_active'
