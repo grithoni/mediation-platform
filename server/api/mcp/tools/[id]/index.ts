@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
       try { JSON.parse(body.envJson) }
       catch { throw createError({ statusCode: 400, message: '环境变量 JSON 格式错误' }) }
     }
-    const updates: Record<string, any> = { updatedAt: new Date() }
+    const updates: Record<string, any> = { updatedAt: Date.now() }
     if (body.name !== undefined) updates.name = body.name
     if (body.description !== undefined) updates.description = body.description
     if (body.transport !== undefined) updates.transport = body.transport

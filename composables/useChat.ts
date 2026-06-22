@@ -189,46 +189,74 @@ export function useChat(caseId: Ref<string>) {
     aiStreamContent.value = ''
 
     try {
-      const data = await $fetch<{
-        success: boolean
-        data: {
-          id: string
-          caseId: string
-          senderType: string
-          senderId: string
-          senderName: string
-          content: string
-          createdAt: string
-          dialogEnded?: boolean
-        }
-      }>('/api/chat/ai', {
+      // Use SSE streaming agent endpoint for real-time token display
+      const response = await fetch('/api/chat/agent', {
         method: 'POST',
-        body: {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           caseId: caseId.value,
           message,
           senderIdentifier: senderIdentifier || 'party',
           senderName: senderName || '当事人',
-        },
+        }),
       })
 
-      if (data?.success && data.data) {
-        const fullContent = data.data.content
-        for (let i = 0; i < fullContent.length; i++) {
-          aiStreamContent.value = fullContent.slice(0, i + 1)
-          await new Promise(r => setTimeout(r, 20))
-        }
-
-        messages.value.push({
-          id: data.data.id,
-          caseId: data.data.caseId,
-          senderType: 'ai',
-          senderId: data.data.senderId,
-          senderName: data.data.senderName,
-          content: data.data.content,
-          createdAt: data.data.createdAt,
-        })
-        return { content: data.data.content, dialogEnded: data.data.dialogEnded }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let fullContent = ''
+      let leftover = ''
+      let dialogEnded = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const text = leftover + chunk
+        const lines = text.split('\n')
+        leftover = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+
+          try {
+            const event = JSON.parse(jsonStr)
+            if (event.type === 'text' && event.content) {
+              fullContent += event.content
+              aiStreamContent.value = fullContent
+            }
+            if (event.type === 'done' && event.content) {
+              fullContent = event.content
+              aiStreamContent.value = fullContent
+            }
+            if (event.type === 'done' && event.data?.exitReason === 'DIALOG_ENDED') {
+              dialogEnded = true
+            }
+          } catch {}
+        }
+      }
+
+      if (fullContent) {
+        messages.value.push({
+          id: `ai-${Date.now()}`,
+          caseId: caseId.value,
+          senderType: 'ai',
+          senderId: 'agent',
+          senderName: '调解智能体',
+          content: fullContent,
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      return { content: fullContent, dialogEnded }
     }
     catch (err) {
       aiStreamContent.value = `错误: ${(err as Error).message}`

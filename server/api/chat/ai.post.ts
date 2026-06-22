@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { cases, messages, caseDynamicFiles } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
+import { isEndDialogIntent } from '../../utils/dialog-intent'
+import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
 
 // ============================================================
 // System prompt templates
@@ -80,6 +82,32 @@ export default defineEventHandler(async (event) => {
 
   if (!body?.caseId || !body?.message || !body?.senderIdentifier) {
     throw createError({ statusCode: 400, message: '缺少必要参数' })
+  }
+
+  // ── Dialog management: turn counting + end-dialog detection ──
+  const keywordMatch = isEndDialogIntent(body.message)
+  const dialogTurn = incrementDialogTurn(body.caseId)
+  const turnExceeded = dialogTurn >= MAX_DIALOG_TURNS
+  const isEndDialog = keywordMatch || turnExceeded
+
+  if (isEndDialog && body.caseId !== 'demo') {
+    endDialog(body.caseId)
+    const endContent = keywordMatch
+      ? '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。'
+      : `对话已进行了${dialogTurn}轮。案件信息已收集充分，请点击页面上方的"选择调解员"按钮选择调解员。`
+    return {
+      success: true,
+      data: {
+        id: 'end-' + Date.now(),
+        caseId: body.caseId,
+        senderType: 'ai',
+        senderId: 'mediation-ai',
+        senderName: '调解AI助手',
+        content: endContent,
+        createdAt: Date.now(),
+        dialogEnded: true,
+      },
+    }
   }
 
   const db = getDb()

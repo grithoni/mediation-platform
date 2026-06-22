@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
     mimeType: fileField.type,
     size: fileField.data.length,
     uploadedBy: mediator.id,
-    createdAt: new Date(),
+    createdAt: Date.now(),
   }
 
   db.insert(documents).values(docRecord).run()

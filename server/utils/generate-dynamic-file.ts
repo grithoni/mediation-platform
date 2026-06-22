@@ -125,7 +125,7 @@ export async function generateDynamicFile(
   }
 
   // 写入数据库
-  const now = new Date()
+  const now = Date.now()
   if (existing) {
     db.update(caseDynamicFiles).set({ ...updates, updatedAt: now }).where(eq(caseDynamicFiles.caseId, caseNumber)).run()
   } else {

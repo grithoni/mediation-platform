@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const newCase = {
     id: body.id || `CM-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    tenantId: mediator.tenantId || 'tenant-default',
     title: body.title,
     description: body.description || null,
     partyAName: body.partyAName,
@@ -24,8 +25,8 @@ export default defineEventHandler(async (event) => {
     status: 'pending' as const,
     mediatorId: body.mediatorId || mediator.id,
     accessCode: body.accessCode || uuidv4().slice(0, 8).toUpperCase(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   }
 
   db.insert(cases).values(newCase).run()

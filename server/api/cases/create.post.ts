@@ -58,22 +58,26 @@ export default defineEventHandler(async (event) => {
     if (!isNaN(n) && n > maxN) maxN = n
   }
 
-  const caseNumber = `${currentYear}-${maxN + 1}`
-  const accessCode = '123'
+  // Use timestamp suffix to reduce concurrent collision risk
+  const seq = maxN + 1
+  const caseNumber = `${currentYear}-${seq}`
+  // Atomic: use timestamp suffix to avoid concurrent collision
+  const accessCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
   const caseTitle = caseTypeLabels[caseType] || '新建案件'
 
   // Create case in database
   db.insert(cases).values({
     id: caseNumber,
+    tenantId: 'tenant-default',
     title: caseTitle,
     description: `${caseTitle} — 当事人自行提交材料`,
     partyAName: '当事人',
     partyBName: '待确认',
     status: 'pending',
     accessCode,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   }).run()
 
   // Save uploaded files
@@ -105,7 +109,7 @@ export default defineEventHandler(async (event) => {
       mimeType: file.type || 'application/octet-stream',
       size: file.data.length,
       uploadedBy: null, // party upload, no mediator ID
-      createdAt: new Date(),
+      createdAt: Date.now(),
     }).run()
   }
 

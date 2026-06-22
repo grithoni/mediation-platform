@@ -258,10 +258,13 @@ export default defineEventHandler(async (event) => {
     if (Object.keys(extracted).length > 0) {
       const now = new Date()
       if (df) {
-        // 只更新空字段，不覆盖已有数据
+        // Only update truly empty fields — never overwrite substantive existing data
         const updates: Record<string, string> = {}
         for (const [key, val] of Object.entries(extracted)) {
-          if (val && (!df[key as keyof typeof df] || String(df[key as keyof typeof df]).trim().length < 30)) {
+          const existing = df[key as keyof typeof df]
+          const existingLen = existing ? String(existing).trim().length : 0
+          // Only write if existing field is empty or very short (<50 chars)
+          if (val && val.trim().length > 50 && existingLen < 50) {
             updates[key] = val
           }
         }

@@ -465,7 +465,8 @@ onMounted(async () => {
     }
 
     // Determine initial chatState based on case data
-    if (resp.data.phase === 'active' && resp.data.mediatorId) {
+    const phase = resp.data.phase || 'intake'
+    if ((phase === 'mediating' || phase === 'mediator_selection') && resp.data.mediatorId) {
       // Mediator already bound — check if there are mediator messages
       const hasMediatorMsgs = resp.data.messages?.some(m => m.senderType === 'mediator')
       if (hasMediatorMsgs) {
@@ -475,6 +476,10 @@ onMounted(async () => {
         chatState.value = 'ai'
         showCallMediatorPrompt.value = true
       }
+    } else if (phase === 'mediator_selection' || phase === 'accepted') {
+      // Dialog ended, show mediator selection prompt
+      chatState.value = 'ai'
+      showCallMediatorPrompt.value = true
     }
   } catch {
     fetchError.value = true

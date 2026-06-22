@@ -1,4 +1,4 @@
-import { asc, eq, and, ne } from 'drizzle-orm'
+import { asc, eq, and, ne, or } from 'drizzle-orm'
 import { getDb } from '../../../database'
 import { messages, sessions, cases } from '../../../database/schema'
 
@@ -41,7 +41,13 @@ export default defineEventHandler(async (event) => {
   // Mediator: hide party↔AI private messages
   // Party: see all messages (their own private AI chat is visible to them)
   const whereCondition = mediator
-    ? and(eq(messages.caseId, caseId), ne(messages.visibility, 'private'))
+    ? and(
+        eq(messages.caseId, caseId),
+        or(
+          ne(messages.visibility, 'private'),
+          eq(messages.channelType, 'caucus'),
+        ),
+      )
     : eq(messages.caseId, caseId)
 
   const caseMessages = db

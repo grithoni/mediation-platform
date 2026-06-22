@@ -31,7 +31,6 @@ export function caseRoutes(router: Router) {
   router.get('/api/mp/cases/:id', defineEventHandler(async (event) => {
     const id = (event as any).context.params?.id
     if (!id) throw createError({ statusCode: 400, message: '缺少案件编号' })
-    const db = getDb()
     const caseRow = db.select().from(cases).where(eq(cases.id, id)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
     const df = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, id)).get()
@@ -41,7 +40,6 @@ export function caseRoutes(router: Router) {
   router.get('/api/mp/cases/:id/files', defineEventHandler(async (event) => {
     const id = (event as any).context.params?.id
     if (!id) throw createError({ statusCode: 400, message: '缺少案件编号' })
-    const db = getDb()
     const files = db.select().from(documents).where(eq(documents.caseId, id)).all()
     return {
       success: true,

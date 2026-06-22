@@ -16,7 +16,7 @@ export function incrementDialogTurn(caseId: string): number {
 
   try {
     const db = getDb()
-    const now = new Date()
+    const now = Date.now()
     const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseId)).get()
 
     if (existing) {
@@ -47,7 +47,7 @@ export function endDialog(caseId: string): void {
 
   try {
     const db = getDb()
-    const now = new Date()
+    const now = Date.now()
     const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseId)).get()
 
     if (existing) {

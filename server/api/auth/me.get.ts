@@ -1,15 +1,18 @@
 import { requireAuth } from '../../middleware/auth'
 
 export default defineEventHandler(async (event) => {
-  const mediator = requireAuth(event)
+  const user = requireAuth(event)
 
   return {
     success: true,
-    user: {
-      id: mediator.id,
-      name: mediator.name,
-      username: mediator.username,
-      role: mediator.role,
+    data: {
+      user: {
+        id: user.userId,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        tenantId: user.tenantId,
+      },
     },
   }
 })

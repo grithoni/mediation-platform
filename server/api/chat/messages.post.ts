@@ -14,6 +14,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少 caseId 或 content' })
   }
 
+  // Basic auth: require either JWT user or mediator session
+  const user = event.context.user
+  const mediator = event.context.mediator
+  if (!user && !mediator) {
+    throw createError({ statusCode: 401, message: '请先登录' })
+  }
+
+  // Validate senderType matches authenticated role
+  const effectiveType = senderType || 'party'
+  const authRole = user?.role || mediator?.role || 'party'
+  const roleToSenderMap: Record<string, string> = {
+    admin: 'mediator',
+    case_manager: 'mediator',
+    mediator: 'mediator',
+    claimant: 'party',
+    respondent: 'party',
+  }
+  const expectedType = roleToSenderMap[authRole] || 'party'
+  if (effectiveType !== expectedType && effectiveType !== 'system') {
+    throw createError({ statusCode: 403, message: '发送者身份与认证身份不匹配' })
+  }
+
   const db = getDb()
 
   // Verify case exists
@@ -23,7 +45,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const msgId = uuidv4()
-  const now = new Date()
+  const now = Date.now()
 
   db.insert(messages)
     .values({
@@ -51,7 +73,7 @@ export default defineEventHandler(async (event) => {
       senderId: senderId || null,
       senderName: senderName || '未知',
       content,
-      createdAt: now.toISOString(),
+      createdAt: new Date(now).toISOString(),
     },
   }
 })

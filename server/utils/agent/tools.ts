@@ -390,6 +390,14 @@ export async function* do_code_run(args: ToolArgs, ctx: AgentContext): AsyncGene
 
   try {
     if (language === 'python') {
+      // Block dangerous modules
+      if (/import\s+(os|subprocess|shutil|sys|socket|ctypes)/.test(code) ||
+          /__import__|exec\(|eval\(|open\(/.test(code)) {
+        return {
+          data: '安全限制：不允许导入 os/subprocess/sys/socket/ctypes 等系统模块，或使用 exec/eval/open',
+          nextPrompt: '代码包含不允许的模块调用，请改用 file_read/file_write 工具操作文件。',
+        }
+      }
       // Use spawnSync with direct binary to avoid shell dependency
       const result = spawnSync('python3', ['-c', code], {
         timeout,
@@ -851,9 +859,9 @@ export async function* do_read_dynamic_file(args: ToolArgs, ctx: AgentContext): 
  */
 export async function* do_update_dynamic_file(args: ToolArgs, ctx: AgentContext): AsyncGenerator<string, StepOutcome> {
   try {
-    const db = getDb()
-    const now = new Date()
+    const now = Date.now()
     const nowUnix = Math.floor(Date.now() / 1000)
+    const db = getDb()
     const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, ctx.caseId)).get()
 
     // Build update data, preferring args but falling back to existing values
@@ -867,8 +875,8 @@ export async function* do_update_dynamic_file(args: ToolArgs, ctx: AgentContext)
       batna: string
       agentLog: string
       dialogEnded: boolean
-      updatedAt: Date
-      createdAt: Date
+      updatedAt: number
+      createdAt: number
       id: string
     }> = {
       caseId: ctx.caseId,

@@ -32,7 +32,6 @@ export function messageRoutes(router: Router) {
     const body = await readBody(event)
     const { content, senderName } = body || {}
     if (!content) throw createError({ statusCode: 400, message: '消息内容不能为空' })
-    const db = getDb()
     const user = (event as any).context.mpUser
     const caseRow = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })

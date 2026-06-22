@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
     passwordHash,
     role: body.role || 'mediator',
     avatar: body.avatar || null,
-    createdAt: new Date(),
+    createdAt: Date.now(),
   }
 
   db.insert(mediators).values(newMediator).run()

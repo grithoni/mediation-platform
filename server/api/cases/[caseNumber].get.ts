@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from 'drizzle-orm'
+import { and, desc, eq, ne, or } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { cases, messages, documents, sessions } from '../../database/schema'
@@ -25,7 +25,13 @@ export default defineEventHandler(async (event) => {
     const caseMessages = db
       .select()
       .from(messages)
-      .where(and(eq(messages.caseId, caseNumber), ne(messages.visibility, 'private')))
+      .where(and(
+        eq(messages.caseId, caseNumber),
+        or(
+          ne(messages.visibility, 'private'),
+          eq(messages.channelType, 'caucus'),
+        ),
+      ))
       .orderBy(messages.createdAt)
       .all()
 

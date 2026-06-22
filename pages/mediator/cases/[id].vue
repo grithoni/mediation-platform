@@ -330,15 +330,9 @@ function handleSend() {
   inputMessage.value = ''
 
   chat.sendMessage(text)
-  chat.messages.value.push({
-    id: `mediator-${Date.now()}`,
-    caseId: caseId,
-    senderType: 'mediator',
-    senderId: auth.user.value?.id,
-    senderName: auth.user.value?.name || '调解员',
-    content: text,
-    createdAt: new Date().toISOString(),
-  })
+  // Do NOT push locally — the WebSocket handler broadcasts back to the sender too,
+  // and the message is persisted in _ws.ts. Pushing here causes duplicates.
+  // The onmessage handler in useChat.ts already appends incoming broadcast messages.
 
   nextTick(() => {
     if (messagesContainer.value) {

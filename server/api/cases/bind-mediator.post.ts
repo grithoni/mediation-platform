@@ -22,9 +22,9 @@ export default defineEventHandler(async (event) => {
       mediatorId,
       mediatorBoundAt: nowUnix,
       mediatorRequestedAt: nowUnix,
-      phase: 'active',
+      phase: 'mediating',
       status: 'active',
-      updatedAt: new Date(),
+      updatedAt: Date.now(),
     })
     .where(eq(cases.id, caseId))
     .run()

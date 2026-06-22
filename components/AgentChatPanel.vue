@@ -183,12 +183,9 @@ const containerRef = ref<HTMLElement | null>(null)
 const idleTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const submitting = ref(false) // debounce guard
 
-const KEYWORDS = [
-  '分配调解员', '选择调解员', '我要找调解员', '帮我找调解员',
-  '我要联系调解员', '联系调解员', '结束谈话', '结束对话', '结束',
-  '就这样', '可以了', '不用了', '不需要', '无需', '无补充',
-  '我不想聊了', '找调解员', '推荐调解员', '安排调解员',
-]
+// Use the same keyword list as the server-side dialog-intent.ts
+import { getEndDialogKeywords } from '~/server/utils/dialog-intent'
+const KEYWORDS = getEndDialogKeywords()
 
 async function submitMessage() {
   const text = inputText.value.trim()

@@ -1,7 +1,7 @@
 // ============================================================
 // GET /api/cases/:caseNumber/conversations — 列出案件下已保存的对话
 // ============================================================
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { getDb } from '../../../database'
 import { savedConversations } from '../../../database/schema'
 import { requireAuth } from '../../../middleware/auth'
@@ -21,10 +21,9 @@ export default defineEventHandler(async (event) => {
       createdAt: savedConversations.createdAt,
     })
     .from(savedConversations)
-    .where(eq(savedConversations.caseId, caseNumber))
+    .where(and(eq(savedConversations.caseId, caseNumber), eq(savedConversations.mediatorId, mediator.id)))
     .orderBy(desc(savedConversations.createdAt))
     .all()
-    .filter((r: any) => r.mediatorId === mediator.id)
 
   return { success: true, data: rows.map((r: any) => ({ ...r, createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt })) }
 })
