@@ -1,6 +1,6 @@
 # 全时在线的纠纷解决专家 · Always Online Dispute Resolution Expert
 
-> 一个基于 AI 的商事调解平台，包含当事人端（案件申请、AI 咨询）和调解员工作台（案件管理、知识库检索、AI 调解技能、技能包/工具管理）。
+> 一个基于 AI 的商事调解平台，服务于向广州仲裁委员会提起仲裁申请的商事纠纷案件。包含当事人端、调解员工作台、管理后台三端界面，以及小程序 API。
 
 ## 目录
 
@@ -9,10 +9,11 @@
 - [前置条件](#前置条件)
 - [快速开始](#快速开始)
 - [环境变量配置](#环境变量配置)
-- [初始化数据库](#初始化数据库)
 - [启动服务](#启动服务)
-- [测试流程](#测试流程)
-- [调解员工作台功能](#调解员工作台功能)
+- [三端功能概览](#三端功能概览)
+- [调解员工作台](#调解员工作台)
+- [管理后台](#管理后台)
+- [API 概览](#api-概览)
 - [项目结构](#项目结构)
 - [FAQ](#faq)
 
@@ -20,9 +21,7 @@
 
 ## 项目简介
 
-本系统服务于向**广州仲裁委员会**提起仲裁申请的商事纠纷案件，定位为**仲裁立案前的调解阶段**。
-
-依据《广州仲裁委员会仲裁规则》第19条第4款，本会在收到仲裁申请后，可以根据纠纷的实际情况引导当事人通过其他争议解决方式解决争议。本平台在此阶段引入调解，引导当事人选择最优解决路径：
+本系统定位为**仲裁立案前的调解阶段**。依据《广州仲裁委员会仲裁规则》第19条第4款，本会在收到仲裁申请后，可以根据纠纷的实际情况引导当事人通过其他争议解决方式解决争议。
 
 | 解决路径 | 说明 | 费用优势 |
 |---------|------|---------|
@@ -30,17 +29,16 @@
 | 调解 + 仲裁 | 调解达成协议 → 仲裁庭出具调解书/裁决书 | 仲裁费用按 **50%** 收取 |
 | 继续仲裁 | 调解未果 → 正式立案进入仲裁程序 | 正常收费 |
 
-系统提供统一 Web 界面 + 小程序 API：
+### 核心特性
 
-- **当事人端**（`/party`） — 进入案件、创建案件、AI 分阶段咨询、调解员匹配介入、与调解员实时对话
-- **调解员工作站**（`/mediator`） — 案件管理、AI 调解技能（实时建议话术、智能/人工应答）、知识库 RAG 检索、技能包/工具管理
-- **小程序 API**（端口 6081） — 微信登录、JWT 认证、案件/消息/AI 对话接口
-
-AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模式（倾听→共情→重塑→协商），调解员端采用专业辅助模式。
-
-**隐私保护**：当事人与 AI 的私聊消息对调解员不可见，仅共享消息（当事人主动发送或调解员发送的）对调解员可见。
-
-**注意**：系统实际运行的 AI 模型由 `.env` 中的 `NUXT_OPENAI_BASE_URL` 指定，支持任何兼容 OpenAI SDK 的 API 端点（如 DeepSeek、通义千问、Xiaomi MiMo 等）。
+- **AI 智能体对话** — 基于 Agent Loop 的多轮对话，支持工具调用（RAG 搜索、动态文件生成、调解员匹配等）
+- **13 阶段案件状态机** — 从 INTAKE 到 CLOSED_SUCCESS/CLOSED_FAILED 完整生命周期管理
+- **知识库 RAG** — ChromaDB + fastembed 向量检索，支持法律文档上传与语义搜索
+- **调解员智能匹配** — 根据案件特征自动匹配合适的调解员
+- **协议签署** — 支持调解协议生成、审批、电子签名
+- **实时通信** — WebSocket 实时聊天 + HTTP 轮询降级
+- **多租户架构** — 支持 SaaS 多租户隔离
+- **隐私保护** — 当事人与 AI 的私聊消息对调解员不可见
 
 ---
 
@@ -49,20 +47,21 @@ AI 对话使用分阶段提示词：当事人端采用 4 阶段心理咨询模�
 | 层级 | 技术 |
 |------|------|
 | 框架 | Nuxt 3 (Vue 3) + TypeScript |
-| UI | Nuxt UI v3 + Tailwind CSS v4 |
-| 数据库 | SQLite + Drizzle ORM |
-| AI SDK | Vercel AI SDK (`@ai-sdk/openai`) |
+| UI | @nuxt/ui v3 + Tailwind CSS v4 |
+| 数据库 | SQLite (better-sqlite3) + Drizzle ORM |
+| AI | Vercel AI SDK + 任何 OpenAI 兼容端点 |
 | 知识库 | ChromaDB + fastembed (Python, 端口 8700) |
+| 实时通信 | Nitro WebSocket + HTTP 轮询降级 |
 | 小程序 API | H3 standalone + JWT (端口 6081) |
-| 实时通信 | HTTP 轮询（消息同步） |
+| 文档生成 | docx 库 |
 
 ---
 
 ## 前置条件
 
 - **Node.js** >= 18（推荐 20+）
-- **npm**（系统 `pnpm` 不可用，使用 `npm`）
-- **Python** >= 3.10（知识库服务需要）
+- **npm**
+- **Python** >= 3.10（知识库服务，可选）
 - **Git**
 
 ---
@@ -79,26 +78,19 @@ cd mediation-platform
 ### 2. 安装依赖
 
 ```bash
-# Node.js 依赖
 npm install
 
-# Python 知识库依赖（可选，不影响核心功能）
+# 知识库依赖（可选，不影响核心功能）
 pip install -r requirements.txt
-
-# 国内下载慢？用阿里云镜像加速：
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 ```
-
-> **注意**：知识库（KB）是可选组件。即使不安装 Python 依赖，平台的核心调解功能（案件管理、AI对话、调解技能等）仍然完全可用。知识库仅提供文档向量搜索功能。
 
 ### 3. 配置环境变量
 
 ```bash
-# 复制环境变量模板
 cp .env.example .env
 ```
 
-编辑 `.env`，填入你的 AI 模型配置：
+编辑 `.env`，填入 AI 模型配置：
 
 ```
 NUXT_OPENAI_API_KEY=your-api-key-here
@@ -106,184 +98,164 @@ NUXT_OPENAI_BASE_URL=https://api.openai.com/v1
 NUXT_OPENAI_MODEL=gpt-4o-mini
 ```
 
-> **默认配置**（本地开发）：系统使用 Xiaomi MiMo 模型，API 地址指向 `https://token-plan-cn.xiaomimimo.com/v1`。
-> 如果你想使用 OpenAI、DeepSeek、通义千问等，只需修改 `.env` 中的这三项即可。
+> 支持任何兼容 OpenAI SDK 的 API 端点（OpenAI、DeepSeek、通义千问、Xiaomi MiMo 等）。
 
 ### 4. 初始化数据库
 
 ```bash
-# 推送 schema 到数据库
-npm run db:push
-
-# 填充种子数据（调解员 + 案件）
-npm run db:seed
+npm run db:push    # 推送 schema
+npm run db:seed    # 填充种子数据
 ```
 
-**种子数据（测试用）**：
-
-| 用户名 | 密码 | 角色 |
-|--------|------|------|
-| `admin` | `123` | 管理员 |
-| `linwanqing` | `123` | 调解员 |
-| `zhaomingyuan` | `123` | 调解员 |
-| `chenjianguo` | `123` | 调解员 |
-
-**测试案件**：编号为 `2026-1` 至 `2026-8`，访问码均为 `123`。
-
----
-
-## 启动服务
-
-系统需要同时运行三个服务：
-
-### 终端 1：知识库服务（端口 8700）
+### 5. 启动服务
 
 ```bash
-npm run kb
-```
-
-首次启动约需 15 秒（加载 embedding 模型），看到输出 `Starting KB server on port 8700...` 即就绪。
-
-### 终端 2：Web 服务（端口 6080）
-
-```bash
-npm run dev
-```
-
-### 终端 3：小程序 API（端口 6081，可选）
-
-```bash
-npm run dev:mp
+npm run dev        # Web 服务 → http://localhost:6080
 ```
 
 ---
 
-## 测试流程
-
-### ▶️ 当事人端 [http://localhost:6080/party](http://localhost:6080/party)
-
-**1. AI 咨询 → 创建案件**
-
-1. 打开浏览器访问 `http://localhost:6080/party`
-2. 在首页底部输入框与 AI 对话（机器人会引导您陈述纠纷）
-3. AI 会先倾听您的诉求（前 3-4 轮不提供解决方案）
-4. 当您确认需要正式申请调解时，点击 **申请调解** 按钮
-5. 上传相关证据材料（支持任意文件格式）
-6. 点击 **创建案件**，系统返回案件编号
-
-**2. 查看案件 → 选择调解员**
-
-1. 在首页点击 **进入我的案件**
-2. 输入案件编号（如 `2026-1`）和访问码 `123`
-3. 进入案件详情页
-4. 点击 **👤 与调解员对话** — 直接展开调解员列表
-5. 浏览调解员信息（专长、学历、单位），选择一个点击 **选择该调解员**
-6. 状态变为 `active`，您可与调解员实时交流
-
-**3. AI 咨询模式**
-
-在案件页面，点击 **🤖 与智能体对话** 可继续与 AI 对话。AI 会基于案件动态文件（争议焦点、时间线、立场等）提供专业的调解建议。
-
-**4. 结束对话**
-
-- 在对话框中输入 "我要找调解员"、"结束"、"不用了" 等关键词，系统自动转入调解员选择
-- 连续对话 5 轮以上也会自动提示选择调解员
-
-### ▶️ 调解员工作站 [http://localhost:6080/mediator](http://localhost:6080/mediator)
-
-**1. 登录**
-
-使用上述任意调解员账号登录（如 `chenjianguo` / `123`）。
-
-**2. 浏览案件**
-
-左侧 **📋 案件列表** 中会显示当前调解员负责的案件。点击案件进入详情。
-
-**3. 与当事人对话**
-
-案件详情页上半部分为聊天区域，可查看当事人与 AI 的对话历史（私聊消息已自动过滤）。在输入框回复消息即可与当事人沟通。
-
-**4. AI 调解技能**
-
-案件详情页底部的技能按钮中：
-
-| 技能 | 说明 |
-|------|------|
-| 💬 沟通话术推荐 | 5 步循序渐进的沟通向导（破冰→倾听→共情→聚焦利益→推进共识） |
-| 💡 利益重构方案推荐 | 生成 10 节结构化调解方案（关键信息/方案 A-C/比较表/BATNA-WATNA/推荐/条款清单/时间表/风险提示） |
-
-**5. 保存对话**
-
-点击案件信息栏的 **💾 保存对话** 按钮，可将当前对话保存为记录。左侧 **💬 近期对话** 可查看已保存的对话。
-
-**6. 查看原始文件**
-
-点击案件资料面板的 **📎 原始文件** 按钮，可查看该案件上传的所有原始文件（支持在线预览 .txt/.md/.图片/.PDF）。
-
-**7. 知识库检索**
-
-左侧点击 **📚 知识库** 展开三个子功能：
-
-| 功能 | 说明 |
-|------|------|
-| 📤 上传 | 上传 .md 格式法律文档到知识库，自动索引 |
-| 👁️ 查看 | 列出所有已索引文档（路径、分块数） |
-| 🔍 搜索 | 输入关键词检索法律知识，结果带相关度评分 |
-
-### ▶️ 完整调解流程
-
-```
-当事人咨询AI → 申请调解 → 创建案件 → 选择调解员 → 双方对话 → 达成调解协议
-                                                             ↓
-                                                   调解员使用技能 + 知识库辅助
-```
-
----
-
-## 调解员工作台功能
-
-调解员工作台采用左侧边栏 + 右侧内容面板的布局，支持暗色/亮色主题切换。
-
-### 左侧边栏
-
-| 区域 | 功能 |
-|------|------|
-| 📋 案件列表 | 搜索、浏览、选择案件 |
-| 📚 知识库 | 上传/查看/检索法律文档 |
-| 💬 近期对话 | 查看已保存的对话记录 |
-| ⚙️ 设置 | 技能包管理、MCP 工具配置、用户信息 |
-
-### 设置区域
-
-设置区域的布局（从上到下）：
-
-1. **⚡ 技能** — 上传/管理技能包（.zip 格式，含 `manifest.json`）
-2. **🔧 工具 (MCP)** — 配置 MCP 工具（stdio/http 传输）
-3. **用户信息** — 当前用户名 + 角色
-
-### MCP 工具配置
-
-支持两种传输方式：
-
-| 传输方式 | 适用场景 | 配置项 |
-|----------|----------|--------|
-| `stdio` | 本地命令行工具 | 命令（如 `npx -y @modelcontextprotocol/server-filesystem /tmp`） |
-| `http` | 远程 HTTP 服务 | URL（如 `https://example.com/mcp`） |
-
-环境变量以 JSON 格式配置（如 `{"API_KEY": "xxx"}`）。
-
----
-
-## 环境变量说明
+## 环境变量配置
 
 | 变量 | 必填 | 说明 | 示例 |
 |------|------|------|------|
 | `NUXT_OPENAI_API_KEY` | 是 | AI 模型 API Key | `sk-xxx` |
 | `NUXT_OPENAI_BASE_URL` | 是 | API 兼容端点 | `https://api.openai.com/v1` |
 | `NUXT_OPENAI_MODEL` | 是 | 模型名称 | `gpt-4o-mini` |
-| `WX_APPID` | 否 | 微信小程序 AppID（小程序登录需要） | `wx123456` |
-| `WX_APP_SECRET` | 否 | 微信小程序 AppSecret（小程序登录需要） | `secret` |
+| `WX_APPID` | 否 | 微信小程序 AppID | `wx123456` |
+| `WX_APP_SECRET` | 否 | 微信小程序 AppSecret | `secret` |
 | `MP_JWT_SECRET` | 否 | 小程序 API JWT 密钥 | `your-secret` |
+
+> `.env` 文件已加入 `.gitignore`，不会被提交到版本库。
+
+---
+
+## 启动服务
+
+```bash
+# 终端 1：Web 服务（端口 6080）
+npm run dev
+
+# 终端 2：知识库服务（端口 8700，可选）
+npm run kb
+
+# 终端 3：小程序 API（端口 6081，可选）
+npm run dev:mp
+```
+
+---
+
+## 三端功能概览
+
+### 当事人端 (`/party`)
+
+| 功能 | 说明 |
+|------|------|
+| 进入我的案件 | 输入案件编号 + 访问码进入案件详情 |
+| 创建新的案件 | 填写纠纷信息、上传证据材料 |
+| AI 智能体对话 | 多轮对话 + 工具调用（RAG 搜索、法律分析） |
+| 调解员匹配 | AI 根据案件特征推荐调解员，当事人自主选择 |
+| 实时聊天 | 与调解员 WebSocket 实时通信 |
+| 流程指引 | 调解流程说明 |
+
+### 调解员工作台 (`/mediator`)
+
+| 功能 | 说明 |
+|------|------|
+| 案件管理 | 查看分配的案件、搜索、筛选 |
+| 与当事人对话 | 实时聊天，AI 辅助建议 |
+| AI 调解技能 | 沟通话术推荐、利益重构方案生成 |
+| 知识库 | 上传/查看/检索法律文档（RAG 向量搜索） |
+| 案件笔记 | 私有/共享笔记（观察、策略、风险） |
+| 调解协议 | 创建/审批/签署调解协议 |
+| 技能包管理 | 上传/启用/禁用自定义技能包 (.zip) |
+| MCP 工具 | 配置外部工具服务（stdio/http） |
+| 近期对话 | 查看已保存的对话记录 |
+
+### 管理后台 (`/admin`)
+
+| 功能 | 说明 |
+|------|------|
+| 数据概览 | 案件总量、调解成功率、活跃调解员等统计 |
+| 案件审核 | 审批待审案件、分配调解员 |
+| 统计报表 | 纠纷类型分布、调解员绩效、金额分布 |
+| 租户管理 | 多租户配置 |
+| Webhook | 事件推送配置 |
+
+---
+
+## 调解员工作台
+
+### 登录
+
+使用种子数据中的调解员账号登录：
+
+| 用户名 | 密码 | 姓名 |
+|--------|------|------|
+| `linwanqing` | `123` | 林婉清 |
+| `zhaomingyuan` | `123` | 赵明远 |
+| `chenjianguo` | `123` | 陈建国 |
+
+### AI 调解技能
+
+| 技能 | 说明 |
+|------|------|
+| 沟通话术推荐 | 5 步循序渐进的沟通向导（破冰→倾听→共情→聚焦利益→推进共识） |
+| 利益重构方案推荐 | 生成 10 节结构化调解方案（关键信息/方案 A-C/比较表/BATNA-WATNA/推荐/条款清单/时间表/风险提示） |
+| AI 回复建议 | 基于对话上下文生成调解员回复建议 |
+
+### MCP 工具配置
+
+| 传输方式 | 适用场景 | 配置项 |
+|----------|----------|--------|
+| `stdio` | 本地命令行工具 | 命令（如 `npx -y @modelcontextprotocol/server-filesystem /tmp`） |
+| `http` | 远程 HTTP 服务 | URL（如 `https://example.com/mcp`） |
+
+---
+
+## 管理后台
+
+访问 `/admin` 进入管理后台。种子数据中的管理员账号：
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| `admin` | `123` | 管理员 |
+
+管理后台支持案件审核、统计报表、调解员绩效分析等功能。
+
+---
+
+## API 概览
+
+系统提供 68+ 个 REST API 端点，主要包括：
+
+| 模块 | 端点数 | 说明 |
+|------|--------|------|
+| 认证 | 4 | 登录/注册/登出/当前用户 |
+| 案件 | 18 | CRUD、状态流转、文件、时间线、笔记、协议 |
+| 聊天 | 5 | 消息发送/接收、AI 对话、Agent SSE 流式 |
+| 调解员 | 3 | 列表、创建、智能匹配 |
+| AI | 4 | 分析、文档处理、建议、一次性查询 |
+| 知识库 | 4 | 上传、列表、搜索、文件获取 |
+| 技能 | 3 | 上传、卸载、启用/禁用 |
+| MCP 工具 | 3 | CRUD、启用/禁用 |
+| 统计 | 3 | 概览、案件统计、调解员统计 |
+| 管理 | 4 | 租户、Webhook |
+| 协议 | 2 | 签署、审批 |
+| 外部 API | 2 | v1 案件创建/查询 |
+| WebSocket | 1 | 实时聊天 (`/_ws`) |
+
+---
+
+## 种子数据
+
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| 租户 | 1 | 广州仲裁委员会 |
+| 用户 | 12 | 1 管理员 + 1 案件管理员 + 3 调解员 + 3 申请人 + 3 被申请人 |
+| 案件 | 13 | 编号 2026-1 至 2026-13，访问码均为 `123` |
+
+所有测试账号密码均为 `123`。
 
 ---
 
@@ -291,111 +263,101 @@ npm run dev:mp
 
 ```
 mediation-platform/
-├── app.vue                    # 根组件（动态布局 + 暗色模式同步）
-├── nuxt.config.ts             # 双端口配置
-├── assets/css/main.css        # Tailwind 4 入口 + 暗色模式 @custom-variant
+├── app.vue                         # 根组件
+├── nuxt.config.ts                  # Nuxt 配置
+├── assets/css/main.css             # Tailwind 4 入口
 ├── layouts/
-│   ├── party.vue              # 当事人端布局（左侧案件表单 + 右侧信息/AI 对话）
-│   └── mediator.vue           # 调解员布局（顶部导航栏 + 暗色模式切换）
+│   ├── party.vue                   # 当事人端布局（左侧导航 + 右侧内容）
+│   └── mediator.vue                # 调解员布局（顶部导航栏）
 ├── pages/
-│   ├── index.vue              # 根路由（重定向到 /party）
+│   ├── index.vue                   # 重定向到 /party
 │   ├── party/
-│   │   ├── index.vue          # 当事人首页（AI 咨询 + 导航菜单）
-│   │   └── case/[caseNumber].vue  # 当事人案件详情
-│   └── mediator/
-│       ├── index.vue          # 调解员工作站（侧边栏 + 多面板状态机）
-│       ├── login.vue          # 调解员登录
-│       └── cases/[id].vue     # 调解员案件详情
+│   │   ├── index.vue               # 当事人首页（案件登录 + 创建 + 流程指引）
+│   │   └── case/[caseNumber].vue   # 当事人案件详情（统一聊天 UI）
+│   ├── mediator/
+│   │   ├── index.vue               # 调解员工作台（侧边栏 + 多面板）
+│   │   ├── login.vue               # 调解员登录
+│   │   └── cases/[id].vue          # 调解员案件详情（三栏布局）
+│   └── admin/
+│       ├── index.vue               # 管理后台首页（数据概览 + 功能入口）
+│       ├── stats.vue               # 统计报表
+│       └── review.vue              # 案件审核
+├── components/
+│   ├── ChatMessage.vue             # 聊天气泡
+│   ├── ChatInput.vue               # 聊天输入框
+│   ├── AIChatPanel.vue             # AI 聊天面板
+│   ├── AgentChatPanel.vue          # Agent SSE 流式面板
+│   ├── CaseStatusBadge.vue         # 案件状态徽章
+│   ├── CaseCard.vue                # 案件摘要卡片
+│   └── admin/
+│       ├── KnowledgePanel.vue      # 知识库面板
+│       ├── CaseDetailView.vue      # 案件详情视图
+│       ├── CaseSidebar.vue         # 案件侧边栏
+│       ├── SettingsPanel.vue       # 设置面板（技能 + MCP）
+│       └── KbTreeNode.vue          # 知识库树节点
 ├── composables/
-│   ├── useAuth.ts             # 认证（credentials:include）
-│   └── useChat.ts             # HTTP 轮询消息
+│   ├── useAuth.ts                  # JWT 认证
+│   ├── useChat.ts                  # 聊天消息 + WebSocket
+│   ├── useAgentChat.ts             # Agent SSE 流式对话
+│   └── useActiveMenu.ts            # 菜单状态
 ├── server/
-│   ├── api/
-│   │   ├── chat/
-│   │   │   ├── ai.post.ts           # AI 对话（分阶段提示词 + 私聊隔离）
-│   │   │   ├── agent.post.ts        # Agent SSE 通信
-│   │   │   ├── messages.post.ts     # 发送消息
-│   │   │   └── messages/[caseId].get.ts  # 消息列表（调解员过滤私聊）
-│   │   ├── cases/
-│   │   │   ├── index.get.ts         # 案件列表
-│   │   │   ├── create.post.ts       # 创建案件（multipart）
-│   │   │   ├── bind-mediator.post.ts  # 绑定调解员
-│   │   │   ├── end-dialog.post.ts   # 结束对话
-│   │   │   └── [caseNumber]/
-│   │   │       ├── index.get.ts     # 案件详情（调解员过滤私聊）
-│   │   │       ├── files.get.ts     # 列出原始文件
-│   │   │       ├── file.get.ts      # 提供文件下载/预览
-│   │   │       ├── recommend-solution.post.ts  # 10 节方案生成
-│   │   │       ├── conversations.post.ts  # 保存对话
-│   │   │       └── conversations.get.ts   # 列出已保存对话
-│   │   ├── conversations.get.ts     # 当前调解员的已保存对话
-│   │   ├── conversations/[id].get.ts  # 对话详情
-│   │   ├── mediators/
-│   │   │   └── match.get.ts         # 调解员匹配
-│   │   ├── skills/
-│   │   │   ├── index.ts             # 技能包列表 + 上传（.zip）
-│   │   │   ├── [id]/index.delete.ts # 卸载技能包
-│   │   │   └── [id]/toggle.post.ts  # 启用/禁用
-│   │   ├── mcp/tools/
-│   │   │   ├── index.ts             # MCP 工具列表 + 创建
-│   │   │   ├── [id]/index.ts        # 更新/删除
-│   │   │   └── [id]/toggle.post.ts  # 启用/禁用
-│   │   └── auth/
-│   │       ├── login.post.ts        # 登录
-│   │       ├── logout.post.ts       # 登出
-│   │       └── me.get.ts            # 当前用户
+│   ├── api/                        # 68+ REST API 端点
+│   │   ├── auth/                   # 认证（登录/注册/登出）
+│   │   ├── cases/                  # 案件管理（CRUD、状态、文件、协议等）
+│   │   ├── chat/                   # 聊天（消息、AI、Agent SSE）
+│   │   ├── mediators/              # 调解员（列表、匹配）
+│   │   ├── ai/                     # AI 功能（分析、建议）
+│   │   ├── kb/                     # 知识库（上传、搜索）
+│   │   ├── skills/                 # 技能包管理
+│   │   ├── mcp/tools/              # MCP 工具管理
+│   │   ├── documents/              # 文档管理
+│   │   ├── conversations/          # 对话记录
+│   │   ├── agreements/             # 协议管理
+│   │   ├── admin/                  # 管理后台 API
+│   │   ├── stats/                  # 统计 API
+│   │   └── v1/                     # 外部 API v1
 │   ├── database/
-│   │   ├── schema.ts          # 8 张表（cases/mediators/sessions/messages/documents/case_dynamic_files/saved_conversations/mcp_tools）
-│   │   ├── seed.ts            # 种子数据（4 调解员 + 9 案件）
-│   │   └── index.ts           # Drizzle 实例
-│   ├── middleware/auth.ts     # 认证中间件
-│   ├── utils/agent/           # Agent 循环、工具 (12个)、记忆 L1/L2
+│   │   ├── schema.ts               # 17 张表定义
+│   │   ├── migrate.ts              # 数据库迁移脚本
+│   │   ├── seed.ts                 # 种子数据（租户 + 用户 + 调解员 + 案件）
+│   │   └── index.ts                # Drizzle 实例
+│   ├── middleware/
+│   │   ├── auth.ts                 # JWT + 角色鉴权中间件
+│   │   └── tenant.ts               # 多租户解析中间件
+│   ├── utils/
+│   │   ├── agent/                  # Agent 循环、工具、记忆
+│   │   ├── dialog-manager.ts       # 对话阶段管理
+│   │   ├── dialog-intent.ts        # 意图识别（调解员转接）
+│   │   ├── generate-dynamic-file.ts # AI 案件分析生成
+│   │   ├── kb-search.ts            # 知识库搜索
+│   │   ├── auth.ts                 # 认证工具
+│   │   ├── case-status.ts          # 13 阶段状态机
+│   │   ├── e-signature.ts          # 电子签名
+│   │   └── webhook.ts              # Webhook 推送
 │   ├── kb/
-│   │   ├── server.py          # FastAPI 知识库服务（端口 8700）
-│   │   └── engine.py          # ChromaDB + fastembed RAG 引擎
-│   └── mp/                    # 小程序 API 服务（端口 6081）
-│       ├── index.ts           # H3 standalone 入口
-│       ├── middleware/auth.ts # JWT 认证
-│       └── routes/
-│           ├── auth.ts        # 微信登录 + demo 登录
-│           ├── cases.ts       # 案件列表/详情/文件
-│           ├── messages.ts    # 消息列表/发送
-│           └── chat.ts        # AI 对话（RAG 增强）
-├── uploads/
-│   ├── cases/                 # 案件上传文件（不提交 Git）
-│   └── skills/                # 技能包存储（不提交 Git）
-├── .data/                     # SQLite + KB 数据（不提交 Git）
-│   ├── mediation.db
-│   └── kb/
-└── .env.example               # 环境变量模板
+│   │   ├── server.py               # FastAPI 知识库服务（端口 8700）
+│   │   └── engine.py               # ChromaDB + fastembed RAG 引擎
+│   └── mp/                         # 小程序 API（端口 6081）
+│       ├── index.ts                # H3 standalone 入口
+│       ├── middleware/auth.ts      # JWT 认证
+│       └── routes/                 # 路由（auth/cases/messages/chat）
+├── uploads/                        # 上传文件（不提交 Git）
+├── .data/                          # SQLite 数据库（不提交 Git）
+├── .env.example                    # 环境变量模板
+└── package.json
 ```
 
 ---
 
 ## FAQ
 
-**Q: 如何切换到别的 AI 模型？**
+**Q: 如何切换 AI 模型？**
 
-修改 `.env` 的三项：`NUXT_OPENAI_API_KEY`、`NUXT_OPENAI_BASE_URL`、`NUXT_OPENAI_MODEL`。兼容任何 OpenAI SDK 兼容的端点。
+修改 `.env` 中的 `NUXT_OPENAI_API_KEY`、`NUXT_OPENAI_BASE_URL`、`NUXT_OPENAI_MODEL`。兼容任何 OpenAI SDK 兼容的端点。
 
 **Q: 知识库搜不到结果？**
 
-确保先执行 `npm run kb` 启动知识库服务（端口 8700），等待约 15 秒加载完成。然后通过 `curl http://localhost:8700/health` 检查。
-
-**Q: 知识库 /stats 或 /search 返回 503 错误？**
-
-说明 Python 依赖未安装或安装不完整。运行：
-
-```bash
-pip install -r requirements.txt
-
-# 国内下载慢用镜像：
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-```
-
-如果 `chromadb` 的 wheel 下载卡住，可以尝试：1) 使用镜像源；2) 先单独安装 `pip install chromadb`；3) 检查网络代理设置。
-
-> 知识库是可选组件，缺少依赖不会影响平台核心功能。
+确保先执行 `npm run kb` 启动知识库服务（端口 8700），等待约 15 秒加载完成。通过 `curl http://localhost:8700/health` 检查。
 
 **Q: 数据库出错怎么办？**
 
@@ -405,22 +367,22 @@ npm run db:push
 npm run db:seed
 ```
 
-**Q: 修改了 layout/config 页面不更新？**
+**Q: 调解员怎么看不到当事人的 AI 私聊？**
 
-清除缓存后重启：
+这是设计行为。当事人与 AI 的私聊消息标记为 `visibility: 'private'`，调解员视图会自动过滤。
 
-```bash
-node -e "require('fs').rmSync('.nuxt',{recursive:true,force:true})"
-```
+**Q: 当事人与 AI 对话多少轮后会提示选择调解员？**
 
-**Q: 当事人端怎么测试 AI 对话？**
+默认 5 轮。也可以在对话中输入"我要找调解员"、"结束"等关键词主动触发。
 
-无需登录，访问 `http://localhost:6080/party`，首页底部就是 AI 对话入口。系统已预置 8 个测试案件，输入案件编号和访问码 `123` 即可查看。
+**Q: 如何上传技能包？**
+
+在调解员工作台的 ⚙️ 设置 → ⚡ 技能，上传 `.zip` 文件。zip 内需包含 `manifest.json`（含 `name`、`description`、`version` 字段）。
 
 **Q: 小程序 API 怎么测试？**
 
 ```bash
-npm run dev:mp  # 启动小程序 API（端口 6081）
+npm run dev:mp
 
 # 登录获取 token
 curl -X POST http://localhost:6081/api/mp/auth/login \
@@ -430,15 +392,3 @@ curl -X POST http://localhost:6081/api/mp/auth/login \
 # 用 token 访问接口
 curl http://localhost:6081/api/mp/cases -H "Authorization: Bearer <token>"
 ```
-
-**Q: 调解员怎么看不到当事人的 AI 私聊？**
-
-这是设计行为。当事人与 AI 的私聊消息标记为 `visibility: 'private'`，调解员视图会自动过滤这些消息，保护当事人的隐私咨询过程。只有当事人主动发送的消息和调解员自己的消息对调解员可见。
-
-**Q: 如何上传技能包？**
-
-在调解员工作台的 ⚙️ 设置 → ⚡ 技能，点击上传区域选择 `.zip` 文件。zip 内需包含 `manifest.json`（含 `name`、`description`、`version` 字段）。
-
-**Q: MCP 工具有什么用？**
-
-MCP（Model Context Protocol）工具允许调解员配置外部工具服务，扩展 AI 的能力。支持 `stdio`（本地命令）和 `http`（远程服务）两种传输方式。
