@@ -15,12 +15,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '没有可保存的消息' })
   }
 
-  // Determine who is saving: mediator (auth) or party (session token)
-  const mediator = event.context.mediator as { id: string; name: string } | null
+  // Determine who is saving: user (auth) or party (session token)
+  const user = event.context.user as { userId: string; name: string } | null
   const savedBy = body?.savedBy || 'mediator'
   const partyIdentifier = body?.partyIdentifier || null
 
-  const mediatorId = mediator?.id || null
+  const mediatorId = user?.userId || null
   const titlePrefix = savedBy === 'party' ? '[当事人退出]' : ''
 
   const now = new Date()

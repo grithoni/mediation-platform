@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
       createdAt: savedConversations.createdAt,
     })
     .from(savedConversations)
-    .where(and(eq(savedConversations.caseId, caseNumber), eq(savedConversations.mediatorId, mediator.id)))
+    .where(and(eq(savedConversations.caseId, caseNumber), eq(savedConversations.mediatorId, mediator.userId)))
     .orderBy(desc(savedConversations.createdAt))
     .all()
 

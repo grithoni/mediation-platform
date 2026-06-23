@@ -245,7 +245,22 @@ function parseTextProtocolTools(text: string): {
     } catch {}
   }
 
-  // Pattern 3: Native OpenAI tool_use in text (fallback)
+  // Pattern 3: <tool_invocation name="..." arguments={...} /> (mimo model format)
+  const toolInvocationRegex = /<tool_invocation\s+name="([^"]+)"\s+arguments=\{([^}]*)\}\s*\/>/g
+  while ((match = toolInvocationRegex.exec(content)) !== null) {
+    try {
+      const toolName = match[1] || ''
+      const argsStr = match[2] || '{}'
+      toolCalls.push({
+        toolName,
+        args: safeJsonParse(argsStr),
+        id: `text_${toolCalls.length}`,
+      })
+      content = content.replace(match[0], '')
+    } catch {}
+  }
+
+  // Pattern 4: Native OpenAI tool_use in text (fallback)
   // ```json \n {...} \n ```
   const jsonBlockRegex = /```json\s*\n([\s\S]*?)\n```/g
   while ((match = jsonBlockRegex.exec(content)) !== null) {
@@ -426,7 +441,7 @@ ${message}
           userInput,
           caseId,
           workDir,
-          maxTurns: agentMode === 'autonomous' ? 20 : 5,
+          maxTurns: agentMode === 'autonomous' ? 20 : 15,
           sessionId: `ag-${caseId}-${Date.now()}`,
           llmCall,
         })
@@ -435,23 +450,37 @@ ${message}
           controller.enqueue(encoder.encode(sendSSE(progress)))
 
           // Save AI text messages
-          if (progress.type === 'done' && progress.content) {
-            try {
-              const db = getDb()
-              const aiMsgId = uuidv4()
-              db.insert(messages)
-                .values({
-                  id: aiMsgId,
-                  caseId,
-                  senderType: 'ai',
-                  senderId: 'agent',
-                  senderName: '调解智能体',
-                  content: progress.content,
-                  visibility: 'private',
-                })
-                .run()
-            } catch (err) {
-              console.error('[Agent] Failed to save AI message:', err)
+          if (progress.type === 'done') {
+            let aiContent = progress.content
+            // Generate fallback if agent returned empty content
+            if (!aiContent && (progress.data as any)?.exitReason) {
+              const reason = (progress.data as any).exitReason
+              if (reason === 'MAX_TURNS_EXCEEDED') {
+                aiContent = 'AI正在分析您的案件材料，请稍候继续对话。'
+              } else if (reason === 'TASK_DONE') {
+                aiContent = '已为您完成分析。'
+              } else {
+                aiContent = 'AI助手已完成处理。'
+              }
+            }
+            if (aiContent) {
+              try {
+                const db = getDb()
+                const aiMsgId = uuidv4()
+                db.insert(messages)
+                  .values({
+                    id: aiMsgId,
+                    caseId,
+                    senderType: 'ai',
+                    senderId: 'agent',
+                    senderName: '调解智能体',
+                    content: aiContent,
+                    visibility: 'private',
+                  })
+                  .run()
+              } catch (err) {
+                console.error('[Agent] Failed to save AI message:', err)
+              }
             }
           }
 

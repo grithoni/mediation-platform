@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
-  const caseId = getRouterParam(event, 'id')
+  const caseId = getRouterParam(event, 'caseNumber')
   const body = await readBody(event)
 
   if (!caseId) {

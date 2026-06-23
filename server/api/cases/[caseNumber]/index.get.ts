@@ -1,8 +1,8 @@
 import { and, desc, eq, ne, or } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
-import { getDb } from '../../database'
-import { cases, messages, documents, sessions } from '../../database/schema'
-import { verifyPartyAccess } from '../../utils/auth'
+import { getDb } from '../../../database'
+import { cases, messages, documents, sessions } from '../../../database/schema'
+import { verifyPartyAccess } from '../../../utils/auth'
 
 export default defineEventHandler(async (event) => {
   const caseNumber = getRouterParam(event, 'caseNumber')
@@ -12,10 +12,10 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
   const query = getQuery(event)
-  const mediator = event.context.mediator
+  const user = event.context.user
 
-  // --- Mode 1: Authenticated mediator ---
-  if (mediator) {
+  // --- Mode 1: Authenticated user (mediator, admin, etc.) ---
+  if (user) {
     const caseData = db.select().from(cases).where(eq(cases.id, caseNumber)).get()
     if (!caseData) {
       throw createError({ statusCode: 404, message: '案件不存在' })

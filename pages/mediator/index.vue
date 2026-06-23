@@ -160,9 +160,38 @@
       </div>
     </div>
 
+    <!-- Right: Inline File List -->
+    <div v-if="viewingFiles && selectedCaseId" class="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-2">
+        <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-purple-500" />
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">原始文件</h3>
+        <span class="text-xs text-gray-400">({{ caseFiles.length }} 个 · 来源: {{ caseFileDir }})</span>
+        <button class="ml-auto px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-lg transition-colors" @click="viewingFiles = false">
+          <UIcon name="i-lucide-arrow-left" class="w-3.5 h-3.5 inline -mt-0.5" /> 返回案件
+        </button>
+      </div>
+      <div v-if="caseFiles.length === 0" class="flex-1 flex items-center justify-center text-sm text-gray-400">该案件暂无上传的原始文件</div>
+      <div v-else class="px-5 py-4 overflow-y-auto flex-1 space-y-2">
+        <div v-for="f in caseFiles" :key="f.name"
+          class="flex items-center gap-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-purple-300 transition-colors">
+          <UIcon :name="fileIcon(f.ext)" class="w-5 h-5 shrink-0" :class="fileIconColor(f.ext)" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ f.name }}</div>
+            <div class="text-xs text-gray-400">{{ formatSize(f.size) }} · {{ f.mime }}</div>
+          </div>
+          <button v-if="canPreview(f.ext)" class="px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 rounded transition-colors" @click="previewFile(f)">
+            <UIcon name="i-lucide-eye" class="w-3.5 h-3.5 inline -mt-0.5" /> 预览
+          </button>
+          <a :href="fileUrl(f)" target="_blank" download class="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded transition-colors">
+            <UIcon name="i-lucide-download" class="w-3.5 h-3.5 inline -mt-0.5" /> 下载
+          </a>
+        </div>
+      </div>
+    </div>
+
     <!-- Right: Case Detail -->
     <AdminCaseDetailView
-      v-else-if="selectedCaseId"
+      v-else-if="selectedCaseId && !viewingFiles"
       ref="caseDetailRef"
       :case-id="selectedCaseId"
       :case-title="selectedCaseTitle"
@@ -209,42 +238,6 @@
       </div>
       <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-end">
         <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="viewingMaterial = null">关闭</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- File List Modal -->
-  <div v-if="viewingFiles" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="viewingFiles = false">
-    <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
-      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-purple-500" />
-          <h3 class="text-base font-semibold text-gray-900 dark:text-white">原始文件</h3>
-          <span class="text-xs text-gray-400">({{ caseFiles.length }} 个 · 来源: {{ caseFileDir }})</span>
-        </div>
-        <button class="text-gray-400 hover:text-gray-600" @click="viewingFiles = false">
-          <UIcon name="i-lucide-x" class="w-5 h-5" />
-        </button>
-      </div>
-      <div v-if="caseFiles.length === 0" class="px-5 py-12 text-center text-sm text-gray-400">该案件暂无上传的原始文件</div>
-      <div v-else class="px-5 py-4 overflow-y-auto flex-1 space-y-2">
-        <div v-for="f in caseFiles" :key="f.name"
-          class="flex items-center gap-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-purple-300 transition-colors">
-          <UIcon :name="fileIcon(f.ext)" class="w-5 h-5 shrink-0" :class="fileIconColor(f.ext)" />
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ f.name }}</div>
-            <div class="text-xs text-gray-400">{{ formatSize(f.size) }} · {{ f.mime }}</div>
-          </div>
-          <button v-if="canPreview(f.ext)" class="px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 rounded transition-colors" @click="previewFile(f)">
-            <UIcon name="i-lucide-eye" class="w-3.5 h-3.5 inline -mt-0.5" /> 预览
-          </button>
-          <a :href="fileUrl(f)" target="_blank" download class="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded transition-colors">
-            <UIcon name="i-lucide-download" class="w-3.5 h-3.5 inline -mt-0.5" /> 下载
-          </a>
-        </div>
-      </div>
-      <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-end">
-        <button class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 rounded-lg" @click="viewingFiles = false">关闭</button>
       </div>
     </div>
   </div>
@@ -589,13 +582,14 @@ onMounted(async () => {
   if (user) {
     await fetchCases()
     await loadSavedConversations()
+    startCaseListPolling()
   }
 })
 
 async function fetchCases() {
   casesLoading.value = true
   try {
-    const data = await $fetch<{ success: boolean; data: CaseItem[]; currentMediatorId?: string; currentMediatorRole?: string }>('/api/cases', { credentials: 'include' })
+    const data = await $fetch<{ success: boolean; data: CaseItem[]; currentMediatorId?: string; currentMediatorRole?: string }>('/api/cases', { headers: auth.getAuthHeaders() })
     if (data?.data) {
       cases.value = (data.currentMediatorRole === 'admin' || !data.currentMediatorId) ? data.data : data.data.filter(c => c.mediatorId === data.currentMediatorId)
     }
@@ -605,6 +599,28 @@ async function fetchCases() {
   } finally {
     casesLoading.value = false
   }
+}
+
+// ============================================================
+// Case list polling — auto-refresh when no case selected
+// ============================================================
+let caseListPollTimer: ReturnType<typeof setInterval> | null = null
+
+function startCaseListPolling() {
+  stopCaseListPolling()
+  caseListPollTimer = setInterval(async () => {
+    if (selectedCaseId.value) return // Don't poll when viewing a case
+    try {
+      const data = await $fetch<{ success: boolean; data: CaseItem[]; currentMediatorId?: string; currentMediatorRole?: string }>('/api/cases', { headers: auth.getAuthHeaders() })
+      if (data?.data) {
+        cases.value = (data.currentMediatorRole === 'admin' || !data.currentMediatorId) ? data.data : data.data.filter(c => c.mediatorId === data.currentMediatorId)
+      }
+    } catch {}
+  }, 5000)
+}
+
+function stopCaseListPolling() {
+  if (caseListPollTimer) { clearInterval(caseListPollTimer); caseListPollTimer = null }
 }
 
 // ============================================================
@@ -621,7 +637,7 @@ function startPolling() {
   if (!selectedCaseId.value) return
   pollTimer = setInterval(async () => {
     try {
-      const resp = await $fetch<{ success: boolean; data: MessageItem[] }>(`/api/chat/messages/${selectedCaseId.value}`, { credentials: 'include' })
+      const resp = await $fetch<{ success: boolean; data: MessageItem[] }>(`/api/chat/messages/${selectedCaseId.value}`, { headers: auth.getAuthHeaders() })
       if (resp?.data) {
         const otherMsgs = allMessages.value.filter(m => m.caseId !== selectedCaseId.value)
         allMessages.value = [...otherMsgs, ...resp.data.map(m => ({ ...m, caseId: selectedCaseId.value! }))]
@@ -640,7 +656,7 @@ async function selectCase(id: string) {
   allMessages.value = allMessages.value.filter(m => m.caseId !== id)
   startPolling()
   try {
-    const resp = await $fetch<{ success: boolean; data: { messages: MessageItem[]; description?: string; claimsSummary?: string; evidenceSummary?: string; documents?: any[] } }>(`/api/cases/${id}`, { credentials: 'include' })
+    const resp = await $fetch<{ success: boolean; data: { messages: MessageItem[]; description?: string; claimsSummary?: string; evidenceSummary?: string; documents?: any[] } }>(`/api/cases/${id}`, { headers: auth.getAuthHeaders() })
     if (resp?.data) {
       caseDetail.value = { description: resp.data.description, claimsSummary: resp.data.claimsSummary, evidenceSummary: resp.data.evidenceSummary, documents: resp.data.documents || [] }
       caseFiles.value = []
@@ -653,6 +669,7 @@ async function selectCase(id: string) {
       caseSearchError.value = ''
     }
   } catch {}
+  viewingFiles.value = false
   loadSavedConversations()
 }
 
@@ -676,7 +693,7 @@ async function handleSendMessage(text: string) {
     await $fetch('/api/chat/messages', {
       method: 'POST',
       body: { caseId: selectedCaseId.value, content: text, senderType: 'mediator', senderId: auth.user.value?.id, senderName: auth.user.value?.name || '调解员' },
-      credentials: 'include',
+      headers: auth.getAuthHeaders(),
     })
     currentSuggestion.value = null // Clear suggestion after sending
   } catch {}
@@ -742,7 +759,7 @@ async function generateSuggestion(partyMessage: string) {
     const resp = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/suggest-reply', {
       method: 'POST',
       body: { caseId: selectedCaseId.value, partyMessage, autoMode: false },
-      credentials: 'include',
+      headers: auth.getAuthHeaders(),
     })
     if (resp?.success) {
       currentSuggestion.value = resp.data.content
@@ -759,7 +776,7 @@ async function generateAutoReply(partyMessage: string) {
     const resp = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/suggest-reply', {
       method: 'POST',
       body: { caseId: selectedCaseId.value, partyMessage, autoMode: true },
-      credentials: 'include',
+      headers: auth.getAuthHeaders(),
     })
     if (resp?.success) {
       // Auto-send as mediator message
@@ -808,7 +825,7 @@ async function openFileList() {
   viewingFiles.value = true
   if (!selectedCaseId.value) return
   try {
-    const resp = await $fetch<{ success: boolean; files: CaseFile[]; dir?: string }>(`/api/cases/${selectedCaseId.value}/files`, { credentials: 'include' })
+    const resp = await $fetch<{ success: boolean; files: CaseFile[]; dir?: string }>(`/api/cases/${selectedCaseId.value}/files`, { headers: auth.getAuthHeaders() })
     caseFiles.value = resp.files || []
     caseFileDir.value = resp.dir || ''
   } catch { caseFiles.value = [] }
@@ -818,7 +835,7 @@ async function previewFile(f: CaseFile) {
   previewingFile.value = f
   previewContent.value = ''
   if (['txt','md','json'].includes(f.ext)) {
-    try { previewContent.value = await $fetch<string>(fileUrl(f), { credentials: 'include', responseType: 'text' }) } catch {}
+    try { previewContent.value = await $fetch<string>(fileUrl(f), { headers: auth.getAuthHeaders(), responseType: 'text' }) } catch {}
   } else {
     previewContent.value = fileUrl(f)
   }
@@ -834,7 +851,7 @@ const skillUploadMsg = ref('')
 const skillUploadOk = ref(false)
 
 async function loadSkills() {
-  try { const resp = await $fetch<{ success: boolean; skills: Skill[] }>('/api/skills', { credentials: 'include' }); if (resp?.skills) skills.value = resp.skills } catch { skills.value = [] }
+  try { const resp = await $fetch<{ success: boolean; skills: Skill[] }>('/api/skills', { headers: auth.getAuthHeaders() }); if (resp?.skills) skills.value = resp.skills } catch { skills.value = [] }
 }
 
 async function uploadSkillFile(ev: Event) {
@@ -845,22 +862,22 @@ async function uploadSkillFile(ev: Event) {
   skillUploading.value = true; skillUploadMsg.value = ''
   const form = new FormData(); form.append('file', file)
   try {
-    const resp = await $fetch<{ success: boolean; skill?: Skill; error?: string }>('/api/skills', { method: 'POST', body: form, credentials: 'include' })
+    const resp = await $fetch<{ success: boolean; skill?: Skill; error?: string }>('/api/skills', { method: 'POST', body: form, headers: auth.getAuthHeaders() })
     if (resp?.success) { skillUploadMsg.value = `已安装：${resp.skill?.name || file.name}`; skillUploadOk.value = true; await loadSkills() }
     else { skillUploadMsg.value = resp?.error || '上传失败'; skillUploadOk.value = false }
   } catch (err: any) { skillUploadMsg.value = err?.data?.error || err?.message || '上传失败'; skillUploadOk.value = false }
   finally { skillUploading.value = false; input.value = '' }
 }
 
-async function toggleSkill(id: string) { await $fetch(`/api/skills/${id}/toggle`, { method: 'POST', credentials: 'include' }); await loadSkills() }
-async function deleteSkill(id: string) { if (!confirm('确认卸载该技能？')) return; await $fetch(`/api/skills/${id}`, { method: 'DELETE', credentials: 'include' }); await loadSkills() }
+async function toggleSkill(id: string) { await $fetch(`/api/skills/${id}/toggle`, { method: 'POST', headers: auth.getAuthHeaders() }); await loadSkills() }
+async function deleteSkill(id: string) { if (!confirm('确认卸载该技能？')) return; await $fetch(`/api/skills/${id}`, { method: 'DELETE', headers: auth.getAuthHeaders() }); await loadSkills() }
 
 // ============================================================
 // MCP Tools
 // ============================================================
 interface McpTool { id: string; name: string; description: string; transport: 'stdio' | 'http'; command?: string; url?: string; envJson?: string; enabled: boolean }
 const mcpTools = ref<McpTool[]>([])
-async function loadMcpTools() { try { const resp = await $fetch<{ success: boolean; tools: McpTool[] }>('/api/mcp/tools', { credentials: 'include' }); if (resp?.tools) mcpTools.value = resp.tools } catch { mcpTools.value = [] } }
+async function loadMcpTools() { try { const resp = await $fetch<{ success: boolean; tools: McpTool[] }>('/api/mcp/tools', { headers: auth.getAuthHeaders() }); if (resp?.tools) mcpTools.value = resp.tools } catch { mcpTools.value = [] } }
 
 const mcpFormOpen = ref(false)
 const mcpFormSaving = ref(false)
@@ -881,15 +898,15 @@ async function saveMcpTool() {
   try {
     if (mcpEditing.value.envJson?.trim()) { try { JSON.parse(mcpEditing.value.envJson) } catch { mcpFormError.value = '环境变量 JSON 格式错误'; mcpFormSaving.value = false; return } }
     const payload = { ...mcpEditing.value }
-    if (mcpEditing.value.id) { await $fetch(`/api/mcp/tools/${mcpEditing.value.id}`, { method: 'PUT', body: payload, credentials: 'include' }) }
-    else { delete (payload as any).id; await $fetch('/api/mcp/tools', { method: 'POST', body: payload, credentials: 'include' }) }
+    if (mcpEditing.value.id) { await $fetch(`/api/mcp/tools/${mcpEditing.value.id}`, { method: 'PUT', body: payload, headers: auth.getAuthHeaders() }) }
+    else { delete (payload as any).id; await $fetch('/api/mcp/tools', { method: 'POST', body: payload, headers: auth.getAuthHeaders() }) }
     mcpFormOpen.value = false; await loadMcpTools()
   } catch (err: any) { mcpFormError.value = err?.data?.error || err?.message || '保存失败' }
   finally { mcpFormSaving.value = false }
 }
 
-async function toggleMcpTool(id: string) { await $fetch(`/api/mcp/tools/${id}/toggle`, { method: 'POST', credentials: 'include' }); await loadMcpTools() }
-async function deleteMcpTool(id: string) { if (!confirm('确认删除该工具？')) return; await $fetch(`/api/mcp/tools/${id}`, { method: 'DELETE', credentials: 'include' }); await loadMcpTools() }
+async function toggleMcpTool(id: string) { await $fetch(`/api/mcp/tools/${id}/toggle`, { method: 'POST', headers: auth.getAuthHeaders() }); await loadMcpTools() }
+async function deleteMcpTool(id: string) { if (!confirm('确认删除该工具？')) return; await $fetch(`/api/mcp/tools/${id}`, { method: 'DELETE', headers: auth.getAuthHeaders() }); await loadMcpTools() }
 
 // ============================================================
 // AI Solution Recommendation
@@ -905,7 +922,7 @@ async function generateSolution() {
   if (!selectedCaseId.value) return
   showSolutionModal.value = true; recommendLoading.value = true; solutionContent.value = ''; solutionError.value = ''; solutionGeneratedAt.value = null
   try {
-    const resp = await $fetch<{ success: boolean; data: { content: string; generatedAt: string } }>(`/api/cases/${selectedCaseId.value}/recommend-solution`, { method: 'POST', credentials: 'include' })
+    const resp = await $fetch<{ success: boolean; data: { content: string; generatedAt: string } }>(`/api/cases/${selectedCaseId.value}/recommend-solution`, { method: 'POST', headers: auth.getAuthHeaders() })
     if (resp?.success) { solutionContent.value = resp.data.content; solutionGeneratedAt.value = resp.data.generatedAt }
     else { solutionError.value = '生成失败：响应异常' }
   } catch (err: any) { solutionError.value = err?.data?.message || err?.message || '生成失败，请稍后重试' }
@@ -922,7 +939,7 @@ async function searchLaw() {
   showLawSearchModal.value = true; lawSearchLoading.value = true; lawSearchResults.value = []; lawSearchError.value = ''
   try {
     const resp = await $fetch<{ success: boolean; data: { results: Array<{ path: string; fileName: string; dirName: string; content: string; score: number }>; message?: string } }>(
-      `/api/cases/${selectedCaseId.value}/search-law`, { method: 'POST', credentials: 'include' }
+      `/api/cases/${selectedCaseId.value}/search-law`, { method: 'POST', headers: auth.getAuthHeaders() }
     )
     if (resp?.success) {
       lawSearchResults.value = resp.data.results || []
@@ -949,7 +966,7 @@ async function searchCases() {
   showCaseSearchModal.value = true; caseSearchLoading.value = true; caseSearchResults.value = []; caseSearchError.value = ''
   try {
     const resp = await $fetch<{ success: boolean; data: { cases: Array<{ path: string; fileName: string; dirName: string; summary: string }>; message?: string } }>(
-      `/api/cases/${selectedCaseId.value}/search-cases`, { method: 'POST', credentials: 'include' }
+      `/api/cases/${selectedCaseId.value}/search-cases`, { method: 'POST', headers: auth.getAuthHeaders() }
     )
     if (resp?.success) {
       caseSearchResults.value = resp.data.cases || []
@@ -971,19 +988,19 @@ const savedConversations = ref<SavedConversation[]>([])
 const savingConversation = ref(false)
 const viewingConversation = ref<SavedConversation | null>(null)
 
-async function loadSavedConversations() { try { const resp = await $fetch<{ success: boolean; data: SavedConversation[] }>('/api/conversations', { credentials: 'include' }); if (resp?.data) savedConversations.value = resp.data } catch {} }
+async function loadSavedConversations() { try { const resp = await $fetch<{ success: boolean; data: SavedConversation[] }>('/api/conversations', { headers: auth.getAuthHeaders() }); if (resp?.data) savedConversations.value = resp.data } catch {} }
 
 async function saveCurrentConversation() {
   if (!selectedCaseId.value || !selectedMessages.value.length) return
   savingConversation.value = true
   try {
-    const resp = await $fetch<{ success: boolean; data: { id: string; title: string } }>(`/api/cases/${selectedCaseId.value}/conversations`, { method: 'POST', credentials: 'include', body: { messages: selectedMessages.value } })
+    const resp = await $fetch<{ success: boolean; data: { id: string; title: string } }>(`/api/cases/${selectedCaseId.value}/conversations`, { method: 'POST', headers: auth.getAuthHeaders(), body: { messages: selectedMessages.value } })
     if (resp?.data) { await loadSavedConversations(); alert(`已保存对话：${resp.data.title}`) }
   } catch (e: any) { alert('保存失败：' + (e?.message || '未知错误')) }
   finally { savingConversation.value = false }
 }
 
-async function openSavedConversation(id: string) { try { const resp = await $fetch<{ success: boolean; data: SavedConversation }>(`/api/conversations/${id}`, { credentials: 'include' }); if (resp?.data) viewingConversation.value = resp.data } catch {} }
+async function openSavedConversation(id: string) { try { const resp = await $fetch<{ success: boolean; data: SavedConversation }>(`/api/conversations/${id}`, { headers: auth.getAuthHeaders() }); if (resp?.data) viewingConversation.value = resp.data } catch {} }
 
 // ============================================================
 // KB Search / Upload
@@ -1094,6 +1111,7 @@ function renderMarkdown(md: string): string {
 // ============================================================
 onUnmounted(() => {
   stopPolling()
+  stopCaseListPolling()
   chat.disconnect()
 })
 </script>

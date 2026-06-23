@@ -358,7 +358,10 @@ async function openMediatorModal() {
       query: { caseId: caseNumber },
     })
     if (resp.success) matchedMediatorList.value = resp.data
-  } catch {}
+  } catch (err: any) {
+    console.error('Failed to load mediators:', err)
+    matchedMediatorList.value = []
+  }
   matchingMediators.value = false
 }
 
@@ -375,8 +378,26 @@ async function bindMediator() {
       caseData.value.phase = 'active'
       caseData.value.mediatorId = selectedMediatorId.value
     }
-    // After binding, show the "联系调解员" prompt so party can call mediator
-    showCallMediatorPrompt.value = true
+    // After binding, automatically call the mediator so party doesn't need to click again
+    try {
+      await $fetch(`/api/cases/${caseNumber}/call-mediator`, { method: 'POST' })
+      chatState.value = 'waiting_mediator'
+      showCallMediatorPrompt.value = false
+      clearIdleTimer()
+
+      chat.messages.value.push({
+        id: `sys-${Date.now()}`,
+        caseId: caseNumber,
+        senderType: 'system',
+        senderName: '系统',
+        content: '调解员已绑定，正在为您连接...',
+        createdAt: new Date().toISOString(),
+      })
+    } catch (err: any) {
+      console.error('call-mediator after bind failed:', err)
+      // Fallback: show the prompt so party can manually trigger
+      showCallMediatorPrompt.value = true
+    }
   } catch {} finally {
     bindingMediator.value = false
   }
@@ -384,7 +405,12 @@ async function bindMediator() {
 
 // ── Call mediator (request intervention) ───────────────────
 async function callMediator() {
-  if (!caseData.value?.mediatorId) {
+  if (!caseData.value) {
+    // Case data not loaded yet, open modal directly
+    await openMediatorModal()
+    return
+  }
+  if (!caseData.value.mediatorId) {
     // No mediator bound yet → show selection
     await openMediatorModal()
     return
@@ -406,6 +432,14 @@ async function callMediator() {
     })
   } catch (err: any) {
     console.error('call-mediator failed:', err)
+    chat.messages.value.push({
+      id: `sys-err-${Date.now()}`,
+      caseId: caseNumber,
+      senderType: 'system',
+      senderName: '系统',
+      content: '联系调解员失败，请稍后重试',
+      createdAt: new Date().toISOString(),
+    })
   }
 }
 
@@ -534,17 +568,18 @@ async function handleSend() {
 
   // ── Mediator active: send to mediator via HTTP ──────────
   if (chatState.value === 'mediator_active') {
-    await $fetch('/api/chat/messages', {
-      method: 'POST',
-      body: {
-        caseId: caseNumber,
-        content: text,
-        senderType: 'party',
-        senderName: '当事人',
-      },
-    })
-    // Re-fetch messages to show the new one
     try {
+      await $fetch('/api/chat/messages', {
+        method: 'POST',
+        body: {
+          caseId: caseNumber,
+          content: text,
+          senderType: 'party',
+          senderName: '当事人',
+          sessionToken: sessionToken.value || accessCode,
+        },
+      })
+      // Re-fetch messages to show the new one
       const resp = await $fetch<{ success: boolean; data: any[] }>(`/api/chat/messages/${caseNumber}`, {
         query: { sessionToken: sessionToken.value || accessCode },
       })
@@ -554,7 +589,17 @@ async function handleSend() {
           senderType: m.senderType as 'party' | 'mediator' | 'ai' | 'system',
         }))
       }
-    } catch {}
+    } catch (err: any) {
+      console.error('Failed to send message:', err)
+      chat.messages.value.push({
+        id: `sys-err-${Date.now()}`,
+        caseId: caseNumber,
+        senderType: 'system',
+        senderName: '系统',
+        content: '发送失败，请稍后重试',
+        createdAt: new Date().toISOString(),
+      })
+    }
     return
   }
 
@@ -574,18 +619,15 @@ async function handleSend() {
   await chat.sendAiMessage(text, 'party', '当事人')
   sessionTurnCount.value++
 
-  // Check semantic intent
-  if (sessionTurnCount.value >= 3 && hasMediatorIntent(text)) {
+  // Show "联系调解员" button immediately after first message if no mediator bound
+  if (!caseData.value?.mediatorId && !showCallMediatorPrompt.value) {
     showCallMediatorPrompt.value = true
-    clearIdleTimer()
-  } else if (sessionTurnCount.value >= 3 && !showCallMediatorPrompt.value) {
-    // Start idle timer after 3rd round
-    startIdleTimer()
   }
 
-  // First time: after 3 rounds, no mediator → show "联系调解员" button (not auto-open modal)
-  if (sessionTurnCount.value >= 3 && !caseData.value?.mediatorId && !showCallMediatorPrompt.value) {
+  // Check semantic intent for mediator request
+  if (hasMediatorIntent(text)) {
     showCallMediatorPrompt.value = true
+    clearIdleTimer()
   }
 
   nextTick(() => {

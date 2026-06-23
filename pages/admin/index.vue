@@ -176,7 +176,7 @@ const pendingCases = computed(() => {
 const features = [
   {
     title: '案件审核',
-    description: '审核新提交的案件，分配调解员',
+    description: '审核新提交的案件',
     icon: 'i-lucide-clipboard-check',
     bgColor: 'bg-blue-100 dark:bg-blue-900',
     iconColor: 'text-blue-600 dark:text-blue-400',
@@ -309,11 +309,6 @@ const getCaseActions = (row: any) => [
     label: '查看详情',
     icon: 'i-lucide-eye',
     click: () => navigateTo(`/mediator/cases/${row.id}`),
-  },
-  {
-    label: '分配调解员',
-    icon: 'i-lucide-user-plus',
-    click: () => showAssignModal(row),
   },
   {
     label: '审核',

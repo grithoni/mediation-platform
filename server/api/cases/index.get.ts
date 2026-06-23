@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   return {
     success: true,
     data: allCases,
-    currentMediatorId: mediator.id,
+    currentMediatorId: mediator.userId,
     currentMediatorRole: mediator.role,
   }
 })

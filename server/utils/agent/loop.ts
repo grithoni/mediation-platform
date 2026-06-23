@@ -46,6 +46,8 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
   let turn = 0
   let fullResponse = ''
   let exitReason: string | null = null
+  let consecutiveToolTurns = 0
+  const MAX_CONSECUTIVE_TOOL_TURNS = 3
 
   while (turn < maxTurns) {
     turn++
@@ -62,8 +64,11 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
     let llmContent = ''
     let toolCalls: ToolCall[] = []
 
+    // After too many consecutive tool-only turns, force text generation by removing tools
+    const effectiveTools = consecutiveToolTurns >= MAX_CONSECUTIVE_TOOL_TURNS ? [] : AGENT_TOOLS
+
     try {
-      const gen = llmCall(messages, AGENT_TOOLS)
+      const gen = llmCall(messages, effectiveTools)
       let iterResult = await gen.next()
 
       // Intermediate yields = streaming text tokens → forward to frontend
@@ -79,7 +84,8 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
       // Final return value = { content, toolCalls }
       const llmResult = iterResult.value as LLMResult
       llmContent = llmResult.content
-      toolCalls = llmResult.toolCalls
+      // If we disabled tools to force text generation, ignore any tool calls the LLM emitted
+      toolCalls = effectiveTools.length > 0 ? llmResult.toolCalls : []
     } catch (err: any) {
       yield { type: 'error', content: `LLM 调用失败: ${err.message}` }
       exitReason = `LLM_ERROR: ${err.message}`
@@ -96,6 +102,13 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
     if (toolCalls.length === 0) {
       exitReason = 'TASK_DONE'
       break
+    }
+
+    // Track consecutive tool-only turns (no text generated)
+    if (!llmContent && toolCalls.length > 0) {
+      consecutiveToolTurns++
+    } else {
+      consecutiveToolTurns = 0
     }
 
     // Process tool calls
@@ -202,6 +215,11 @@ export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<A
 
     // Build next user message with tool results
     let nextContent = nextPrompts.length > 0 ? nextPrompts.join('\n') : '请继续执行任务。'
+
+    // Force text generation after too many consecutive tool-only turns
+    if (consecutiveToolTurns >= MAX_CONSECUTIVE_TOOL_TURNS) {
+      nextContent += `\n\n[HINT] 您已连续${consecutiveToolTurns}轮仅使用工具未生成文字回复。请基于已收集的信息直接生成完整的文字回复给用户，不要再调用工具。用户需要看到您的分析和建议。`
+    }
 
     // ============================================================
     // Turn escalation warnings (ported from GenericAgent ga.py)

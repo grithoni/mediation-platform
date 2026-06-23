@@ -81,14 +81,7 @@
               >
                 驳回
               </UButton>
-              <UButton
-                size="sm"
-                color="primary"
-                variant="soft"
-                @click="assignMediator(row)"
-              >
-                分配调解员
-              </UButton>
+
             </div>
           </template>
         </UTable>
@@ -155,48 +148,7 @@
       </template>
     </UModal>
 
-    <!-- 分配调解员模态框 -->
-    <UModal v-model:open="showAssignModal">
-      <template #header>
-        <h3 class="text-lg font-semibold">分配调解员</h3>
-      </template>
-      <template #default>
-        <div class="space-y-4">
-          <div v-if="selectedCase">
-            <p class="text-sm text-gray-500">案件编号</p>
-            <p class="font-medium">{{ selectedCase.id }}</p>
-          </div>
-          <div v-if="selectedCase">
-            <p class="text-sm text-gray-500">案件标题</p>
-            <p class="font-medium">{{ selectedCase.title }}</p>
-          </div>
-          <UFormGroup label="选择调解员">
-            <USelectMenu
-              v-model="selectedMediator"
-              :options="mediatorOptions"
-              placeholder="请选择调解员"
-            />
-          </UFormGroup>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <UButton
-            variant="soft"
-            color="neutral"
-            @click="showAssignModal = false"
-          >
-            取消
-          </UButton>
-          <UButton
-            :disabled="!selectedMediator"
-            @click="confirmAssign"
-          >
-            确认分配
-          </UButton>
-        </div>
-      </template>
-    </UModal>
+
   </div>
 </template>
 
@@ -250,13 +202,8 @@ const reviewedColumns = [
 
 // 模态框状态
 const showReviewModal = ref(false)
-const showAssignModal = ref(false)
 const selectedCase = ref(null)
 const reviewNote = ref('')
-const selectedMediator = ref('')
-
-// 调解员选项
-const mediatorOptions = ref([])
 
 // 格式化日期
 const formatDate = (timestamp: number) => {
@@ -347,42 +294,6 @@ const confirmReject = async () => {
   }
 }
 
-// 分配调解员
-const assignMediator = (row: any) => {
-  selectedCase.value = row
-  selectedMediator.value = ''
-  showAssignModal.value = true
-}
-
-// 确认分配
-const confirmAssign = async () => {
-  if (!selectedCase.value || !selectedMediator.value) return
-
-  try {
-    await $fetch(`/api/cases/${selectedCase.value.id}/assign`, {
-      method: 'POST',
-      body: {
-        mediatorId: selectedMediator.value,
-      },
-    })
-
-    toast.add({
-      title: '分配成功',
-      description: '调解员已分配',
-      color: 'success',
-    })
-
-    showAssignModal.value = false
-    loadCases()
-  } catch (error: any) {
-    toast.add({
-      title: '分配失败',
-      description: error.message,
-      color: 'error',
-    })
-  }
-}
-
 // 加载案件数据
 const loadCases = async () => {
   try {
@@ -395,24 +306,8 @@ const loadCases = async () => {
   }
 }
 
-// 加载调解员列表
-const loadMediators = async () => {
-  try {
-    const { data } = await useFetch('/api/mediators')
-    if (data.value) {
-      mediatorOptions.value = data.value.map((m) => ({
-        label: m.name,
-        value: m.id,
-      }))
-    }
-  } catch (error) {
-    console.error('加载调解员失败:', error)
-  }
-}
-
 // 初始化
 onMounted(() => {
   loadCases()
-  loadMediators()
 })
 </script>

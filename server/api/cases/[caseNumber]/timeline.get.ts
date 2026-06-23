@@ -5,7 +5,7 @@ import { requireAuth } from '~/server/middleware/auth'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
-  const caseId = getRouterParam(event, 'id')
+  const caseId = getRouterParam(event, 'caseNumber')
 
   if (!caseId) {
     throw createError({ statusCode: 400, message: '案件ID不能为空' })

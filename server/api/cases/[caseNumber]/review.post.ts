@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 export default defineEventHandler(async (event) => {
   // 只有案件管理员和管理员可以审核案件
   const user = requireRole(event, ['case_manager', 'admin'])
-  const caseId = getRouterParam(event, 'id')
+  const caseId = getRouterParam(event, 'caseNumber')
   const body = await readBody(event)
 
   if (!caseId) {

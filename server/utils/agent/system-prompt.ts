@@ -74,7 +74,7 @@ export function buildSystemPrompt(context: {
 你正在首次分析此案件，必须先完成以下步骤再与当事人对话：
 
 ### 必须执行的步骤
-1. 用 file_read 列出案件目录（uploads/cases/${context.caseId}/）
+1. 用 file_read 列出当前目录（直接用 path: "." 即可，工作目录已是案件目录）
 2. 用 read_docx 读取所有 docx 文件（仲裁申请书、证据材料等）
 3. 搜索相关法律知识（search_legal_knowledge）
 4. 调用 update_dynamic_file 生成标准化案件动态文件，字段包括：

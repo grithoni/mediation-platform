@@ -1,7 +1,7 @@
 export interface ChatMessage {
   id: string
   caseId: string
-  senderType: 'party' | 'mediator' | 'ai'
+  senderType: 'party' | 'mediator' | 'ai' | 'system'
   senderId?: string | null
   senderName?: string | null
   content: string
@@ -233,12 +233,40 @@ export function useChat(caseId: Ref<string>) {
               fullContent += event.content
               aiStreamContent.value = fullContent
             }
-            if (event.type === 'done' && event.content) {
-              fullContent = event.content
-              aiStreamContent.value = fullContent
+            if (event.type === 'thinking' && event.content) {
+              // Show simple thinking indicator (hide round number)
+              aiStreamContent.value = '思考中...'
             }
-            if (event.type === 'done' && event.data?.exitReason === 'DIALOG_ENDED') {
-              dialogEnded = true
+            if (event.type === 'tool_call' && event.toolName) {
+              aiStreamContent.value = `正在调用工具: ${event.toolName}...`
+            }
+            if (event.type === 'tool_result' && event.content) {
+              // Brief show of tool result before next thinking round
+              const preview = event.content.length > 80 ? event.content.slice(0, 80) + '...' : event.content
+              aiStreamContent.value = `工具返回: ${preview}`
+            }
+            if (event.type === 'done') {
+              if (event.content) {
+                fullContent = event.content
+                aiStreamContent.value = fullContent
+              }
+              if (event.data?.exitReason === 'DIALOG_ENDED') {
+                dialogEnded = true
+              }
+              // Generate fallback message when agent returned empty content
+              if (!fullContent && event.data?.exitReason) {
+                const reason = event.data.exitReason
+                if (reason === 'MAX_TURNS_EXCEEDED') {
+                  fullContent = 'AI正在分析您的案件材料，请稍候继续对话。'
+                } else if (reason === 'TASK_DONE') {
+                  fullContent = '已为您完成分析。'
+                } else if (reason === 'DIALOG_ENDED') {
+                  fullContent = '信息收集完毕，请选择调解员继续。'
+                } else {
+                  fullContent = 'AI助手已完成处理。'
+                }
+                aiStreamContent.value = fullContent
+              }
             }
           } catch {}
         }
@@ -259,11 +287,21 @@ export function useChat(caseId: Ref<string>) {
       return { content: fullContent, dialogEnded }
     }
     catch (err) {
-      aiStreamContent.value = `错误: ${(err as Error).message}`
+      const errorMsg = `AI服务暂时不可用，请稍后重试。${(err as Error).message ? `(${(err as Error).message})` : ''}`
+      messages.value.push({
+        id: `ai-error-${Date.now()}`,
+        caseId: caseId.value,
+        senderType: 'ai',
+        senderId: 'agent',
+        senderName: '调解智能体',
+        content: errorMsg,
+        createdAt: new Date().toISOString(),
+      })
+      aiStreamContent.value = ''
+      return { content: errorMsg }
     }
     finally {
       aiStreaming.value = false
-      aiStreamContent.value = ''
     }
     return { content: '' }
   }
