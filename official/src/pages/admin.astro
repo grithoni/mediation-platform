@@ -1,0 +1,255 @@
+---
+import OfficialLayout from '../layouts/OfficialLayout.astro'
+---
+
+<OfficialLayout title="管理后台" description="系统管理后台">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">管理后台</h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">珠江国际商事调解院 · 系统管理</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="loadData()" class="px-3 py-1.5 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          刷新数据
+        </button>
+        <span id="updateTime" class="text-xs text-gray-400 font-mono"></span>
+      </div>
+    </div>
+
+    <!-- 调解员入口弹窗 -->
+    <div id="mediatorModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div class="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg mx-4 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <!-- Modal header -->
+        <div class="relative bg-gradient-to-r from-blue-700 to-blue-900 px-6 py-8 text-center">
+          <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center">
+            <svg class="w-7 h-7 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="text-xl font-bold text-white">调解员入口</h3>
+          <p class="text-blue-200 text-sm mt-1">珠江国际商事调解院 · 内部管理系统</p>
+        </div>
+        <!-- Modal body -->
+        <div class="px-6 py-5 space-y-4">
+          <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            欢迎进入调解员工作平台。您可以在此<span class="font-semibold text-gray-900 dark:text-white">查阅和管理案件信息、查看调解申请进度、生成分析报告</span>。
+          </p>
+          <div class="bg-blue-50 dark:bg-blue-900/20 rounded-xl px-4 py-3 flex items-start gap-3">
+            <svg class="w-5 h-5 text-blue-600 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+            <p class="text-xs text-blue-700 dark:text-blue-300">首次使用？通过 WorkBuddy 等 AI 智能体可进行脱敏案件分析、风险评估、报告生成等操作。</p>
+          </div>
+          <a href="http://localhost:3006/admin" target="_blank"
+             class="block w-full text-center py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/30 active:scale-[0.98] transition-all">
+            <span class="flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              进入案件管理系统
+            </span>
+          </a>
+          <div class="flex items-center justify-center gap-3 text-xs text-gray-400">
+            <a href="http://localhost:3006/docs" target="_blank" class="hover:text-blue-600 transition-colors">API 文档</a>
+            <span>·</span>
+            <a href="http://localhost:3005/docs" target="_blank" class="hover:text-blue-600 transition-colors">AI 服务</a>
+            <span>·</span>
+            <button onclick="closeMediatorModal()" class="hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service Status -->
+    <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">服务状态</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10" id="servicesGrid">
+      <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 animate-pulse">
+        <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3"></div>
+        <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-2"></div>
+        <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+      </div>
+      <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 animate-pulse">
+        <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3"></div>
+        <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-2"></div>
+        <div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+      </div>
+    </div>
+
+    <!-- Quick Links -->
+    <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">快捷入口</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
+      <a href="http://localhost:3006/admin" target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
+        <svg class="w-6 h-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">案件管理</span>
+      </a>
+      <a href="http://localhost:3006/docs" target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
+        <svg class="w-6 h-6 text-amber-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
+        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">API 文档</span>
+      </a>
+      <a href="http://localhost:3005/docs" target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
+        <svg class="w-6 h-6 text-purple-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">AI 服务 API</span>
+      </a>
+      <a href="/" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
+        <svg class="w-6 h-6 text-gray-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">返回官网首页</span>
+      </a>
+    </div>
+
+    <!-- Case List -->
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">案件列表</h2>
+      <span id="caseCount" class="text-xs text-gray-400"></span>
+    </div>
+
+    <div id="caseLoading" class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-10 text-center">
+      <div class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+      <p class="text-sm text-gray-400">加载中...</p>
+    </div>
+
+    <div id="caseError" class="hidden bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6 text-center">
+      <p class="text-amber-700 dark:text-amber-400 text-sm font-medium">案件服务不可用</p>
+      <p id="caseErrorMsg" class="text-amber-600 dark:text-amber-500 text-xs mt-1"></p>
+      <a href="http://localhost:3006/admin" target="_blank" class="inline-block mt-3 text-xs text-blue-600 dark:text-blue-400 hover:underline">直接打开案件管理 →</a>
+    </div>
+
+    <div id="caseEmpty" class="hidden bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-10 text-center">
+      <p class="text-gray-400 dark:text-gray-500 text-sm">暂无案件</p>
+      <p class="text-xs text-gray-400 mt-1">下一个案号将自动生成为 2026-1</p>
+    </div>
+
+    <div id="caseTableWrap" class="hidden bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">案号</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">申请人</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">被申请人</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">意愿</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">状态</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">时间</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400 text-xs">操作</th>
+          </tr>
+        </thead>
+        <tbody id="caseTbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-6 text-center">管理后台仅限内部使用，不对外公开。</p>
+  </div>
+</OfficialLayout>
+
+<script is:inline>
+const SERVICES = [
+  { name: '案件管理系统', url: 'http://localhost:3006/health', admin: 'http://localhost:3006/admin', desc: '调解申请 · 材料上传 · 案件数据库' },
+  { name: '智能咨询系统', url: 'http://localhost:3005/health', admin: 'http://localhost:3005/docs', desc: 'AI 对话 · 案件分析 · RAG 知识库' },
+]
+
+function esc(s) {
+  if (!s) return ''
+  var d = document.createElement('div')
+  d.textContent = s
+  return d.innerHTML
+}
+
+function statusLabel(w) {
+  return ({ mutual: '双方自愿', single_party: '单方请求' })[w] || w || '-'
+}
+
+function fmtTime(t) {
+  if (!t) return '-'
+  return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+}
+
+async function loadServices() {
+  var html = ''
+  for (var _i = 0; _i < SERVICES.length; _i++) {
+    var svc = SERVICES[_i]
+    var ok = false
+    var data = ''
+    try {
+      var r = await fetch(svc.url, { signal: AbortSignal.timeout(3000) })
+      ok = r.ok
+      data = await r.text()
+    } catch (e) { data = '连接失败' }
+    html += '<a href="' + svc.admin + '" target="_blank" class="block bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all">'
+      + '<div class="flex items-center justify-between mb-2">'
+      + '<span class="font-semibold text-gray-900 dark:text-white text-sm">' + esc(svc.name) + '</span>'
+      + '<span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ' + (ok ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400') + '">'
+      + '<span class="w-1.5 h-1.5 rounded-full ' + (ok ? 'bg-green-500' : 'bg-red-500') + '"></span>'
+      + (ok ? '正常' : '离线') + '</span></div>'
+      + '<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">' + esc(svc.desc) + '</p>'
+      + '<div class="text-xs text-gray-400 dark:text-gray-500 font-mono bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 truncate">' + esc(data.slice(0, 120)) + '</div>'
+      + '</a>'
+  }
+  document.getElementById('servicesGrid').innerHTML = html
+}
+
+async function loadCases() {
+  var loading = document.getElementById('caseLoading')
+  var errDiv = document.getElementById('caseError')
+  var emptyDiv = document.getElementById('caseEmpty')
+  var tableWrap = document.getElementById('caseTableWrap')
+  var tbody = document.getElementById('caseTbody')
+  var countSpan = document.getElementById('caseCount')
+
+  ;[errDiv, emptyDiv, tableWrap].forEach(function(el) { el.classList.add('hidden') })
+  loading.classList.remove('hidden')
+  countSpan.textContent = ''
+
+  var apps = []
+  try {
+    var r = await fetch('http://localhost:3006/api/mediation/applications?limit=100', { signal: AbortSignal.timeout(3000) })
+    if (!r.ok) { throw new Error('HTTP ' + r.status) }
+    var data = await r.json()
+    apps = data.applications || []
+  } catch (e) {
+    loading.classList.add('hidden')
+    errDiv.classList.remove('hidden')
+    document.getElementById('caseErrorMsg').textContent = e.message
+    return
+  }
+
+  loading.classList.add('hidden')
+
+  if (apps.length === 0) {
+    emptyDiv.classList.remove('hidden')
+    countSpan.textContent = '共 0 件'
+    return
+  }
+
+  countSpan.textContent = '共 ' + apps.length + ' 件'
+  tableWrap.classList.remove('hidden')
+
+  var html = ''
+  for (var i = 0; i < apps.length; i++) {
+    var c = apps[i]
+    var cn = c.case_number || '(未编号)'
+    var w = statusLabel(c.mediation_willingness)
+    var t = fmtTime(c.created_at)
+    var st = c.status || '待处理'
+    html += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">'
+      + '<td class="px-4 py-3 font-mono text-xs font-bold text-amber-700 dark:text-amber-400">' + esc(cn) + '</td>'
+      + '<td class="px-4 py-3 text-gray-900 dark:text-gray-200">' + esc(c.applicant_name) + '</td>'
+      + '<td class="px-4 py-3 text-gray-900 dark:text-gray-200">' + esc(c.respondent_name) + '</td>'
+      + '<td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">' + w + '</td>'
+      + '<td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">' + esc(st) + '</span></td>'
+      + '<td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">' + t + '</td>'
+      + '<td class="px-4 py-3"><a href="http://localhost:3006/api/mediation/applications/' + esc(c.id) + '" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">JSON</a></td>'
+      + '</tr>'
+  }
+  tbody.innerHTML = html
+}
+
+window.closeMediatorModal = function() {
+  document.getElementById('mediatorModal').classList.add('hidden')
+}
+window.openMediatorModal = function() {
+  document.getElementById('mediatorModal').classList.remove('hidden')
+}
+window.loadData = function() {
+  document.getElementById('updateTime').textContent = new Date().toLocaleString('zh-CN')
+  loadServices()
+  loadCases()
+}
+
+document.addEventListener('DOMContentLoaded', loadData)
+</script>

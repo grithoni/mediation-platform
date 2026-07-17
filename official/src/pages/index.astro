@@ -1,0 +1,243 @@
+---
+import OfficialLayout from '../layouts/OfficialLayout.astro'
+---
+
+<OfficialLayout title="首页" description="珠江国际商事调解院 - 粤港澳大湾区商事争议解决机构">
+  <!-- Hero Section -->
+  <section class="relative min-h-screen flex items-center overflow-hidden">
+    <div class="absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('/images/hero-bg.jpg');" />
+    <div class="absolute inset-0 bg-gradient-to-br from-blue-950/85 via-blue-900/75 to-gray-900/85 dark:from-gray-950/90 dark:via-blue-950/85 dark:to-gray-900/90" />
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
+      <div class="max-w-4xl">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 text-xs text-white/80 mb-6">
+          <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+          <span>粤港澳大湾区商事争议解决机构</span>
+        </div>
+
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-[1.1] tracking-tight">
+          <span class="block">珠江国际商事调解院</span>
+          <span class="block mt-2 text-lg sm:text-xl lg:text-2xl xl:text-3xl font-normal text-blue-200 dark:text-blue-300 max-w-2xl leading-relaxed">
+            努力为每一起纠纷提供最佳解决方案
+          </span>
+        </h1>
+
+        <p class="mt-3 text-sm sm:text-base text-blue-300/80 dark:text-blue-400/70 font-mono italic max-w-xl">
+          The Best Solution For Each Dispute
+        </p>
+
+        <p class="mt-6 text-base sm:text-lg text-gray-300 dark:text-gray-400 max-w-2xl leading-relaxed">
+          珠江国际商事调解院是粤港澳大湾区领先的商事调解机构，融合国际调解规则与人工智能技术，
+          为国内外当事人提供专业、高效、保密的在线与线下调解服务。
+        </p>
+
+        <div class="mt-8 flex flex-wrap gap-4">
+          <a
+            href="/mediation"
+            class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white text-blue-900 font-semibold text-sm hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          >
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L18 5.5"/><circle cx="8" cy="13" r="2"/><path d="M14 19c0-3.5 3-5 5-5"/><path d="M14 13c0-2.5 2-4 4-4"/></svg>
+            开始调解
+          </a>
+          <a
+            href="/about"
+            class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/30 text-white font-medium text-sm hover:bg-white/20 transition-all duration-200"
+          >
+            了解我们
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40">
+      <span class="text-xs font-mono">SCROLL</span>
+      <div class="w-5 h-8 rounded-full border border-white/30 flex justify-center pt-1.5">
+        <div class="w-1 h-2 rounded-full bg-white/60 animate-bounce" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Strip -->
+  <section class="relative -mt-16 z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-px rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-800 shadow-xl">
+      <div class="bg-white dark:bg-gray-950 py-6 px-4 text-center">
+        <div class="text-2xl lg:text-3xl font-bold text-blue-600 dark:text-blue-400">500+</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">调解案件</div>
+      </div>
+      <div class="bg-white dark:bg-gray-950 py-6 px-4 text-center">
+        <div class="text-2xl lg:text-3xl font-bold text-blue-600 dark:text-blue-400">98%</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">满意度</div>
+      </div>
+      <div class="bg-white dark:bg-gray-950 py-6 px-4 text-center">
+        <div class="text-2xl lg:text-3xl font-bold text-blue-600 dark:text-blue-400">85%</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">调解成功率</div>
+      </div>
+      <div class="bg-white dark:bg-gray-950 py-6 px-4 text-center">
+        <div class="text-2xl lg:text-3xl font-bold text-blue-600 dark:text-blue-400">50+</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">调解员</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Services Section -->
+  <section class="py-20 lg:py-28 bg-gray-50 dark:bg-gray-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-2xl mx-auto mb-14">
+        <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white">我们的服务</h2>
+        <p class="mt-3 text-gray-500 dark:text-gray-400 text-base lg:text-lg">
+          多元化的争议解决服务，满足不同商业需求
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Service 1: 商事调解 -->
+        <a href="/mediation" class="group relative bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center mb-4 shadow-md">
+            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L18 5.5"/><circle cx="8" cy="13" r="2"/><path d="M14 19c0-3.5 3-5 5-5"/><path d="M14 13c0-2.5 2-4 4-4"/></svg>
+          </div>
+          <div class="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-semibold uppercase tracking-wider">在线办理</div>
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">商事调解</h3>
+          <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5 mb-2">Mediation</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">由资深调解员主持，协助当事人通过协商达成和解，高效、保密地化解各类商事纠纷。</p>
+          <div class="mt-4 flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400">
+            <span>在线申请</span>
+            <svg class="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </a>
+
+        <!-- Service 2: 中立评估 -->
+        <a href="/neutral-evaluation" class="group relative bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center mb-4 shadow-md">
+            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+          </div>
+          <div class="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold uppercase tracking-wider">在线申请</div>
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">中立评估</h3>
+          <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5 mb-2">Neutral Evaluation</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">中立第三方专家对案件进行客观评估，帮助各方准确了解争议的法律前景与潜在风险。</p>
+          <div class="mt-4 flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+            <span>在线申请</span>
+            <svg class="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </a>
+
+        <!-- Service 3: 争议评审 -->
+        <a href="/dispute-review" class="group relative bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center mb-4 shadow-md">
+            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 12.5-8-8a2.119 2.119 0 1 1 3-3l8 8"/><path d="m16 16 6-6"/><path d="m8 8 6-6"/><path d="m9 7 8 8"/><path d="m21 11-8-8"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">争议评审</h3>
+          <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5 mb-2">Dispute Review</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">由专家评审团对争议事项出具专业评审意见，为快速、低成本解决争议提供可靠依据。</p>
+          <div class="mt-4 flex items-center gap-1 text-sm font-medium text-gray-400">
+            <span>了解更多</span>
+            <svg class="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </a>
+
+        <!-- Service 4: 咨询服务 -->
+        <div class="group relative bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center mb-4 shadow-md">
+            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+          <div class="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-semibold uppercase tracking-wider">AI 智能咨询</div>
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">咨询服务</h3>
+          <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5 mb-2">Consulting</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">为企业和机构提供争议解决策略咨询，协助设计高效的纠纷预防与管理体系。</p>
+          <div class="mt-4 flex items-center gap-4">
+            <button id="ai-chat-open-btn" type="button" class="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors">
+              <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+              <span>AI 智能咨询</span>
+            </button>
+            <a href="/consulting" class="inline-flex items-center gap-1 text-sm font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              <span>了解更多</span>
+              <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- Service 5: 培训服务 -->
+        <a href="/training" class="group relative bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-rose-600 to-rose-800 flex items-center justify-center mb-4 shadow-md">
+            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">培训服务</h3>
+          <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5 mb-2">Training</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">提供国际水准的商事调解与谈判技巧培训课程，培养高素质专业调解人才。</p>
+          <div class="mt-4 flex items-center gap-1 text-sm font-medium text-gray-400">
+            <span>了解更多</span>
+            <svg class="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Why Choose Us -->
+  <section class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-2xl mx-auto mb-14">
+        <h2 class="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white">为什么选择我们</h2>
+        <p class="mt-3 text-gray-500 dark:text-gray-400 text-base lg:text-lg">
+          技术驱动 + 国际标准 + 专业团队
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+        <div class="text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-gray-900 dark:text-white mb-2">国际视野</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">融合《联合国国际贸易法委员会调解规则》等国际规范，服务跨境商事争议</p>
+        </div>
+        <div class="text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="10" x="3" y="11" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" x2="8" y1="16" y2="16"/><line x1="16" x2="16" y1="16" y2="16"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-gray-900 dark:text-white mb-2">AI 赋能</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">自研人工智能调解系统，提供智能案情分析与调解建议，显著提升效率</p>
+        </div>
+        <div class="text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-gray-900 dark:text-white mb-2">保密安全</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">严格遵守调解保密原则，全流程加密保护商业秘密与当事人隐私</p>
+        </div>
+        <div class="text-center">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3 class="text-base font-bold text-gray-900 dark:text-white mb-2">高效便捷</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">全流程在线调解平台，随时随地提交案件、推进程序、达成和解</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="py-20 lg:py-28 relative overflow-hidden">
+    <div class="absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('/images/cta-bg.jpg'); background-position: center 60%;" />
+    <div class="absolute inset-0 bg-gradient-to-r from-blue-800/85 to-blue-900/85 dark:from-gray-900/90 dark:to-blue-950/90" />
+    <div class="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 text-center">
+      <h2 class="text-3xl lg:text-4xl font-bold text-white mb-4">
+        准备好开始了吗？
+      </h2>
+      <p class="text-lg text-blue-200 dark:text-blue-300 mb-8 max-w-xl mx-auto">
+        无论您身处何地，我们的在线平台都能为您提供便捷、高效的商事调解服务
+      </p>
+      <a
+        href="/mediation"
+        class="inline-flex items-center gap-2 px-8 py-3.5 rounded-lg bg-white text-blue-900 font-semibold text-sm hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+      >
+        <svg class="w-4.5 h-4.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.5L18 5.5"/><circle cx="8" cy="13" r="2"/><path d="M14 19c0-3.5 3-5 5-5"/><path d="M14 13c0-2.5 2-4 4-4"/></svg>
+        立即在线调解
+        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </a>
+    </div>
+  </section>
+
+</OfficialLayout>

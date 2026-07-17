@@ -1,0 +1,7 @@
+# Mediation Application Service dependencies
+# Install with: pip install -r requirements.txt
+# Mirror: pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6

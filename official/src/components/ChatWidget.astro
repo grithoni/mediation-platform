@@ -1,0 +1,437 @@
+---
+/**
+ * AI 智能咨询悬浮弹窗
+ *
+ * 入口：首页「咨询服务」卡片的「AI 智能咨询」按钮（#ai-chat-open-btn），
+ * 或在任意页面派发事件 document.dispatchEvent(new Event('ai-chat:open'))。
+ *
+ * 后端服务：ai-consulting/ (FastAPI + DeepSeek + 本地知识库 RAG)
+ * 接口契约：POST http://localhost:3005/api/chat
+ *   Body: {"messages": [{"role": "user"|"assistant", "content": "..."}]}
+ *   Response: SSE — data: {"content": "token"} ... data: [DONE]
+ */
+const SUGGESTED_QUESTIONS = [
+  "申请商事调解需要什么材料？",
+  "调解如何收费？",
+  "中立评估（ENE）是什么？",
+  "分析案件 469dd022f187",
+];
+---
+
+<!-- 悬浮聊天弹窗（默认隐藏） -->
+<div
+  id="ai-chat-panel"
+  class="fixed inset-0 z-50 flex items-center justify-center opacity-0 scale-95 pointer-events-none transition-all duration-200"
+  role="dialog"
+  aria-label="AI 智能咨询"
+  aria-hidden="true"
+>
+  <!-- 遮罩层 -->
+  <div id="ai-chat-overlay" class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+
+  <div class="relative flex flex-col w-[calc(100vw-2rem)] sm:w-[28rem] h-[32rem] max-h-[78vh] bg-white dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
+    <!-- 头部 -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-950 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center shadow-sm">
+          <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+        </div>
+        <div>
+          <div class="text-sm font-bold text-gray-900 dark:text-white leading-tight">智能咨询助手</div>
+          <div class="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">珠江国际商事调解院</div>
+        </div>
+      </div>
+      <button
+        id="ai-chat-close"
+        type="button"
+        aria-label="关闭"
+        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      >
+        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- 消息区 -->
+    <div id="ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-900 scroll-smooth">
+      <div class="flex items-start gap-2.5">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+          <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+        </div>
+        <div class="max-w-[85%] rounded-2xl rounded-tl-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3.5 py-2.5 text-sm text-gray-700 dark:text-gray-200 leading-relaxed shadow-sm">
+          您好！我是珠江国际商事调解院的智能咨询助手。您可以向我咨询商事调解、中立评估、争议评审、培训等业务的流程与常见问题。
+        </div>
+      </div>
+    </div>
+
+    <!-- 推荐问题 -->
+    <div class="flex flex-wrap gap-2 px-4 pt-3 shrink-0" id="ai-chat-suggestions">
+      {SUGGESTED_QUESTIONS.map((q) => (
+        <button
+          type="button"
+          class="ai-chat-chip text-xs px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-amber-500 hover:text-amber-600 dark:hover:border-amber-500 dark:hover:text-amber-400 transition-colors"
+        >{q}</button>
+      ))}
+    </div>
+
+    <!-- 输入区 -->
+    <form id="ai-chat-form" class="flex items-center gap-2 px-4 pt-3 pb-2 shrink-0">
+      <input
+        id="ai-chat-input"
+        type="text"
+        autocomplete="off"
+        placeholder="请输入您的问题…"
+        class="flex-1 min-w-0 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition"
+      />
+      <button
+        id="ai-chat-send"
+        type="submit"
+        aria-label="发送"
+        class="inline-flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 transition-colors shrink-0"
+      >
+        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      </button>
+    </form>
+
+    <p class="px-4 pb-3 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed shrink-0">
+      智能助手回答仅供参考，具体业务请以工作人员答复为准。咨询电话：020-83288530
+    </p>
+  </div>
+</div>
+
+<script>
+  const API_URL = "http://localhost:3005/api/chat";
+  const ANALYZE_URL = "http://localhost:3005/api/analyze-case";
+
+  // 案件编号检测：12位hex（如 469dd022f187）或 C2026-001 格式
+  const CASE_ID_PATTERN = /(?:案件编号?\s*[:：]?\s*)?([a-f0-9]{12}|C\d{4}-\d{3})\s*$/i;
+  // 显式触发：以"分析案件"/"案件分析"开头
+  const ANALYZE_PREFIX = /^(分析案件|案件分析)\s*[:：]?\s*([a-f0-9]{12}|C\d{4}-\d{3})\s*$/i;
+
+  const panel = document.getElementById("ai-chat-panel") as HTMLDivElement;
+  const messagesEl = document.getElementById("ai-chat-messages") as HTMLDivElement;
+  const form = document.getElementById("ai-chat-form") as HTMLFormElement;
+  const input = document.getElementById("ai-chat-input") as HTMLInputElement;
+  const sendBtn = document.getElementById("ai-chat-send") as HTMLButtonElement;
+  const closeBtn = document.getElementById("ai-chat-close") as HTMLButtonElement;
+  const openBtn = document.getElementById("ai-chat-open-btn");
+  const fabBtn = document.getElementById("ai-chat-fab");
+  const suggestionsEl = document.getElementById("ai-chat-suggestions");
+
+  const overlay = document.getElementById("ai-chat-overlay") as HTMLDivElement;
+
+  const history: { role: "user" | "assistant"; content: string }[] = [];
+  let busy = false;
+  let isOpen = false;
+
+  // ── 弹窗开合 ──────────────────────────────────────────
+  const HIDDEN_CLASSES = ["opacity-0", "scale-95", "pointer-events-none"];
+
+  function openPanel() {
+    if (isOpen) return;
+    isOpen = true;
+    HIDDEN_CLASSES.forEach((c) => panel.classList.remove(c));
+    panel.setAttribute("aria-hidden", "false");
+    setTimeout(() => input.focus(), 200);
+  }
+
+  function closePanel() {
+    if (!isOpen) return;
+    isOpen = false;
+    HIDDEN_CLASSES.forEach((c) => panel.classList.add(c));
+    panel.setAttribute("aria-hidden", "true");
+  }
+
+  openBtn?.addEventListener("click", openPanel);
+  fabBtn?.addEventListener("click", openPanel);
+  closeBtn.addEventListener("click", closePanel);
+  overlay.addEventListener("click", closePanel);
+  document.addEventListener("ai-chat:open", openPanel);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closePanel();
+  });
+
+  // ── 渲染工具 ──────────────────────────────────────────
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /** 渲染助手消息：HTML 转义 + 轻量 markdown（加粗、换行、列表符号） */
+  function renderContent(s: string): string {
+    return escapeHtml(s)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-gray-900 dark:text-gray-100">$1</strong>')
+      .replace(/\n/g, "<br>")
+      .replace(/(^|<br>)\s*\*\s+/g, "$1• ");
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function assistantAvatar(): string {
+    return `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+      <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+    </div>`;
+  }
+
+  function addUserMessage(text: string) {
+    const row = document.createElement("div");
+    row.className = "flex justify-end";
+    row.innerHTML = `<div class="max-w-[85%] rounded-2xl rounded-tr-sm bg-amber-600 px-3.5 py-2.5 text-sm text-white leading-relaxed shadow-sm">${escapeHtml(text)}</div>`;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function addAssistantBubble(): HTMLDivElement {
+    const row = document.createElement("div");
+    row.className = "flex items-start gap-2.5";
+    row.innerHTML = `${assistantAvatar()}
+      <div class="ai-chat-bubble max-w-[85%] rounded-2xl rounded-tl-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3.5 py-2.5 text-sm text-gray-700 dark:text-gray-200 leading-relaxed shadow-sm"></div>`;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+    return row.querySelector(".ai-chat-bubble") as HTMLDivElement;
+  }
+
+  function addTypingIndicator() {
+    const row = document.createElement("div");
+    row.id = "ai-chat-typing";
+    row.className = "flex items-start gap-2.5";
+    row.innerHTML = `${assistantAvatar()}
+      <div class="rounded-2xl rounded-tl-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm">
+        <div class="flex gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay:0ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay:150ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay:300ms"></span>
+        </div>
+      </div>`;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function removeTypingIndicator() {
+    document.getElementById("ai-chat-typing")?.remove();
+  }
+
+  function setBusy(v: boolean) {
+    busy = v;
+    input.disabled = v;
+    sendBtn.disabled = v;
+    if (!v) input.focus();
+  }
+
+  // ── 案件编号检测 ──────────────────────────────────────
+  function detectCaseId(text: string): string | null {
+    const t = text.trim();
+    // 1. 显式前缀："分析案件 XXX" / "案件分析 XXX"
+    const m1 = t.match(ANALYZE_PREFIX);
+    if (m1) return m1[2];
+    // 2. 纯案件编号
+    const m2 = t.match(CASE_ID_PATTERN);
+    if (m2 && t.length <= 30) return m2[1];
+    return null;
+  }
+
+  // ── 案件分析（脱敏 → 分析 → 反脱敏）────────────────────
+  async function analyzeCase(caseId: string) {
+    setBusy(true);
+    addUserMessage(`分析案件 ${caseId}`);
+    input.value = "";
+    addTypingIndicator();
+
+    const bubble = addAssistantBubble();
+    let answer = "";
+    let statusMsg = "";
+
+    try {
+      const res = await fetch(ANALYZE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ case_id: caseId }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let firstToken = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+          if (data === "[DONE]") break;
+          try {
+            const obj = JSON.parse(data);
+            // 状态消息：更新 typing indicator 文案
+            if (obj.status) {
+              const statusMap: Record<string, string> = {
+                desensitizing: "正在脱敏案件材料…",
+                analyzing: "正在分析案情…",
+                restoring: "正在还原分析结果…",
+              };
+              statusMsg = statusMap[obj.status] || "处理中…";
+              updateTypingText(statusMsg);
+              continue;
+            }
+            if (typeof obj.content === "string") {
+              if (firstToken) {
+                removeTypingIndicator();
+                firstToken = false;
+              }
+              answer += obj.content;
+              bubble.innerHTML = renderContent(answer);
+              scrollToBottom();
+            }
+          } catch {
+            // 忽略不完整的 JSON 片段
+          }
+        }
+      }
+      removeTypingIndicator();
+
+      if (!answer) {
+        throw new Error("empty response");
+      }
+      history.push({ role: "assistant", content: answer });
+    } catch (err) {
+      removeTypingIndicator();
+      bubble.innerHTML =
+        "案件分析服务暂时不可用。请确认案件编号正确，或拨打 <span class=\"font-medium text-gray-900 dark:text-gray-100\">020-83288530</span> 与我们联系。";
+      console.error("[AI Chat] 案件分析失败:", err);
+    } finally {
+      setBusy(false);
+      scrollToBottom();
+    }
+  }
+
+  // 更新 typing indicator 显示状态文案
+  function updateTypingText(text: string) {
+    const typing = document.getElementById("ai-chat-typing");
+    if (!typing) return;
+    const bubble = typing.querySelector("div > div");
+    if (bubble) {
+      bubble.innerHTML = `<span class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(text)}</span>`;
+    }
+  }
+
+  // ── 对话逻辑（SSE 流式）────────────────────────────────
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+
+    // 检测是否为案件分析请求
+    const caseId = detectCaseId(trimmed);
+    if (caseId) {
+      await analyzeCase(caseId);
+      return;
+    }
+
+    setBusy(true);
+    addUserMessage(trimmed);
+    history.push({ role: "user", content: trimmed });
+    input.value = "";
+    addTypingIndicator();
+
+    const bubble = addAssistantBubble();
+    let answer = "";
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let firstToken = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+          if (data === "[DONE]") break;
+          try {
+            const obj = JSON.parse(data);
+            if (typeof obj.content === "string") {
+              if (firstToken) {
+                removeTypingIndicator();
+                firstToken = false;
+              }
+              answer += obj.content;
+              bubble.innerHTML = renderContent(answer);
+              scrollToBottom();
+            }
+          } catch {
+            // 忽略不完整的 JSON 片段
+          }
+        }
+      }
+      removeTypingIndicator();
+
+      if (!answer) {
+        throw new Error("empty response");
+      }
+      history.push({ role: "assistant", content: answer });
+    } catch (err) {
+      removeTypingIndicator();
+      bubble.innerHTML =
+        "抱歉，智能咨询服务暂时不可用。请稍后重试，或拨打 <span class=\"font-medium text-gray-900 dark:text-gray-100\">020-83288530</span> 与我们联系。";
+      console.error("[AI Chat] 请求失败:", err);
+    } finally {
+      setBusy(false);
+      scrollToBottom();
+    }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    send(input.value);
+  });
+
+  suggestionsEl?.querySelectorAll(".ai-chat-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      send((chip as HTMLButtonElement).textContent ?? "");
+    });
+  });
+
+  // ── URL 参数检测：?analyze=C2026-001 → 自动打开并分析 ──
+  (function autoAnalyze() {
+    const params = new URLSearchParams(window.location.search);
+    const caseId = params.get("analyze");
+    if (!caseId) return;
+
+    // remove param from URL without reload
+    const url = new URL(window.location.href);
+    url.searchParams.delete("analyze");
+    window.history.replaceState({}, "", url.toString());
+
+    // wait for DOM + panel to be ready, then open + analyze
+    setTimeout(() => {
+      openPanel();
+      // slight delay for panel animation
+      setTimeout(() => analyzeCase(caseId), 350);
+    }, 300);
+  })();
+</script>

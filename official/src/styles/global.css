@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@source "../layouts/OfficialLayout.astro";
+@source "../pages/**/*.astro";
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: none; /* system font fallback */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

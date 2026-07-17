@@ -1,0 +1,14 @@
+# AI 智能咨询后端依赖
+# 安装: pip install -r requirements.txt
+# 下载慢可使用镜像: pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+
+fastapi>=0.100.0
+uvicorn>=0.23.0
+openai>=1.30.0
+
+# 本地知识库（RAG）
+chromadb>=0.4.0
+fastembed>=0.2.0
+
+# 可选：检索结果重排序（BGE-reranker，缺失时自动降级为混合检索）
+sentence-transformers>=2.2.0
