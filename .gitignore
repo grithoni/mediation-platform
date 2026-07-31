@@ -16,3 +16,7 @@ node_modules/
 .claude/
 .omo/
 #/
+
+# SQLite temporary files
+*.db-shm
+*.db-wal
