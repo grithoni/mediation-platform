@@ -10,6 +10,15 @@ function toggleTheme() {
 }
 
 const { activeMenu, setMenu } = useActiveMenu()
+const router = useRouter()
+
+function handleMenuClick(key: ActiveMenu) {
+  if (key === 'apply') {
+    router.push('/party/apply')
+    return
+  }
+  setMenu(key)
+}
 
 const menuItems: Array<{
   key: ActiveMenu
@@ -17,6 +26,7 @@ const menuItems: Array<{
   label: string
 }> = [
   { key: 'case-entry', icon: 'i-lucide-folder-open', label: '进入我的案件' },
+  { key: 'apply', icon: 'i-lucide-file-plus', label: '提交调解申请' },
   { key: 'create-case', icon: 'i-lucide-plus-circle', label: '创建新的案件' },
 ]
 </script>
@@ -49,7 +59,7 @@ const menuItems: Array<{
         <button
           v-for="item in menuItems"
           :key="item.key"
-          @click="setMenu(item.key)"
+          @click="handleMenuClick(item.key)"
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
           :class="activeMenu === item.key
             ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium'

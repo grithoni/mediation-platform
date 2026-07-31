@@ -128,7 +128,50 @@ export const documents = sqliteTable('documents', {
   mimeType: text('mime_type'),
   size: integer('size'),
   uploadedBy: text('uploaded_by'),
+  // 材料分类: application(调解申请书) | evidence(证据) | identity(身份证明) | authorization(授权委托书)
+  category: text('category').default('application'),
   createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+})
+
+// ============================================================
+// 调解申请详情表 (1:1 关联 cases，方案C迁移：3006 表单数据)
+// ============================================================
+export const caseApplications = sqliteTable('case_applications', {
+  id: text('id').primaryKey(), // 与 caseId 相同（案件号）
+  caseId: text('case_id').notNull().references(() => cases.id),
+  // 申请人信息
+  applicantName: text('applicant_name'),
+  applicantAddress: text('applicant_address'),
+  applicantPostalCode: text('applicant_postal_code'),
+  applicantPhone: text('applicant_phone'),
+  applicantMobile: text('applicant_mobile'),
+  applicantFax: text('applicant_fax'),
+  applicantEmail: text('applicant_email'),
+  applicantOtherContact: text('applicant_other_contact'),
+  // 被申请人信息
+  respondentName: text('respondent_name'),
+  respondentAddress: text('respondent_address'),
+  respondentPostalCode: text('respondent_postal_code'),
+  respondentPhone: text('respondent_phone'),
+  respondentMobile: text('respondent_mobile'),
+  respondentFax: text('respondent_fax'),
+  respondentEmail: text('respondent_email'),
+  respondentOtherContact: text('respondent_other_contact'),
+  // 调解意愿: mutual(各方自愿) | single_party(单方请求)
+  mediationWillingness: text('mediation_willingness'),
+  // 案件信息
+  caseFacts: text('case_facts'),
+  disputeMatters: text('dispute_matters'),
+  mediationDemands: text('mediation_demands'),
+  demandsBasis: text('demands_basis'),
+  // 证据保密声明
+  evidenceConfidential: integer('evidence_confidential', { mode: 'boolean' }).default(false),
+  // 代理人
+  hasAgent: integer('has_agent', { mode: 'boolean' }).default(false),
+  agentName: text('agent_name'),
+  agentDuties: text('agent_duties'),
+  createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  updatedAt: integer('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
 })
 
 // ============================================================

@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { eq, sql } from 'drizzle-orm'
 import { getDb } from '../../database'
-import { cases, documents } from '../../database/schema'
+import { cases, documents, caseApplications } from '../../database/schema'
 import { existsSync, mkdirSync, createWriteStream } from 'node:fs'
 import { resolve } from 'node:path'
 import { createAiWelcomeForCase } from '../../utils/ai-welcome'
@@ -10,6 +10,15 @@ const caseTypeLabels: Record<string, string> = {
   mediation: '申请调解',
   evaluation: '申请中立评估',
   review: '申请争议评审',
+}
+
+// 文件分类 → 表单字段名
+const FILE_CATEGORY_MAP: Record<string, string> = {
+  application_files: 'application', // 调解申请书
+  evidence_files: 'evidence', // 证据材料
+  identity_files: 'identity', // 身份证明
+  authorization_files: 'authorization', // 授权委托书
+  files: 'application', // 兼容旧字段
 }
 
 export default defineEventHandler(async (event) => {
@@ -24,21 +33,35 @@ export default defineEventHandler(async (event) => {
   let respondentName = ''
   let disputeType = ''
   let description = ''
-  const files: Array<{ name: string; data: Buffer; type: string }> = []
+  const files: Array<{ name: string; data: Buffer; type: string; category: string }> = []
+
+  // 完整申请详情字段（方案C）
+  const appFields: Record<string, string> = {}
 
   for (const part of formData) {
-    if (part.name === 'caseType' && part.data) {
-      caseType = part.data.toString('utf-8').trim()
-    } else if (part.name === 'partyName' && part.data) {
-      partyName = part.data.toString('utf-8').trim()
-    } else if (part.name === 'respondentName' && part.data) {
-      respondentName = part.data.toString('utf-8').trim()
-    } else if (part.name === 'disputeType' && part.data) {
-      disputeType = part.data.toString('utf-8').trim()
-    } else if (part.name === 'description' && part.data) {
-      description = part.data.toString('utf-8').trim()
-    } else if (part.name === 'files' && part.filename) {
-      files.push({ name: part.filename, data: part.data, type: part.type || '' })
+    if (!part.data) continue
+    const isFile = part.filename
+    if (isFile) {
+      const category = FILE_CATEGORY_MAP[part.name] || 'application'
+      files.push({ name: part.filename!, data: part.data, type: part.type || '', category })
+      continue
+    }
+    const value = part.data.toString('utf-8').trim()
+    if (part.name === 'caseType') {
+      caseType = value
+    } else if (part.name === 'partyName') {
+      partyName = value
+      appFields.applicantName = value
+    } else if (part.name === 'respondentName') {
+      respondentName = value
+      appFields.respondentName = value
+    } else if (part.name === 'disputeType') {
+      disputeType = value
+    } else if (part.name === 'description') {
+      description = value
+    } else {
+      // 其余文本字段全部收进 appFields（22字段 + 标志位）
+      appFields[part.name] = value
     }
   }
 
@@ -75,19 +98,53 @@ export default defineEventHandler(async (event) => {
   // Atomic: use timestamp suffix to avoid concurrent collision
   const accessCode = '123'
 
-  const caseTitle = disputeType || description || caseTypeLabels[caseType] || '新建案件'
+  const finalTitle = disputeType || appFields.disputeMatters || description || caseTypeLabels[caseType] || '新建案件'
 
   // Create case in database
   db.insert(cases).values({
     id: caseNumber,
     tenantId: 'tenant-default',
-    title: caseTitle,
-    description: description || `${caseTitle} — 当事人自行提交材料`,
-    partyAName: partyName || '当事人',
-    partyBName: respondentName || '待确认',
+    title: finalTitle,
+    description: description || appFields.caseFacts || `${finalTitle} — 当事人自行提交材料`,
+    disputeType: disputeType || null,
+    partyAName: appFields.applicantName || partyName || '当事人',
+    partyBName: appFields.respondentName || respondentName || '待确认',
     status: 'pending',
     accessCode,
     phase: 'intake',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }).run()
+
+  // 写入申请详情（case_applications）
+  db.insert(caseApplications).values({
+    id: caseNumber,
+    caseId: caseNumber,
+    applicantName: appFields.applicantName || null,
+    applicantAddress: appFields.applicantAddress || null,
+    applicantPostalCode: appFields.applicantPostalCode || null,
+    applicantPhone: appFields.applicantPhone || null,
+    applicantMobile: appFields.applicantMobile || null,
+    applicantFax: appFields.applicantFax || null,
+    applicantEmail: appFields.applicantEmail || null,
+    applicantOtherContact: appFields.applicantOtherContact || null,
+    respondentName: appFields.respondentName || null,
+    respondentAddress: appFields.respondentAddress || null,
+    respondentPostalCode: appFields.respondentPostalCode || null,
+    respondentPhone: appFields.respondentPhone || null,
+    respondentMobile: appFields.respondentMobile || null,
+    respondentFax: appFields.respondentFax || null,
+    respondentEmail: appFields.respondentEmail || null,
+    respondentOtherContact: appFields.respondentOtherContact || null,
+    mediationWillingness: appFields.mediationWillingness || null,
+    caseFacts: appFields.caseFacts || null,
+    disputeMatters: appFields.disputeMatters || null,
+    mediationDemands: appFields.mediationDemands || null,
+    demandsBasis: appFields.demandsBasis || null,
+    evidenceConfidential: appFields.evidenceConfidential === 'true',
+    hasAgent: appFields.hasAgent === 'true',
+    agentName: appFields.agentName || null,
+    agentDuties: appFields.agentDuties || null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }).run()
@@ -121,6 +178,7 @@ export default defineEventHandler(async (event) => {
       mimeType: file.type || 'application/octet-stream',
       size: file.data.length,
       uploadedBy: null, // party upload, no mediator ID
+      category: file.category, // application | evidence | identity | authorization
       createdAt: Date.now(),
     }).run()
   }
@@ -136,6 +194,7 @@ export default defineEventHandler(async (event) => {
       caseNumber,
       accessCode,
       fileCount: files.length,
+      applicantName: appFields.applicantName || partyName || '',
     },
   }
 })
