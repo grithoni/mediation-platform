@@ -21,6 +21,11 @@ const FILE_CATEGORY_MAP: Record<string, string> = {
   files: 'application', // 兼容旧字段
 }
 
+// snake_case → camelCase（官网表单字段名如 applicant_name → applicantName）
+function toCamelCase(key: string): string {
+  return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+}
+
 export default defineEventHandler(async (event) => {
   // Parse multipart form data
   const formData = await readMultipartFormData(event)
@@ -61,7 +66,8 @@ export default defineEventHandler(async (event) => {
       description = value
     } else {
       // 其余文本字段全部收进 appFields（22字段 + 标志位）
-      appFields[part.name] = value
+      // 兼容 snake_case 字段名（官网表单），统一转为 camelCase
+      appFields[toCamelCase(part.name)] = value
     }
   }
 
@@ -70,7 +76,8 @@ export default defineEventHandler(async (event) => {
   }
 
   if (files.length === 0) {
-    throw createError({ statusCode: 400, message: '请上传至少一个文件' })
+    // 文件为可选（官网表单不强制上传文件）
+    console.log('[create-case] 未上传文件，纯文本建案')
   }
 
   const db = getDb()

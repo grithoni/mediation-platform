@@ -1,7 +1,7 @@
 import { and, desc, eq, ne, or } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../../database'
-import { cases, messages, documents, sessions } from '../../../database/schema'
+import { cases, messages, documents, sessions, caseApplications } from '../../../database/schema'
 import { verifyPartyAccess } from '../../../utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -42,12 +42,20 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(documents.createdAt))
       .all()
 
+    // 申请详情（调解申请书 22 字段）
+    const application = db
+      .select()
+      .from(caseApplications)
+      .where(eq(caseApplications.caseId, caseNumber))
+      .get()
+
     return {
       success: true,
       data: {
         ...caseData,
         messages: caseMessages,
         documents: caseDocuments,
+        application: application || null,
       },
     }
   }
