@@ -1,6 +1,7 @@
 import { asc, eq, and, ne, or } from 'drizzle-orm'
 import { getDb } from '../../../database'
-import { messages, sessions, cases } from '../../../database/schema'
+import { messages, cases } from '../../../database/schema'
+import { classifyMessageActor, resolvePartySessionToken } from '../../../utils/chat-workflow'
 
 export default defineEventHandler(async (event) => {
   const caseId = getRouterParam(event, 'caseId')
@@ -10,12 +11,15 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
   const query = getQuery(event)
-  const mediator = event.context.mediator
+  const actor = classifyMessageActor({
+    user: event.context.user,
+    mediator: event.context.mediator,
+  })
 
   // Access check: mediator auth OR valid party session
   let hasAccess = false
 
-  if (mediator) {
+  if (actor.kind === 'mediator') {
     // Verify the case belongs to this mediator or they are admin
     const caseData = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (caseData) hasAccess = true
@@ -25,11 +29,7 @@ export default defineEventHandler(async (event) => {
     // Try party session token
     const sessionToken = query.sessionToken as string | undefined
     if (sessionToken) {
-      const session = db
-        .select()
-        .from(sessions)
-        .where(and(eq(sessions.id, sessionToken), eq(sessions.caseId, caseId), eq(sessions.isActive, true)))
-        .get()
+      const session = resolvePartySessionToken(db, { caseId, sessionToken })
       if (session) hasAccess = true
     }
   }
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
 
   // Mediator: hide party↔AI private messages
   // Party: see all messages (their own private AI chat is visible to them)
-  const whereCondition = mediator
+  const whereCondition = actor.kind === 'mediator'
     ? and(
         eq(messages.caseId, caseId),
         or(

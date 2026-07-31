@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { requireAuth } from '~/server/middleware/auth'
 import { createESignService } from '~/server/utils/e-signature'
 import { v4 as uuidv4 } from 'uuid'
+import { phaseAfterSigningStarted } from '~/server/utils/agreement-workflow'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
@@ -120,7 +121,7 @@ export default defineEventHandler(async (event) => {
 
   // 更新案件状态
   await db.update(cases).set({
-    phase: 'signing',
+    phase: phaseAfterSigningStarted(),
     updatedAt: now,
   }).where(eq(cases.id, agreement.caseId)).run()
 

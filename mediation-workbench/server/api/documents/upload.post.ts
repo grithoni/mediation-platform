@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
     path: `uploads/${caseId}/${safeName}`,
     mimeType: fileField.type,
     size: fileField.data.length,
-    uploadedBy: mediator.id,
+    uploadedBy: mediator.userId,
     createdAt: Date.now(),
   }
 

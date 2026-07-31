@@ -3,6 +3,7 @@ import { agreements, cases, caseActivities } from '~/server/database/schema'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '~/server/middleware/auth'
 import { v4 as uuidv4 } from 'uuid'
+import { phaseAfterAgreementApproval } from '~/server/utils/agreement-workflow'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
@@ -64,11 +65,15 @@ export default defineEventHandler(async (event) => {
 
     // 更新案件状态
     await db.update(cases).set({
-      phase: 'signing',
+      phase: phaseAfterAgreementApproval(true),
       updatedAt: now,
     }).where(eq(cases.id, agreement.caseId)).run()
   } else {
     updateData.status = 'pending_approval'
+    await db.update(cases).set({
+      phase: phaseAfterAgreementApproval(false),
+      updatedAt: now,
+    }).where(eq(cases.id, agreement.caseId)).run()
   }
 
   // 更新协议

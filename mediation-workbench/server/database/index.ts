@@ -5,6 +5,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 let _db: ReturnType<typeof drizzle> | null = null
+let _sqlite: Database.Database | null = null
 
 function getDbPath(): string {
   // During Nuxt dev/build, use .data/mediation.db relative to project root
@@ -26,6 +27,104 @@ export function getDb() {
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
 
+  _sqlite = sqlite
   _db = drizzle(sqlite, { schema })
   return _db
+}
+
+export function resetDb() {
+  _db = null
+  if (_sqlite) {
+    _sqlite.close()
+    _sqlite = null
+  }
+}
+
+export function initTestDb() {
+  const db = getDb()
+
+  _sqlite?.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT,
+      role TEXT NOT NULL,
+      name TEXT NOT NULL,
+      username TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cases (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      dispute_type TEXT,
+      amount REAL,
+      party_a_name TEXT NOT NULL,
+      party_b_name TEXT NOT NULL,
+      party_a_contact TEXT,
+      party_b_contact TEXT,
+      party_a_user_id TEXT,
+      party_b_user_id TEXT,
+      claims_summary TEXT,
+      evidence_summary TEXT,
+      phase TEXT NOT NULL DEFAULT 'intake',
+      status TEXT NOT NULL DEFAULT 'pending',
+      mediator_id TEXT,
+      mediator_bound_at INTEGER,
+      mediator_requested_at INTEGER,
+      access_code TEXT NOT NULL,
+      reviewed_by TEXT,
+      reviewed_at INTEGER,
+      review_note TEXT,
+      closed_at INTEGER,
+      close_reason TEXT,
+      dynamic_file_updated_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      party_identifier TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      ended_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS case_dynamic_files (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      party_analysis TEXT,
+      timeline TEXT,
+      dispute_checklist TEXT,
+      positions TEXT,
+      potential_interests TEXT,
+      batna TEXT,
+      issues TEXT,
+      sentiment TEXT,
+      settlement_suggestions TEXT,
+      agent_log TEXT,
+      dialog_turn_count INTEGER DEFAULT 0,
+      dialog_ended INTEGER DEFAULT 0,
+      agent_status TEXT NOT NULL DEFAULT 'pending',
+      agent_analysis TEXT,
+      material_checklist TEXT,
+      agent_updated_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `)
+
+  return db
 }

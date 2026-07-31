@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { isEndDialogIntent } from '../../utils/dialog-intent'
 import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
+import { filterAgentTools } from '../../utils/agent/capabilities'
 
 // ============================================================
 // LLM call function — wraps the mimo model API with tool calling
@@ -25,11 +26,7 @@ async function* llmCall(
 ): AsyncGenerator<string, { content: string; toolCalls: any[] }> {
   // Filter out file/code tools — they fail on bad paths and cause useless loops
   // Only keep: ask_user, update_dynamic_file, update_working_checkpoint, search_legal_knowledge
-  const safeTools = (tools as any[]).filter((t: any) => {
-    const name = t?.function?.name || ''
-    return ['ask_user', 'update_dynamic_file', 'update_working_checkpoint', 'search_legal_knowledge'].includes(name)
-  })
-  tools = safeTools as any
+  tools = filterAgentTools(tools as any) as any
 
   const config = useRuntimeConfig()
 

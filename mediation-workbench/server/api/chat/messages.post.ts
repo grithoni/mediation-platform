@@ -2,9 +2,10 @@
 // POST /api/chat/messages — 发送消息（双方通用）
 // ============================================================
 import { v4 as uuidv4 } from 'uuid'
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { getDb } from '../../database'
-import { messages, cases, sessions } from '../../database/schema'
+import { messages, cases } from '../../database/schema'
+import { classifyMessageActor, resolvePartySessionToken } from '../../utils/chat-workflow'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -23,13 +24,7 @@ export default defineEventHandler(async (event) => {
     // Fallback: check party session token
     if (sessionToken) {
       const db = getDb()
-      const sess = db.select().from(sessions).where(
-        and(
-          eq(sessions.caseId, caseId),
-          eq(sessions.partyIdentifier, sessionToken),
-          eq(sessions.isActive, true),
-        ),
-      ).get()
+      const sess = resolvePartySessionToken(db, { caseId, sessionToken })
       if (!sess) {
         throw createError({ statusCode: 401, message: '会话无效或已过期' })
       }
@@ -47,7 +42,10 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, message: '发送者身份与认证身份不匹配' })
     }
   } else {
-    const authRole = user?.role || mediator?.role || 'party'
+    const actor = classifyMessageActor({ user, mediator })
+    const authRole = actor.kind === 'mediator'
+      ? 'mediator'
+      : (user?.role || mediator?.role || 'party')
     const roleToSenderMap: Record<string, string> = {
       admin: 'mediator',
       case_manager: 'mediator',
