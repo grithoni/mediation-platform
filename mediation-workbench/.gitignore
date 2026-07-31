@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Nuxt build output
+.output
+.nuxt
+dist
+
+# Database
+.data
+*.sqlite
+*.sqlite-journal
+
+# KB model & cache (large, regenerable)
+server/chroma_data
+server/fastembed_cache
+server/kb/__pycache__
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Environment & API keys (模型配置、密钥等敏感信息)
+.env
+.env.local
+.env.*.local
+.env.party
+.env.mediator
+
+# IDE / OS
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+logs
+.claude/launch.json

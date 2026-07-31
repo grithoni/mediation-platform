@@ -40,3 +40,10 @@ case-mcp-server/data/mapping.db
 case-mcp-server/data/.master_key
 mediation-apply/data/mediation.db
 mediation-apply/data/uploads/
+
+# mediation-workbench
+mediation-workbench/node_modules/
+mediation-workbench/.nuxt/
+mediation-workbench/.output/
+mediation-workbench/.data/
+mediation-workbench/.env
