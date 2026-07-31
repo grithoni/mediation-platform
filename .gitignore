@@ -23,3 +23,20 @@ node_modules/
 
 # Local environment files
 *.env
+
+# Python runtime artifacts
+__pycache__/
+*.pyc
+.venv/
+
+# Vector DB / model caches (regenerable)
+ai-consulting/app/chroma_data/
+ai-consulting/app/fastembed_cache/
+
+# Runtime data (regenerable, may contain sensitive case data)
+ai-consulting/data/mapping.db
+ai-consulting/data/.master_key
+case-mcp-server/data/mapping.db
+case-mcp-server/data/.master_key
+mediation-apply/data/mediation.db
+mediation-apply/data/uploads/
