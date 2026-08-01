@@ -33,6 +33,38 @@ const cleanRules = ref<string[]>(['clean_whitespace'])
 const deletingPath = ref('')
 const deleteError = ref('')
 
+// ── 查看原文（仅 .md） ──
+const viewDocOpen = ref(false)
+const viewingDoc = ref<{ fileName: string; content: string } | null>(null)
+const viewing = ref(false)
+const viewError = ref('')
+
+async function viewDoc(path: string) {
+  viewing.value = true
+  viewError.value = ''
+  try {
+    const res = await fetch(`/api/kb/file?path=${encodeURIComponent(path)}`)
+    if (!res.ok) {
+      let msg = '无法读取文件'
+      try {
+        const j = await res.json()
+        msg = j?.message || j?.statusMessage || msg
+      } catch {}
+      throw new Error(msg)
+    }
+    viewingDoc.value = { fileName: fileName(path), content: await res.text() }
+    viewDocOpen.value = true
+  } catch (e: any) {
+    viewError.value = e?.message || '无法读取文件'
+  } finally {
+    viewing.value = false
+  }
+}
+
+function isMd(path: string) {
+  return path.toLowerCase().endsWith('.md')
+}
+
 // ── 检索 ──
 interface KbHit {
   path: string
@@ -332,7 +364,17 @@ onMounted(async () => {
                         </div>
                       </td>
                       <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
-                      <td class="px-4 py-2.5 w-16 text-right">
+                      <td class="px-4 py-2.5 w-24 text-right">
+                        <UButton
+                          v-if="isMd(doc.path)"
+                          icon="i-lucide-eye"
+                          size="xs"
+                          color="gray"
+                          variant="ghost"
+                          :loading="viewing"
+                          title="查看原文"
+                          @click="viewDoc(doc.path)"
+                        />
                         <UButton
                           icon="i-lucide-trash-2"
                           size="xs"
@@ -443,6 +485,28 @@ onMounted(async () => {
           <UButton color="primary" :loading="uploading" :disabled="selectedFiles.length === 0" @click="confirmUpload">
             <UIcon name="i-lucide-upload" class="w-4 h-4" /> 确认上传
           </UButton>
+        </div>
+      </div>
+    </UModal>
+
+    <!-- 查看原文弹窗（仅 .md） -->
+    <UModal v-model="viewDocOpen" :ui="{ width: 'max-w-3xl' }">
+      <div class="p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2 min-w-0">
+            <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500 shrink-0" />
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white truncate">{{ viewingDoc?.fileName }}</h3>
+          </div>
+          <UButton icon="i-lucide-x" color="gray" variant="ghost" size="sm" @click="viewDocOpen = false" />
+        </div>
+        <p v-if="viewError" class="mb-3">
+          <UAlert color="red" :title="viewError" icon="i-lucide-alert-circle" />
+        </p>
+        <div
+          v-if="viewingDoc"
+          class="max-h-[60vh] overflow-y-auto rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-4"
+        >
+          <pre class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300 font-mono">{{ viewingDoc.content }}</pre>
         </div>
       </div>
     </UModal>
