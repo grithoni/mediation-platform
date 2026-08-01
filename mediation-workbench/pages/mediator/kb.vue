@@ -19,19 +19,15 @@ const docListOpen = ref(false)
 const uploadInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const uploadMsg = ref('')
-const uploadMsgType = ref<'success' | 'error'>('success')
+const uploadMsgType = ref<'success' | 'error' | 'warning'>('success')
 const uploadModalOpen = ref(false)
-const selectedFile = ref<File | null>(null)
+const selectedFiles = ref<File[]>([])
 // 分段配置
 const chunkMode = ref<'auto' | 'custom'>('auto')
 const customSeparator = ref('\\n\\n')
 const chunkSize = ref(2000)
 const chunkOverlap = ref(200)
 const cleanRules = ref<string[]>(['clean_whitespace'])
-// 分段预览
-const previewing = ref(false)
-const previewResult = ref<{ chunks: { index: number; content: string; token_count: number }[]; text_length: number; chunk_count: number } | null>(null)
-const previewError = ref('')
 
 // ── 删除 ──
 const deletingPath = ref('')
@@ -100,19 +96,14 @@ async function loadDocs() {
 function openUploadModal() {
   uploadModalOpen.value = true
   uploadMsg.value = ''
-  previewResult.value = null
-  previewError.value = ''
-  // 选择文件后由 onFileSelect 触发预览（自动模式）
+  selectedFiles.value = []
 }
 
 function onFileSelect(e: Event) {
   const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  selectedFile.value = file
-  previewResult.value = null
-  previewError.value = ''
-  if (chunkMode.value === 'auto') previewUpload()
+  const files = input.files
+  if (!files || files.length === 0) return
+  selectedFiles.value = Array.from(files)
 }
 
 // 自定义分隔符：用户输入 \n\n 字面量，转为真实换行符
@@ -123,50 +114,33 @@ function resolvedSeparator() {
   return ''
 }
 
-async function previewUpload() {
-  if (!selectedFile.value) return
-  previewing.value = true
-  previewError.value = ''
-  previewResult.value = null
-  try {
-    const text = await selectedFile.value.text()
-    const res = await $fetch('/api/kb/preview', {
-      method: 'POST',
-      body: {
-        text,
-        chunk_size: chunkSize.value,
-        overlap: chunkOverlap.value,
-        separator: resolvedSeparator(),
-        clean_rules: cleanRules.value.join(','),
-      },
-    })
-    previewResult.value = res as any
-  } catch (e: any) {
-    previewError.value = e?.data?.message || e?.message || '分段预览失败'
-  } finally {
-    previewing.value = false
-  }
-}
-
 async function confirmUpload() {
-  if (!selectedFile.value) return
+  if (selectedFiles.value.length === 0) return
   uploading.value = true
   uploadMsg.value = ''
   try {
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
-    formData.append('chunk_size', String(chunkSize.value))
-    formData.append('overlap', String(chunkOverlap.value))
     const sep = resolvedSeparator()
-    if (sep) formData.append('separator', sep)
-    formData.append('clean_rules', cleanRules.value.join(','))
-    await $fetch('/api/kb/upload', { method: 'POST', body: formData })
-    uploadMsgType.value = 'success'
-    uploadMsg.value = `已上传 ${selectedFile.value.name} 并完成索引`
+    const failed: string[] = []
+    let uploadedCount = 0
+    for (const file of selectedFiles.value) {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('chunk_size', String(chunkSize.value))
+      formData.append('overlap', String(chunkOverlap.value))
+      if (sep) formData.append('separator', sep)
+      formData.append('clean_rules', cleanRules.value.join(','))
+      try {
+        await $fetch('/api/kb/upload', { method: 'POST', body: formData })
+        uploadedCount++
+      } catch (e: any) {
+        failed.push(file.name)
+      }
+    }
+    uploadMsgType.value = failed.length ? 'warning' : 'success'
+    uploadMsg.value = `已上传 ${uploadedCount} 个文件并完成索引` + (failed.length ? `，${failed.length} 个失败：${failed.join('、')}` : '')
     await loadDocs()
     uploadModalOpen.value = false
-    selectedFile.value = null
-    previewResult.value = null
+    selectedFiles.value = []
   } catch (e: any) {
     uploadMsgType.value = 'error'
     uploadMsg.value = e?.data?.message || e?.message || '上传失败'
@@ -249,7 +223,6 @@ onMounted(async () => {
           <div class="flex items-center gap-2">
             <UButton icon="i-lucide-refresh-cw" color="gray" variant="ghost" size="sm" title="刷新列表" :loading="loadingDocs" @click="loadDocs" />
             <UButton icon="i-lucide-upload" color="primary" variant="soft" :loading="uploading" @click="openUploadModal">上传文档</UButton>
-            <input ref="uploadInput" type="file" accept=".md,.txt,.pdf,.doc,.docx,.html,.json,.csv" class="hidden" @change="onFileSelect" />
           </div>
         </div>
 
@@ -400,10 +373,19 @@ onMounted(async () => {
           >
             <UIcon name="i-lucide-file-up" class="w-7 h-7 text-gray-400 mx-auto mb-2" />
             <p class="text-sm text-gray-500 dark:text-gray-400">
-              {{ selectedFile ? selectedFile.name : '点击选择文件（支持 .md/.txt/.pdf/.doc/.docx/.html/.json/.csv）' }}
+              {{ selectedFiles.length ? `已选择 ${selectedFiles.length} 个文件，点击可继续添加` : '点击选择文件（支持多选 .md/.txt/.pdf/.doc/.docx/.html/.json/.csv）' }}
             </p>
           </button>
-          <input ref="uploadInput" type="file" accept=".md,.txt,.pdf,.doc,.docx,.html,.json,.csv" class="hidden" @change="onFileSelect" />
+          <input ref="uploadInput" type="file" multiple accept=".md,.txt,.pdf,.doc,.docx,.html,.json,.csv" class="hidden" @change="onFileSelect" />
+          <ul v-if="selectedFiles.length" class="mt-2 space-y-1">
+            <li v-for="(f, i) in selectedFiles" :key="i" class="flex items-center justify-between px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-300">
+              <span class="flex items-center gap-1.5 min-w-0">
+                <UIcon name="i-lucide-file-text" class="w-3.5 h-3.5 shrink-0" />
+                <span class="truncate">{{ f.name }}</span>
+              </span>
+              <span class="text-gray-400 shrink-0">{{ (f.size / 1024).toFixed(1) }} KB</span>
+            </li>
+          </ul>
         </div>
 
         <!-- 2. 分段设置 -->
@@ -455,50 +437,10 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 4. 分段预览 -->
-        <div class="mb-5">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">④ 分段预览</label>
-            <UButton size="xs" color="gray" variant="soft" icon="i-lucide-eye" :loading="previewing" :disabled="!selectedFile" @click="previewUpload">
-              预览分段
-            </UButton>
-          </div>
-
-          <div v-if="previewError" class="mb-2">
-            <UAlert :title="previewError" color="error" variant="soft" />
-          </div>
-
-          <div
-            v-if="previewResult"
-            class="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden max-h-64 overflow-y-auto"
-          >
-            <div class="bg-gray-50 dark:bg-gray-800/50 px-4 py-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-              共 {{ previewResult.chunk_count }} 个分段（原文 {{ previewResult.text_length }} 字符）
-            </div>
-            <div
-              v-for="chunk in previewResult.chunks.slice(0, 10)"
-              :key="chunk.index"
-              class="px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0"
-            >
-              <div class="flex items-center gap-2 mb-1">
-                <span class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 text-[11px] font-mono">#{{ chunk.index + 1 }}</span>
-                <span class="text-[11px] text-gray-400">{{ chunk.token_count }} 字符</span>
-              </div>
-              <p class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-line line-clamp-4">{{ chunk.content }}</p>
-            </div>
-            <div v-if="previewResult.chunks.length > 10" class="px-4 py-2 text-center text-[11px] text-gray-400">
-              仅显示前 10 个分段，共 {{ previewResult.chunks.length }} 个
-            </div>
-          </div>
-          <p v-else-if="!previewResult && !previewing" class="text-xs text-gray-400 dark:text-gray-500">
-            选择文件后点击「预览分段」，查看内容如何被拆分。
-          </p>
-        </div>
-
-        <!-- 5. 操作按钮 -->
+        <!-- 4. 操作按钮 -->
         <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
           <UButton color="gray" variant="ghost" @click="uploadModalOpen = false">取消</UButton>
-          <UButton color="primary" :loading="uploading" :disabled="!selectedFile" @click="confirmUpload">
+          <UButton color="primary" :loading="uploading" :disabled="selectedFiles.length === 0" @click="confirmUpload">
             <UIcon name="i-lucide-upload" class="w-4 h-4" /> 确认上传
           </UButton>
         </div>
