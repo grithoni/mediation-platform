@@ -13,7 +13,7 @@ interface KbDoc {
 const docs = ref<KbDoc[]>([])
 const loadingDocs = ref(false)
 const docError = ref('')
-const showTree = ref(false)
+const docListOpen = ref(false)
 
 // ── 上传（Dify 风格分段配置） ──
 const uploadInput = ref<HTMLInputElement | null>(null)
@@ -50,18 +50,38 @@ const searched = ref(false)
 const searchError = ref('')
 const searchMode = ref('rerank')
 
-// ── 分类统计（基于真实文档路径计算） ──
-const kbCategories = computed(() => {
-  const cats = [
-    { title: '调解规则与流程', match: ['mediation', 'guide', '02'], icon: 'i-lucide-book-marked', desc: '商事调解流程、立案受理规则、调解指引。' },
-    { title: '机构与中立评估', match: ['institution', '01', 'neutral', '03', 'dispute', '04'], icon: 'i-lucide-building-2', desc: '机构介绍、中立评估（ENE）、争议评审（DRB）。' },
-    { title: '服务与培训', match: ['consulting', '05', 'training', '06'], icon: 'i-lucide-graduation-cap', desc: '咨询服务范围、培训课程。' },
-    { title: '常见问答', match: ['faq', '07'], icon: 'i-lucide-message-circle-question', desc: '高频咨询问题与标准答复。' },
-  ]
-  return cats.map((c) => ({
-    ...c,
-    count: docs.value.filter((d) => c.match.some((m) => d.path.toLowerCase().includes(m))).length,
-  }))
+// ── 分类分组（按文档路径归类） ──
+const CATEGORY_RULES: { title: string; icon: string; match: string[] }[] = [
+  { title: '调解规则与流程', icon: 'i-lucide-book-marked', match: ['mediation', 'guide', '02'] },
+  { title: '机构与中立评估', icon: 'i-lucide-building-2', match: ['institution', '01', 'neutral', '03', 'dispute', '04'] },
+  { title: '服务与培训', icon: 'i-lucide-graduation-cap', match: ['consulting', '05', 'training', '06'] },
+  { title: '常见问答', icon: 'i-lucide-message-circle-question', match: ['faq', '07'] },
+]
+
+function categorize(doc: KbDoc): { title: string; icon: string } {
+  const p = doc.path.toLowerCase()
+  for (const c of CATEGORY_RULES) {
+    if (c.match.some((m) => p.includes(m))) return { title: c.title, icon: c.icon }
+  }
+  return { title: '其他文档', icon: 'i-lucide-folder' }
+}
+
+// 按分类分组（保持分类顺序，未匹配归"其他文档"）
+const docGroups = computed(() => {
+  const order = [...CATEGORY_RULES.map((c) => c.title), '其他文档']
+  const groups: Record<string, KbDoc[]> = {}
+  for (const d of docs.value) {
+    const title = categorize(d).title
+    if (!groups[title]) groups[title] = []
+    groups[title].push(d)
+  }
+  return order
+    .filter((t) => groups[t])
+    .map((title) => ({
+      title,
+      icon: CATEGORY_RULES.find((c) => c.title === title)?.icon || 'i-lucide-folder',
+      docs: groups[title],
+    }))
 })
 
 async function loadDocs() {
@@ -286,89 +306,76 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 分类统计 -->
-        <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">分类统计</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div
-            v-for="item in kbCategories"
-            :key="item.title"
-            class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5"
+        <!-- 文档列表（默认折叠，点击展开按分类显示） -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+          <button
+            class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+            @click="docListOpen = !docListOpen"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-                  <UIcon :name="item.icon" class="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div class="min-w-0">
-                  <div class="text-base font-semibold text-gray-900 dark:text-white">{{ item.title }}</div>
-                  <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{{ item.desc }}</p>
-                </div>
-              </div>
-              <span class="px-2 py-1 rounded-full text-[11px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 shrink-0">{{ item.count }} 篇</span>
+            <div class="flex items-center gap-2">
+              <UIcon :name="docListOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+              <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">文档列表（{{ docs.length }}）</h2>
             </div>
-          </div>
-        </div>
-
-        <!-- 文档列表 -->
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">文档列表（{{ docs.length }}）</h2>
-          <button class="text-xs text-blue-600 dark:text-blue-400 hover:underline" @click="showTree = !showTree">
-            {{ showTree ? '按文档列表显示' : '查看分类树' }}
+            <span class="text-xs text-gray-400 shrink-0">{{ docListOpen ? '点击折叠' : '点击展开' }}</span>
           </button>
-        </div>
 
-        <div v-if="docError" class="mb-4">
-          <UAlert :title="docError" color="error" variant="soft" />
-        </div>
-        <div v-if="deleteError" class="mb-4">
-          <UAlert :title="deleteError" color="error" variant="soft" @close="deleteError = ''" />
-        </div>
+          <div v-if="docListOpen" class="border-t border-gray-100 dark:border-gray-800">
+            <div v-if="docError" class="px-4 py-3">
+              <UAlert :title="docError" color="error" variant="soft" />
+            </div>
+            <div v-if="deleteError" class="px-4 py-3">
+              <UAlert :title="deleteError" color="error" variant="soft" @close="deleteError = ''" />
+            </div>
 
-        <div v-if="loadingDocs" class="flex items-center justify-center py-16">
-          <UIcon name="i-lucide-loader-2" class="w-6 h-6 text-blue-500 animate-spin" />
-        </div>
+            <div v-if="loadingDocs" class="flex items-center justify-center py-16">
+              <UIcon name="i-lucide-loader-2" class="w-6 h-6 text-blue-500 animate-spin" />
+            </div>
 
-        <div v-else-if="docs.length === 0" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-10 text-center">
-          <UIcon name="i-lucide-folder-open" class="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p class="text-sm text-gray-400 dark:text-gray-500">知识库暂无文档，点击右上角「上传文档」添加</p>
-        </div>
+            <div v-else-if="docs.length === 0" class="p-10 text-center">
+              <UIcon name="i-lucide-folder-open" class="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p class="text-sm text-gray-400 dark:text-gray-500">知识库暂无文档，点击右上角「上传文档」添加</p>
+            </div>
 
-        <div v-else class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
-                <th class="px-4 py-3 font-medium">文档名称</th>
-                <th class="px-4 py-3 font-medium w-24">分块数</th>
-                <th class="px-4 py-3 font-medium w-24 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="doc in docs"
-                :key="doc.path"
-                class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-              >
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <UIcon :name="fileIcon(doc.path)" class="w-4 h-4 text-blue-500 shrink-0" />
-                    <span class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ doc.chunks }}</td>
-                <td class="px-4 py-3 text-right">
-                  <UButton
-                    icon="i-lucide-trash-2"
-                    size="xs"
-                    color="red"
-                    variant="ghost"
-                    :loading="deletingPath === doc.path"
-                    title="删除文档"
-                    @click="deleteDoc(doc.path)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
+            <template v-else>
+              <div v-for="group in docGroups" :key="group.title" class="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                <!-- 分类头 -->
+                <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/40">
+                  <UIcon :name="group.icon" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ group.title }}</span>
+                  <span class="px-1.5 py-px rounded-full text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{{ group.docs.length }} 篇</span>
+                </div>
+                <!-- 分类内文档 -->
+                <table class="w-full text-sm">
+                  <tbody>
+                    <tr
+                      v-for="doc in group.docs"
+                      :key="doc.path"
+                      class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                    >
+                      <td class="px-4 py-2.5 pl-8">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <UIcon :name="fileIcon(doc.path)" class="w-4 h-4 text-blue-500 shrink-0" />
+                          <span class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
+                      <td class="px-4 py-2.5 w-16 text-right">
+                        <UButton
+                          icon="i-lucide-trash-2"
+                          size="xs"
+                          color="red"
+                          variant="ghost"
+                          :loading="deletingPath === doc.path"
+                          title="删除文档"
+                          @click="deleteDoc(doc.path)"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
         </div>
       </template>
     </div>
