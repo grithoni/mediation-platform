@@ -56,6 +56,107 @@ def _ensure_deps():
 MAX_CHUNK_CHARS = 2000
 CHUNK_OVERLAP = 200
 
+
+# ── Text cleaning (Dify-style preprocessing) ──────────────
+
+_URL_RE = re.compile(r'https?://[^\s<>"\'()]+')
+_EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
+_WS_SPECIAL = {'\t', '\f', '\u00a0', '\u2007', '\u202f', '\u3000'}
+
+
+def clean_text(text: str, clean_rules: list[str] | None = None) -> str:
+    """Apply Dify-style text preprocessing rules.
+
+    Rules (subset of Dify 文本预处理):
+      - clean_whitespace: collapse 3+ consecutive newlines to 2, multiple
+        spaces to one, tabs/form-feeds/special unicode spaces to plain space.
+      - remove_urls: delete all URLs.
+      - remove_emails: delete all email addresses.
+    Unknown rules are ignored. Returns the cleaned text.
+    """
+    if not clean_rules:
+        return text
+
+    rules = set(clean_rules or [])
+
+    if 'remove_urls' in rules:
+        text = _URL_RE.sub('', text)
+    if 'remove_emails' in rules:
+        text = _EMAIL_RE.sub('', text)
+    if 'clean_whitespace' in rules:
+        # special unicode spaces / tabs / form feeds -> plain space
+        for ch in _WS_SPECIAL:
+            text = text.replace(ch, ' ')
+        # collapse runs of 3+ newlines to 2
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        # collapse runs of 2+ spaces to 1
+        text = re.sub(r' {2,}', ' ', text)
+
+    return text.strip()
+
+
+def split_text_by_separator(text: str, separator: str | None) -> list[str]:
+    """Split text on a separator. Keeps the separator attached to the
+    previous segment (like Dify, separators are removed from the split,
+    here we keep them so content is not lost). If separator is empty,
+    returns the whole text as a single segment.
+    """
+    sep = separator or ''
+    if not sep:
+        return [text] if text.strip() else []
+    parts = text.split(sep)
+    segments = []
+    for i, part in enumerate(parts):
+        piece = part
+        if i < len(parts) - 1:
+            piece = part + sep
+        if piece.strip():
+            segments.append(piece)
+    return segments
+
+
+def chunk_text(text: str, chunk_size: int | None = None,
+               overlap: int | None = None,
+               separator: str | None = None,
+               clean_rules: list[str] | None = None) -> list[str]:
+    """Chunk text with configurable size / overlap / separator / cleaning.
+
+    Returns a list of chunk strings (already cleaned). Used by both the
+    indexer and the /preview endpoint.
+    """
+    size = chunk_size or MAX_CHUNK_CHARS
+    ovl = overlap if overlap is not None else CHUNK_OVERLAP
+    ovl = max(0, min(ovl, size // 2))
+
+    text = clean_text(text, clean_rules)
+    if not text:
+        return []
+
+    if len(text) <= size:
+        return [text]
+
+    # First split on separator, then enforce max size with overlap.
+    segments = split_text_by_separator(text, separator)
+    merged: list[str] = []
+    buf = ''
+    for seg in segments:
+        if not buf:
+            buf = seg
+        elif len(buf) + len(seg) <= size:
+            buf += seg
+        else:
+            merged.append(buf)
+            buf = seg
+        # A single segment may still exceed the max size
+        while len(buf) > size:
+            merged.append(buf[:size])
+            buf = buf[size - ovl:] if ovl else buf[size:]
+    if buf:
+        merged.append(buf)
+
+    return merged
+
+
 TEXT_EXTENSIONS = {
     '.txt', '.md', '.py', '.js', '.ts', '.json', '.yaml', '.yml',
     '.toml', '.cfg', '.ini', '.csv', '.html', '.css', '.xml', '.sql',
@@ -283,7 +384,8 @@ class LocalKB:
 
     # ── Indexing ─────────────────────────────────────────
 
-    def index(self, path, recursive=True, glob_pattern=None):
+    def index(self, path, recursive=True, glob_pattern=None,
+              chunk_size=None, overlap=None, separator=None, clean_rules=None):
         self._ensure_collection()
         t0 = time.time()
 
@@ -293,7 +395,8 @@ class LocalKB:
         indexed, skipped, errors = 0, 0, []
         for fpath in files:
             try:
-                chunks = self._chunk_file(fpath)
+                chunks = self._chunk_file(fpath, chunk_size, overlap,
+                                          separator, clean_rules)
                 if not chunks:
                     skipped += 1
                     continue
@@ -336,7 +439,8 @@ class LocalKB:
         ext = os.path.splitext(filename)[1].lower()
         return ext in TEXT_EXTENSIONS
 
-    def _chunk_file(self, fpath):
+    def _chunk_file(self, fpath, chunk_size=None, overlap=None,
+                    separator=None, clean_rules=None):
         try:
             with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
                 text = f.read()
@@ -344,32 +448,52 @@ class LocalKB:
             return []
 
         mtime = os.path.getmtime(fpath)
-        if len(text) <= MAX_CHUNK_CHARS:
-            doc_id = self._make_doc_id(fpath, 0)
-            return [ChunkDocument(
-                doc_id=doc_id, content=text, source_path=fpath,
-                chunk_index=0, total_chunks=1, file_mtime=mtime,
-                token_count=len(text),
-            )]
+        pieces = chunk_text(text, chunk_size, overlap, separator, clean_rules)
+        if not pieces:
+            return []
 
-        chunks = []
-        start = 0
-        while start < len(text):
-            end = min(start + MAX_CHUNK_CHARS, len(text))
-            chunk_text = text[start:end]
-            chunks.append(ChunkDocument(
-                doc_id=self._make_doc_id(fpath, len(chunks)),
-                content=chunk_text, source_path=fpath,
-                chunk_index=len(chunks), file_mtime=mtime,
-                token_count=len(chunk_text),
-            ))
-            if end >= len(text):
-                break
-            start = end - CHUNK_OVERLAP
-
+        chunks = [ChunkDocument(
+            doc_id=self._make_doc_id(fpath, i),
+            content=piece, source_path=fpath,
+            chunk_index=i, file_mtime=mtime,
+            token_count=len(piece),
+        ) for i, piece in enumerate(pieces)]
         for c in chunks:
             c.total_chunks = len(chunks)
         return chunks
+
+    def preview(self, file_path=None, text=None, chunk_size=None,
+                overlap=None, separator=None, clean_rules=None) -> dict:
+        """Preview how a file/text would be chunked (no persistence).
+
+        Either file_path or text must be provided.
+        Returns {"success": bool, "chunks": [{"index", "content", "token_count"}],
+                 "text_length": int, "chunk_count": int, "message": str|None}
+        """
+        if text is None and file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    text = f.read()
+            except Exception as e:
+                return {"success": False, "chunks": [],
+                        "text_length": 0, "chunk_count": 0,
+                        "message": f"无法读取文件: {e}"}
+        if not text:
+            return {"success": False, "chunks": [],
+                    "text_length": 0, "chunk_count": 0,
+                    "message": "文本为空"}
+
+        pieces = chunk_text(text, chunk_size, overlap, separator, clean_rules)
+        return {
+            "success": True,
+            "chunks": [
+                {"index": i, "content": piece, "token_count": len(piece)}
+                for i, piece in enumerate(pieces)
+            ],
+            "text_length": len(text),
+            "chunk_count": len(pieces),
+            "message": None,
+        }
 
     @staticmethod
     def _make_doc_id(path, chunk_idx):

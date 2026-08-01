@@ -52,14 +52,14 @@ def get_kb():
 # FastAPI app
 # ============================================================
 try:
-    from fastapi import FastAPI, UploadFile, File
+    from fastapi import FastAPI, UploadFile, File, Form
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
 except ImportError:
     print("Installing fastapi/uvicorn...")
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "fastapi", "uvicorn", "python-multipart"])
-    from fastapi import FastAPI, UploadFile, File
+    from fastapi import FastAPI, UploadFile, File, Form
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
 
@@ -147,7 +147,17 @@ def rerank_status():
     return {"available": available}
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: UploadFile = File(...),
+                 chunk_size: int = Form(0),
+                 overlap: int = Form(-1),
+                 separator: str = Form(""),
+                 clean_rules: str = Form("")):
+    """Upload a document. Optional Dify-style chunking config:
+      - chunk_size: max chars per chunk (0 = engine default 2000)
+      - overlap: overlap chars (-1 = engine default 200)
+      - separator: text separator for pre-splitting ('' = whole-text)
+      - clean_rules: comma-separated list, e.g. "clean_whitespace,remove_urls,remove_emails"
+    """
     k = get_kb()
     if k is None:
         return _deps_error_response("文档上传")
@@ -155,8 +165,47 @@ async def upload(file: UploadFile = File(...)):
     path = os.path.join(UPLOAD_DIR, file.filename or "uploaded_file")
     with open(path, "wb") as f:
         f.write(await file.read())
-    k.index(UPLOAD_DIR, glob_pattern="*")
-    return {"success": True, "path": path}
+
+    rules = [r.strip() for r in clean_rules.split(",") if r.strip()]
+    kwargs = {}
+    if chunk_size and chunk_size > 0:
+        kwargs["chunk_size"] = chunk_size
+    if overlap >= 0:
+        kwargs["overlap"] = overlap
+    if separator:
+        kwargs["separator"] = separator
+    if rules:
+        kwargs["clean_rules"] = rules
+
+    result = k.index(UPLOAD_DIR, glob_pattern="*", **kwargs)
+    return {"success": True, "path": path, "index": result}
+
+class PreviewRequest(BaseModel):
+    text: str = ""
+    chunk_size: int = 0
+    overlap: int = -1
+    separator: str = ""
+    clean_rules: str = ""
+
+@app.post("/preview")
+def preview_document(body: PreviewRequest):
+    """Preview how text would be chunked (no persistence).
+    Returns {"success", "chunks": [{index, content, token_count}], ...}.
+    """
+    k = get_kb()
+    if k is None:
+        return _deps_error_response("分段预览")
+    rules = [r.strip() for r in body.clean_rules.split(",") if r.strip()]
+    kwargs = {}
+    if body.chunk_size and body.chunk_size > 0:
+        kwargs["chunk_size"] = body.chunk_size
+    if body.overlap >= 0:
+        kwargs["overlap"] = body.overlap
+    if body.separator:
+        kwargs["separator"] = body.separator
+    if rules:
+        kwargs["clean_rules"] = rules
+    return k.preview(text=body.text, **kwargs)
 
 @app.post("/upload-key")
 async def upload_key(file: UploadFile = File(...)):

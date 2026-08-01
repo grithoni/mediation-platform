@@ -9,8 +9,8 @@ import time
 from typing import Optional
 
 # ── Cache config ──────────────────────────────────────────
-# Reuse the model cache from reranker-serve to avoid re-downloading
-_RERANKER_CACHE = os.path.expanduser("~/projects/reranker-serve/hf_cache")
+# Project-local HF cache (embedding & reranker models copied into the repo)
+_RERANKER_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'hf_cache')
 os.environ.setdefault("HF_HOME", _RERANKER_CACHE)
 os.environ.setdefault("HF_HUB_OFFLINE", "1")  # Use cached model only
 
