@@ -47,3 +47,8 @@ mediation-workbench/.nuxt/
 mediation-workbench/.output/
 mediation-workbench/.data/
 mediation-workbench/.env
+
+# KB model caches (offline)
+mediation-workbench/server/fastembed_cache/
+mediation-workbench/server/hf_cache/
+mediation-workbench/server/chroma_data/
