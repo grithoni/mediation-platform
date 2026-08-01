@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 调解员工作台 — 案件管理
+// 调解员工作台 — 我的案件
 const { user, isAuthenticated, login, fetchUser, getAuthHeaders, isLoading } = useAuth()
 
 // ── 登录态管理 ──
@@ -104,51 +104,81 @@ const filteredCases = computed(() => {
   return list
 })
 
-const smartAgentSteps = [
-  '读取案件材料与调解申请书',
-  '使用本地模型执行脱敏',
-  '调用云端大模型按 skills 分析',
-  '反脱敏后回写案件分析与补正清单',
-]
-
-const agentModules = [
-  {
-    title: '案情概要',
-    desc: '先把人物、金额、时间、争议点收拢成一张可读的案件底图。',
-    state: '材料进入后自动生成',
-  },
-  {
-    title: '请求权基础',
-    desc: '围绕调解主张拆解请求路径、成立要件和关键事实。',
-    state: '本地脱敏后进入云端 skills',
-  },
-  {
-    title: '证据清单',
-    desc: '把现有材料映射到待证事实，并指出缺口与补正方向。',
-    state: '反脱敏后回写工作台',
-  },
-  {
-    title: '调解建议',
-    desc: '基于双方立场、争议焦点和材料强弱给出谈判抓手。',
-    state: '后续可扩展为推荐方案',
-  },
-]
-
 function fmtTime(ts: number | null | undefined): string {
   if (!ts) return '-'
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+
+// ══════════════════════════════════════════════════════════
+// 案件工作台：接入的大模型 + AI 对话框
+// ══════════════════════════════════════════════════════════
+interface ChatMsg {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+const activeCaseId = ref('')
+const chatMessages = ref<ChatMsg[]>([])
+const chatInput = ref('')
+const chatSending = ref(false)
+const chatError = ref('')
+
+const modelName = 'deepseek-v4-flash' // 已接入的大模型
+const modelProvider = 'DeepSeek'
+
+watch(
+  () => cases.value,
+  (list) => {
+    if (list.length > 0 && !list.some((c) => c.id === activeCaseId.value)) {
+      activeCaseId.value = list[0].id
+    }
+  },
+  { immediate: true },
+)
+
+async function sendChat() {
+  const text = chatInput.value.trim()
+  if (!text || chatSending.value) return
+  if (!activeCaseId.value) {
+    chatError.value = '请先选择案件'
+    return
+  }
+  chatError.value = ''
+  chatMessages.value.push({ role: 'user', content: text })
+  chatInput.value = ''
+  chatSending.value = true
+  try {
+    const data = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/ai', {
+      method: 'POST',
+      body: {
+        caseId: activeCaseId.value,
+        message: text,
+        senderIdentifier: `mediator-${user.value?.username || 'anonymous'}`,
+      },
+    })
+    chatMessages.value.push({ role: 'assistant', content: data.data?.content || '（无回复）' })
+  } catch (err: any) {
+    chatError.value = err?.data?.message || err?.message || '发送失败'
+  } finally {
+    chatSending.value = false
+  }
+}
+
+function resetChat() {
+  chatMessages.value = []
+  chatError.value = ''
+}
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto">
+  <div class="flex-1 min-w-0 flex flex-col">
     <!-- ── 未登录：登录卡片 ── -->
     <div v-if="checking" class="flex items-center justify-center py-32">
       <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-blue-500 animate-spin" />
     </div>
 
-    <div v-else-if="!isAuthenticated" class="max-w-md mx-auto mt-16">
+    <div v-else-if="!isAuthenticated" class="max-w-md mx-auto mt-16 px-6">
       <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 shadow-sm">
         <div class="flex items-center gap-3 mb-6">
           <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
@@ -182,198 +212,186 @@ function fmtTime(ts: number | null | undefined): string {
     </div>
 
     <!-- ── 已登录但角色不符 ── -->
-    <div v-else-if="!roleOk" class="max-w-md mx-auto mt-16">
+    <div v-else-if="!roleOk" class="max-w-md mx-auto mt-16 px-6">
       <UAlert color="error" variant="soft" title="无调解员权限" :description="`当前账号（${user?.name} / ${user?.role}）无法访问调解员工作台`" />
     </div>
 
-    <!-- ── 已登录：案件管理 ── -->
-    <div v-else>
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">案件管理</h1>
-          <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">共 {{ filteredCases.length }} 个案件 · 调解员 {{ user?.name }}</p>
-        </div>
-        <UButton icon="i-lucide-refresh-cw" color="gray" variant="soft" :loading="loadingCases" @click="loadCases">
-          刷新
-        </UButton>
-      </div>
-
-      <div class="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-[linear-gradient(135deg,#f8fafc_0%,#eef6ff_48%,#f8fafc_100%)] dark:bg-[linear-gradient(135deg,#0f172a_0%,#111827_48%,#0f172a_100%)] p-6 md:p-8 mb-6 overflow-hidden relative">
-        <div class="absolute right-0 top-0 w-48 h-48 rounded-full bg-blue-200/30 dark:bg-blue-500/10 blur-3xl pointer-events-none" />
-        <div class="absolute left-20 bottom-0 w-40 h-40 rounded-full bg-cyan-200/20 dark:bg-cyan-500/10 blur-3xl pointer-events-none" />
-
-        <div class="relative flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/80 dark:bg-slate-900/80 border border-blue-100 dark:border-slate-700 text-xs text-blue-700 dark:text-blue-300 mb-4">
-              <UIcon name="i-lucide-sparkles" class="w-3.5 h-3.5" />调解智能中枢
-            </div>
-            <h2 class="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white flex items-center gap-3">
-              <UIcon name="i-lucide-bot" class="w-6 h-6 text-blue-500" />案件工作台
-            </h2>
-          </div>
-          <div class="grid grid-cols-2 gap-3 shrink-0 min-w-[220px]">
-            <div class="px-4 py-3 rounded-2xl bg-white/85 dark:bg-slate-900/85 border border-slate-200 dark:border-slate-700">
-              <div class="text-xs text-slate-500 dark:text-slate-400">当前案件数</div>
-              <div class="text-2xl font-bold text-slate-900 dark:text-white mt-1">{{ cases.length }}</div>
-            </div>
-            <div class="px-4 py-3 rounded-2xl bg-white/85 dark:bg-slate-900/85 border border-slate-200 dark:border-slate-700">
-              <div class="text-xs text-slate-500 dark:text-slate-400">智能体状态</div>
-              <div class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mt-2">已接入</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="relative grid grid-cols-1 md:grid-cols-4 gap-3 mt-6">
-          <div
-            v-for="step in smartAgentSteps"
-            :key="step"
-            class="rounded-2xl border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur p-4"
-          >
-            <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-lucide-check-circle-2" class="w-4 h-4 text-green-500" />
-              <span class="text-sm font-medium text-slate-900 dark:text-white">流程节点</span>
-            </div>
-            <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{{ step }}</p>
-          </div>
-        </div>
-
-        <div
-          v-if="filteredCases.length === 0"
-          class="relative mt-6 rounded-2xl border border-dashed border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 p-5"
-        >
-          <div class="flex items-start gap-3">
-            <UIcon name="i-lucide-info" class="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+    <!-- ── 已登录：案件工作台 + AI 对话框 ── -->
+    <div v-else class="flex-1 min-w-0 flex flex-col">
+      <!-- 上方案件工作台 -->
+      <div class="flex-1 min-w-0 overflow-y-auto p-6">
+        <div class="max-w-7xl mx-auto">
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-6">
             <div>
-              <p class="text-sm font-medium text-amber-800 dark:text-amber-200">当前没有可进入的案件</p>
+              <h1 class="text-2xl font-bold text-gray-900 dark:text-white">案件工作台</h1>
+              <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">共 {{ filteredCases.length }} 个案件 · 调解员 {{ user?.name }}</p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-6 mb-6">
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-6">
-          <div class="flex items-center justify-between gap-3 mb-5">
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">智能体研判模块</h3>
-            </div>
-            <div class="text-xs text-gray-400 dark:text-gray-500">模块化输出</div>
+            <UButton icon="i-lucide-refresh-cw" color="gray" variant="soft" :loading="loadingCases" @click="loadCases">
+              刷新
+            </UButton>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Filters -->
+          <div class="flex items-center gap-3 mb-5">
+            <UInput v-model="searchQuery" placeholder="搜索案号 / 标题 / 当事人" icon="i-lucide-search" class="flex-1 max-w-sm" />
+            <USelect
+              v-model="statusFilter"
+              :options="[
+                { label: '全部状态', value: 'all' },
+                { label: '待处理', value: 'pending' },
+                { label: '进行中', value: 'active' },
+                { label: '已解决', value: 'resolved' },
+                { label: '已关闭', value: 'closed' },
+              ]"
+              class="w-36"
+            />
+          </div>
+
+          <UAlert v-if="loadError" color="error" variant="soft" :title="loadError" class="mb-4" />
+
+          <!-- Cases Grid -->
+          <div v-if="loadingCases && cases.length === 0" class="flex items-center justify-center py-24">
+            <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-blue-500 animate-spin" />
+          </div>
+
+          <div v-else-if="filteredCases.length === 0" class="text-center py-24">
+            <UIcon name="i-lucide-inbox" class="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+            <p class="text-gray-400 dark:text-gray-500 text-sm">暂无案件</p>
+          </div>
+
+          <div v-else class="grid grid-cols-1 gap-4">
             <div
-              v-for="item in agentModules"
-              :key="item.title"
-              class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5"
+              v-for="c in filteredCases"
+              :key="c.id"
+              class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
             >
-              <div class="flex items-center justify-between gap-3 mb-3">
-                <div class="text-base font-semibold text-slate-900 dark:text-white">{{ item.title }}</div>
-                <span class="px-2 py-1 rounded-full text-[11px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">已规划</span>
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{{ c.id }}</span>
+                    <span
+                      class="px-2 py-0.5 rounded-full text-xs font-medium"
+                      :class="{
+                        'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300': c.status === 'pending',
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': c.status === 'active',
+                        'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': c.status === 'resolved',
+                        'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400': c.status === 'closed',
+                      }"
+                    >
+                      {{ statusLabels[c.status || 'pending'] || c.status }}
+                    </span>
+                    <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                      {{ phaseLabels[c.phase || ''] || c.phase || '收件' }}
+                    </span>
+                  </div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{{ c.title || '未命名案件' }}</h3>
+                  <div class="flex items-center gap-3 mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+                    <span class="flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3.5 h-3.5" />{{ c.partyAName || '当事人' }}</span>
+                    <span class="text-gray-300 dark:text-gray-600">vs</span>
+                    <span class="flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3.5 h-3.5" />{{ c.partyBName || '待确认' }}</span>
+                  </div>
+                </div>
+                <div class="shrink-0 text-right flex flex-col items-end gap-2">
+                  <div class="text-xs text-gray-400 dark:text-gray-500">提交于 {{ fmtTime(c.createdAt) }}</div>
+                  <UButton
+                    size="sm"
+                    color="gray"
+                    variant="soft"
+                    icon="i-lucide-arrow-right"
+                    :to="`/mediator/cases/${c.id}`"
+                  >
+                    查看
+                  </UButton>
+                </div>
               </div>
-              <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">{{ item.desc }}</p>
-              <div class="text-xs text-slate-400 dark:text-slate-500">{{ item.state }}</div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="bg-[#0f172a] border border-slate-800 rounded-3xl p-6 text-white overflow-hidden relative">
-          <div class="absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.35),transparent_60%)] pointer-events-none" />
-          <div class="relative">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs text-blue-200 mb-4">
-              <UIcon name="i-lucide-shield" class="w-3.5 h-3.5" />安全分析链
+      <!-- 下方：AI 对话框 + 接入的大模型 -->
+      <div class="shrink-0 h-[340px] border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+        <!-- Dialog header -->
+        <div class="h-12 px-5 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="relative">
+              <div class="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                <UIcon name="i-lucide-bot" class="w-4 h-4 text-white" />
+              </div>
+              <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-900" />
             </div>
-            <h3 class="text-xl font-semibold leading-snug">本地脱敏 → 云端分析 → 结果回写</h3>
-
-            <div class="space-y-3 mt-6">
-              <div class="rounded-2xl bg-white/5 border border-white/10 p-4">
-                <div class="text-xs text-slate-400">输入</div>
-                <div class="text-sm font-medium mt-1">官网提交材料、申请书、证据附件</div>
-              </div>
-              <div class="rounded-2xl bg-white/5 border border-white/10 p-4">
-                <div class="text-xs text-slate-400">处理中枢</div>
-                <div class="text-sm font-medium mt-1">本地模型脱敏 + 云端 skills 编排 + MCP 工具协同</div>
-              </div>
-              <div class="rounded-2xl bg-white/5 border border-white/10 p-4">
-                <div class="text-xs text-slate-400">输出</div>
-                <div class="text-sm font-medium mt-1">案件分析、材料补正清单、调解员后续操作入口</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filters -->
-      <div class="flex items-center gap-3 mb-5">
-        <UInput v-model="searchQuery" placeholder="搜索案号 / 标题 / 当事人" icon="i-lucide-search" class="flex-1 max-w-sm" />
-        <USelect
-          v-model="statusFilter"
-          :options="[
-            { label: '全部状态', value: 'all' },
-            { label: '待处理', value: 'pending' },
-            { label: '进行中', value: 'active' },
-            { label: '已解决', value: 'resolved' },
-            { label: '已关闭', value: 'closed' },
-          ]"
-          class="w-36"
-        />
-      </div>
-
-      <UAlert v-if="loadError" color="error" variant="soft" :title="loadError" class="mb-4" />
-
-      <!-- Cases Grid -->
-      <div v-if="loadingCases && cases.length === 0" class="flex items-center justify-center py-24">
-        <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-blue-500 animate-spin" />
-      </div>
-
-      <div v-else-if="filteredCases.length === 0" class="text-center py-24">
-        <UIcon name="i-lucide-inbox" class="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-        <p class="text-gray-400 dark:text-gray-500 text-sm">暂无案件</p>
-      </div>
-
-      <div v-else class="grid grid-cols-1 gap-4">
-        <div
-          v-for="c in filteredCases"
-          :key="c.id"
-          class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-        >
-          <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{{ c.id }}</span>
-                <span
-                  class="px-2 py-0.5 rounded-full text-xs font-medium"
-                  :class="{
-                    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300': c.status === 'pending',
-                    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': c.status === 'active',
-                    'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': c.status === 'resolved',
-                    'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400': c.status === 'closed',
-                  }"
-                >
-                  {{ statusLabels[c.status || 'pending'] || c.status }}
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                  {{ phaseLabels[c.phase || ''] || c.phase || '收件' }}
-                </span>
-              </div>
-              <h3 class="text-base font-semibold text-gray-900 dark:text-white truncate">{{ c.title || '未命名案件' }}</h3>
-              <div class="flex items-center gap-3 mt-1.5 text-sm text-gray-500 dark:text-gray-400">
-                <span class="flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3.5 h-3.5" />{{ c.partyAName || '当事人' }}</span>
-                <span class="text-gray-300 dark:text-gray-600">vs</span>
-                <span class="flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3.5 h-3.5" />{{ c.partyBName || '待确认' }}</span>
+              <div class="text-sm font-semibold text-gray-900 dark:text-white">智能调解助手</div>
+              <div class="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+                <span>已接入</span>
+                <span class="px-1.5 py-px rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-mono">{{ modelProvider }} {{ modelName }}</span>
               </div>
             </div>
-            <div class="shrink-0 text-right">
-              <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">提交于 {{ fmtTime(c.createdAt) }}</div>
-              <UButton
-                size="sm"
-                color="gray"
-                variant="soft"
-                icon="i-lucide-arrow-right"
-                :to="`/mediator/cases/${c.id}`"
-              >
-                查看
-              </UButton>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <USelect
+              v-model="activeCaseId"
+              :options="cases.map((c) => ({ label: `${c.id} · ${c.partyAName || ''} vs ${c.partyBName || ''}`, value: c.id }))"
+              placeholder="选择案件"
+              class="w-56"
+              size="xs"
+            />
+            <UButton icon="i-lucide-rotate-ccw" size="xs" color="gray" variant="ghost" title="清空对话" @click="resetChat" />
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
+          <div v-if="chatMessages.length === 0" class="h-full flex items-center justify-center">
+            <p class="text-sm text-gray-400 dark:text-gray-500">选择案件后，可向 AI 助手咨询调解建议、争议焦点分析等</p>
+          </div>
+          <div
+            v-for="(msg, i) in chatMessages"
+            :key="i"
+            class="flex"
+            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+          >
+            <div
+              class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+              :class="msg.role === 'user'
+                ? 'bg-blue-600 text-white rounded-br-md'
+                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-md'"
+            >
+              {{ msg.content }}
             </div>
+          </div>
+          <div v-if="chatSending" class="flex justify-start">
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-md px-4 py-2.5">
+              <div class="flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" />
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0.15s]" />
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0.3s]" />
+              </div>
+            </div>
+          </div>
+          <UAlert v-if="chatError" color="error" variant="soft" :title="chatError" size="sm" />
+        </div>
+
+        <!-- Input -->
+        <div class="shrink-0 px-4 py-3 border-t border-gray-100 dark:border-gray-800">
+          <div class="flex items-center gap-2">
+            <UInput
+              v-model="chatInput"
+              placeholder="输入消息，向 AI 助手提问…"
+              class="flex-1"
+              :disabled="chatSending"
+              @keyup.enter="sendChat"
+            />
+            <UButton
+              icon="i-lucide-send"
+              color="primary"
+              :loading="chatSending"
+              :disabled="!chatInput.trim() || !activeCaseId"
+              @click="sendChat"
+            >
+              发送
+            </UButton>
           </div>
         </div>
       </div>
