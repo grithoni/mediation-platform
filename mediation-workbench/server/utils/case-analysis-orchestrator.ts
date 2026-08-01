@@ -186,6 +186,50 @@ export async function runDesensitizedSkillWorkflow(options: WorkflowRunOptions) 
   const analyzeWithCloudSkills = options.analyzeWithCloudSkills || defaultCloudSkillAnalysis
 
   const desensitized = await desensitize(options.materials)
+
+  // Persist mapping to central MappingStore via Python CLI if available.
+  // If a caller already supplied a traceId (for tests or external stores), preserve it.
+  if (!desensitized.traceId) {
+    try {
+      const script = resolve(process.cwd(), 'case-mcp-server', 'cli_save_mapping.py')
+      const payload = {
+        case_id: (options as any).caseNumber || (options as any).caseId || 'TEXT',
+        mapping: desensitized.mapping || {},
+        categories: desensitized.mapping ? Object.fromEntries(Object.keys(desensitized.mapping).map(k => [k, desensitized.mapping[k]])) : {},
+      }
+      try {
+        const out = execSync(`python3 "${script}"`, { input: JSON.stringify(payload), encoding: 'utf-8', timeout: 20000 })
+        if (out) {
+          try {
+            const parsed = JSON.parse(String(out))
+            if (parsed.trace_id) {
+              desensitized.traceId = parsed.trace_id
+            }
+          } catch (e) {
+            console.warn('[persistMapping] parse output failed:', e)
+          }
+        }
+      } catch (e: any) {
+        console.warn('[persistMapping] CLI call failed:', e?.message || e)
+        // Fallback: persist mapping to local file (unencrypted) with restrictive permissions.
+        try {
+          const fs = await import('node:fs')
+          const path = resolve(process.cwd(), 'data', 'mappings')
+          await fs.promises.mkdir(path, { recursive: true })
+          const trace = `local-${Date.now()}`
+          const filepath = resolve(path, `${trace}.json`)
+          await fs.promises.writeFile(filepath, JSON.stringify({ payload, trace }, null, 2), { encoding: 'utf-8', mode: 0o600 })
+          console.warn(`[persistMapping] persisted fallback mapping to ${filepath}`)
+          desensitized.traceId = trace
+        } catch (e2: any) {
+          console.warn('[persistMapping] fallback persist failed:', e2?.message || e2)
+        }
+      }
+    } catch (e: any) {
+      console.warn('[persistMapping] prepare failed:', e?.message || e)
+    }
+  }
+
   const cloudOutput = await analyzeWithCloudSkills({
     analysisType: options.analysisType,
     maskedMaterials: desensitized.maskedText,

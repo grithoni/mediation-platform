@@ -15,6 +15,11 @@ const ENABLED_AGENT_TOOL_NAMES = [
   'read_docx',
   'file_patch',
   'file_write',
+  'query_case_materials',
+  'desensitize_case_materials',
+  'analyze_with_mediation_skills',
+  'restore_analysis_result',
+  'writeback_case_analysis',
 ] as const
 
 export function getAgentEnabledToolNames(): string[] {

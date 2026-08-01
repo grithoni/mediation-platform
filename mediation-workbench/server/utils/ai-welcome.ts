@@ -69,29 +69,35 @@ export async function createAiWelcomeForCase(caseNumber: string): Promise<void> 
     '每条问题20-60字，必须具体指出缺失什么材料。',
   ].filter(Boolean).join('\n')
 
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey as string }
-  if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl as string
-  const openai = createOpenAI(openaiOptions)
-
-  const result = await generateText({
-    model: openai((config.openaiModel as string) || 'deepseek-v4-pro'),
-    system: '你是仲裁材料审查助手。只输出JSON。',
-    messages: [{ role: 'user' as const, content: reviewPrompt }],
-    temperature: 0.3,
-    maxTokens: 500,
-  })
+  // Use desensitized workflow to avoid sending PII to cloud models.
+  // Leverage the orchestrator's runDesensitizedSkillWorkflow which handles masking -> cloud call -> restore.
+  const { runDesensitizedSkillWorkflow } = await import('./case-analysis-orchestrator')
 
   let issues: string[] = []
   try {
-    const jsonMatch = result.text.trim().match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0])
-      issues = (parsed.issues || []).slice(0, 4)
+    const workflowResult = await runDesensitizedSkillWorkflow({
+      analysisType: 'dynamic_file',
+      materials: fileContent,
+      partyNames: [caseData.partyAName, caseData.partyBName].filter(Boolean),
+      addresses: [],
+      prompt: reviewPrompt,
+      system: '你是仲裁材料审查助手。只输出JSON。',
+    })
+
+    const restored = (workflowResult.restoredOutput || workflowResult.rawOutput || '').trim()
+    try {
+      const jsonMatch = restored.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        issues = (parsed.issues || []).slice(0, 4)
+      }
+    } catch {
+      issues = restored.split(/\n/).filter((l: string) => l.trim()).slice(0, 4)
     }
-  } catch {
-    issues = result.text.split(/\n/).filter((l: string) => l.trim()).slice(0, 4)
+  } catch (err: any) {
+    console.warn(`[createAiWelcome] desensitized workflow failed: ${err?.message || err}`)
+    // Fail-safe: do not call cloud model with raw PII. Leave issues empty so UI asks for manual review.
+    issues = []
   }
   console.log(`[createAiWelcome] ${caseNumber}: 提取到 ${issues.length} 个问题`)
 

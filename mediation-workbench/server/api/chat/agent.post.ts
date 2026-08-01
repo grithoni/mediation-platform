@@ -9,20 +9,21 @@ import { cases, messages, caseDynamicFiles } from '../../database/schema'
 import { eq } from 'drizzle-orm'
 import { runAgentLoop } from '../../utils/agent/loop'
 import { buildSystemPrompt } from '../../utils/agent/system-prompt'
-import type { AgentMessage } from '../../utils/agent/types'
-import { AGENT_TOOLS } from '../../utils/agent/tools'
+import type { AgentMessage, ToolDefinition } from '../../utils/agent/types'
+import { AGENT_TOOLS, TOOL_HANDLERS } from '../../utils/agent/tools'
 import { v4 as uuidv4 } from 'uuid'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { isEndDialogIntent } from '../../utils/dialog-intent'
 import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
 import { filterAgentTools } from '../../utils/agent/capabilities'
+import { buildMediationToolCatalog, buildMediationToolHandlers } from '../../utils/mediation-agent'
 
 // ============================================================
 // LLM call function — wraps the mimo model API with tool calling
 // ============================================================
 async function* llmCall(
   messages: AgentMessage[],
-  tools: typeof AGENT_TOOLS
+  tools: ToolDefinition[]
 ): AsyncGenerator<string, { content: string; toolCalls: any[] }> {
   // Filter out file/code tools — they fail on bad paths and cause useless loops
   // Only keep: ask_user, update_dynamic_file, update_working_checkpoint, search_legal_knowledge
@@ -452,6 +453,19 @@ ${message}
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        const mediationTools = buildMediationToolCatalog() as unknown as ToolDefinition[]
+        const combinedTools = [...AGENT_TOOLS, ...mediationTools]
+        const combinedHandlers = {
+          ...TOOL_HANDLERS,
+          ...buildMediationToolHandlers(caseId, {
+            materials: '',
+            traceId: '',
+            maskedMaterials: '',
+            mapping: {},
+            restoredResult: '',
+          }),
+        }
+
         const agentGen = runAgentLoop({
           systemPrompt,
           userInput,
@@ -459,6 +473,8 @@ ${message}
           workDir,
           maxTurns: agentMode === 'autonomous' ? 20 : 15,
           sessionId: `ag-${caseId}-${Date.now()}`,
+          tools: combinedTools,
+          handlers: combinedHandlers as any,
           llmCall,
         })
 

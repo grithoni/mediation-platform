@@ -7,6 +7,14 @@ const caseNumber = route.params.caseNumber as string
 const caseData = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
+const runningAgent = ref(false)
+const agentError = ref('')
+const agentStatus = ref<'pending' | 'processing' | 'done'>('pending')
+const agentAnalysis = ref('')
+const materialChecklist = ref('')
+const agentUpdatedAt = ref<number | null>(null)
+const analysisStatus = ref<Record<string, { done: boolean; generatedAt?: number }>>({})
+let agentPollTimer: ReturnType<typeof setInterval> | null = null
 
 const phaseLabels: Record<string, string> = {
   intake: '收件', reviewing: '审查中', screening: '甄别中', accepted: '已受理',
@@ -48,9 +56,80 @@ function fmtTime(ts: number | null | undefined): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const analysisCards = computed(() => ([
+  { key: 'claim_basis', label: '请求权基础分析' },
+  { key: 'evidence_checklist', label: '证据清单分析' },
+  { key: 'anticipate_defense', label: '预判抗辩' },
+  { key: 'recommend_solution', label: '调解方案建议' },
+]))
+
 // 文件预览（图片直接打开，其余下载）— 需登录认证（/api/cases/:caseNumber/file?name=xxx）
 function fileUrl(name: string): string {
   return `/api/cases/${caseNumber}/file?name=${encodeURIComponent(name)}`
+}
+
+async function loadAgentPanel() {
+  try {
+    const [analysisResp, statusResp] = await Promise.all([
+      $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/analysis`, {
+        headers: getAuthHeaders(),
+      }),
+      $fetch<{ success: boolean; data: Record<string, { done: boolean; generatedAt?: number }> }>(`/api/cases/${caseNumber}/analysis-status`, {
+        headers: getAuthHeaders(),
+      }),
+    ])
+
+    if (analysisResp?.success && analysisResp.data) {
+      agentStatus.value = analysisResp.data.agentStatus || 'pending'
+      agentAnalysis.value = analysisResp.data.agentAnalysis || ''
+      materialChecklist.value = analysisResp.data.materialChecklist || ''
+      agentUpdatedAt.value = analysisResp.data.agentUpdatedAt || null
+    }
+
+    if (statusResp?.success) {
+      analysisStatus.value = statusResp.data || {}
+    }
+
+    if (agentStatus.value === 'done') {
+      stopAgentPolling()
+      runningAgent.value = false
+    }
+  } catch (err: any) {
+    agentError.value = err?.data?.message || err?.message || '加载智能体分析状态失败'
+    stopAgentPolling()
+    runningAgent.value = false
+  }
+}
+
+function startAgentPolling() {
+  if (agentPollTimer) return
+  agentPollTimer = setInterval(() => {
+    loadAgentPanel().catch(() => {})
+  }, 5000)
+}
+
+function stopAgentPolling() {
+  if (agentPollTimer) {
+    clearInterval(agentPollTimer)
+    agentPollTimer = null
+  }
+}
+
+async function runAgentAnalysis() {
+  runningAgent.value = true
+  agentError.value = ''
+  try {
+    await $fetch(`/api/cases/${caseNumber}/agent-run`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    })
+    agentStatus.value = 'processing'
+    await loadAgentPanel()
+    startAgentPolling()
+  } catch (err: any) {
+    runningAgent.value = false
+    agentError.value = err?.data?.message || err?.message || '启动调解智能体失败'
+  }
 }
 
 onMounted(async () => {
@@ -59,11 +138,17 @@ onMounted(async () => {
       headers: getAuthHeaders(),
     })
     caseData.value = data.data
+    await loadAgentPanel()
+    if (agentStatus.value === 'processing') startAgentPolling()
   } catch (err: any) {
     error.value = err?.data?.message || err?.message || '加载案件失败'
   } finally {
     loading.value = false
   }
+})
+
+onUnmounted(() => {
+  stopAgentPolling()
 })
 </script>
 
@@ -255,6 +340,102 @@ onMounted(async () => {
               <span class="text-xs text-gray-400 dark:text-gray-500">{{ fmtTime(msg.createdAt) }}</span>
             </div>
             <p class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{{ msg.content }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 调解智能体 -->
+      <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+        <div class="flex items-start justify-between gap-4 flex-wrap mb-5">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <UIcon name="i-lucide-bot" class="w-4 h-4 text-blue-500" />调解智能体
+            </h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              按“读取材料 → 本地脱敏 → 云端 skills 分析 → 反脱敏 → 回写结果”执行
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span
+              class="px-2.5 py-1 rounded-full text-xs font-medium"
+              :class="{
+                'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300': agentStatus === 'pending',
+                'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': agentStatus === 'processing',
+                'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': agentStatus === 'done',
+              }"
+            >
+              {{ agentStatus === 'pending' ? '待分析' : agentStatus === 'processing' ? '分析中' : '已完成' }}
+            </span>
+            <UButton
+              color="primary"
+              icon="i-lucide-play"
+              :loading="runningAgent"
+              @click="runAgentAnalysis"
+            >
+              {{ agentStatus === 'done' ? '重新分析' : '开始分析' }}
+            </UButton>
+          </div>
+        </div>
+
+        <UAlert
+          v-if="agentError"
+          color="error"
+          variant="soft"
+          :title="agentError"
+          class="mb-4"
+        />
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+          <div
+            v-for="item in analysisCards"
+            :key="item.key"
+            class="rounded-lg border p-4"
+            :class="analysisStatus[item.key]?.done
+              ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/40'
+              : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm font-medium text-gray-900 dark:text-white">{{ item.label }}</span>
+              <UIcon
+                :name="analysisStatus[item.key]?.done ? 'i-lucide-check-circle-2' : 'i-lucide-clock-3'"
+                class="w-4 h-4"
+                :class="analysisStatus[item.key]?.done ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'"
+              />
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {{ analysisStatus[item.key]?.done ? `完成于 ${fmtTime(analysisStatus[item.key]?.generatedAt)}` : '尚未生成' }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="agentStatus === 'processing'" class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 p-4 mb-5">
+          <div class="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            智能体正在分析案件材料，页面会自动刷新分析状态。
+          </div>
+        </div>
+
+        <div v-if="agentUpdatedAt" class="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          最近更新：{{ fmtTime(agentUpdatedAt) }}
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <UIcon name="i-lucide-file-search" class="w-4 h-4 text-blue-500" />
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">案件分析</h3>
+            </div>
+            <p v-if="agentAnalysis" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ agentAnalysis }}</p>
+            <p v-else class="text-sm text-gray-400 dark:text-gray-500">尚未生成案件分析结果。</p>
+          </div>
+
+          <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <UIcon name="i-lucide-list-checks" class="w-4 h-4 text-blue-500" />
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">材料补正清单</h3>
+            </div>
+            <p v-if="materialChecklist" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ materialChecklist }}</p>
+            <p v-else class="text-sm text-gray-400 dark:text-gray-500">尚未生成材料补正清单。</p>
           </div>
         </div>
       </div>

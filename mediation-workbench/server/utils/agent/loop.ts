@@ -1,10 +1,9 @@
 // ============================================================
-// Agent Execution Loop — Multi-turn autonomous agent
-// Ported from GenericAgent agent_loop.py (agent_runner_loop)
+// Agent Execution Loop — delegates to extracted GenericAgent-style core
 // ============================================================
-import type { ToolCall, AgentMessage, AgentProgress, StepOutcome } from './types'
+import { runGaAgentLoop } from '../ga-core/loop'
 import { AGENT_TOOLS, TOOL_HANDLERS } from './tools'
-import { buildMemoryContext, setWorkingCheckpoint } from './memory'
+import type { ToolCall, AgentMessage, AgentProgress, StepOutcome, ToolDefinition } from './types'
 
 interface AgentLoopOptions {
   systemPrompt: string
@@ -13,264 +12,36 @@ interface AgentLoopOptions {
   workDir: string
   maxTurns?: number
   sessionId?: string
+  tools?: ToolDefinition[]
+  handlers?: Record<string, (args: Record<string, unknown>, ctx: any) => AsyncGenerator<string, StepOutcome> | Promise<StepOutcome> | StepOutcome>
   llmCall: (
     messages: AgentMessage[],
-    tools: typeof AGENT_TOOLS
+    tools: ToolDefinition[],
   ) => AsyncGenerator<string, { content: string; toolCalls: ToolCall[] }, unknown>
 }
 
-type LLMResult = { content: string; toolCalls: ToolCall[] }
-
-/**
- * Run the autonomous agent execution loop.
- * Yields AgentProgress events for streaming to frontend.
- */
 export async function* runAgentLoop(options: AgentLoopOptions): AsyncGenerator<AgentProgress> {
   const {
     systemPrompt,
     userInput,
     caseId,
     workDir,
-    maxTurns = 40,
-    sessionId = `agent-${caseId}-${Date.now()}`,
+    maxTurns,
+    sessionId,
+    tools,
+    handlers,
     llmCall,
   } = options
 
-  let checkpoint = ''
-
-  const messages: AgentMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userInput },
-  ]
-
-  let turn = 0
-  let fullResponse = ''
-  let exitReason: string | null = null
-  let consecutiveToolTurns = 0
-  const MAX_CONSECUTIVE_TOOL_TURNS = 3
-
-  while (turn < maxTurns) {
-    turn++
-
-    yield { type: 'thinking', turn, content: `思考中... (第 ${turn} 轮)` }
-
-    // Inject working checkpoint into system prompt each turn
-    const memoryContext = buildMemoryContext(sessionId)
-    if (memoryContext && messages[0]) {
-      messages[0].content = systemPrompt + '\n' + memoryContext
-    }
-
-    // Call LLM — iterate generator to forward streaming tokens
-    let llmContent = ''
-    let toolCalls: ToolCall[] = []
-
-    // After too many consecutive tool-only turns, force text generation by removing tools
-    const effectiveTools = consecutiveToolTurns >= MAX_CONSECUTIVE_TOOL_TURNS ? [] : AGENT_TOOLS
-
-    try {
-      const gen = llmCall(messages, effectiveTools)
-      let iterResult = await gen.next()
-
-      // Intermediate yields = streaming text tokens → forward to frontend
-      while (!iterResult.done) {
-        const token = iterResult.value as string
-        if (token) {
-          fullResponse += token
-          yield { type: 'text', content: token }
-        }
-        iterResult = await gen.next()
-      }
-
-      // Final return value = { content, toolCalls }
-      const llmResult = iterResult.value as LLMResult
-      llmContent = llmResult.content
-      // If we disabled tools to force text generation, ignore any tool calls the LLM emitted
-      toolCalls = effectiveTools.length > 0 ? llmResult.toolCalls : []
-    } catch (err: any) {
-      yield { type: 'error', content: `LLM 调用失败: ${err.message}` }
-      exitReason = `LLM_ERROR: ${err.message}`
-      break
-    }
-
-    // Reconcile: llmContent may contain text not yielded as tokens (e.g. tool_use blocks).
-    // Ensure fullResponse reflects the complete LLM output.
-    if (llmContent && llmContent.length > fullResponse.length) {
-      fullResponse = llmContent
-    }
-
-    // If no tool calls, task is complete
-    if (toolCalls.length === 0) {
-      exitReason = 'TASK_DONE'
-      break
-    }
-
-    // Track consecutive tool-only turns (no text generated)
-    if (!llmContent && toolCalls.length > 0) {
-      consecutiveToolTurns++
-    } else {
-      consecutiveToolTurns = 0
-    }
-
-    // Process tool calls
-    const toolResults: Array<{ tool_call_id: string; content: string }> = []
-    const nextPrompts: string[] = []
-
-    for (let i = 0; i < toolCalls.length; i++) {
-      const tc = toolCalls[i]!
-      const { toolName, args, id } = tc
-
-      const handler = TOOL_HANDLERS[toolName]
-      if (!handler) {
-        yield {
-          type: 'error',
-          content: `未知工具: ${toolName}`,
-          toolName,
-          toolArgs: args,
-        }
-        nextPrompts.push(`未知工具 ${toolName}，请使用可用工具列表中的工具。`)
-        continue
-      }
-
-      yield {
-        type: 'tool_call',
-        turn,
-        toolName,
-        toolArgs: args,
-      }
-
-      const ctx = {
-        caseId,
-        workDir,
-        maxTurns,
-        currentTurn: turn,
-        workingCheckpoint: checkpoint,
-        fullResponse,
-        stopRequested: false,
-      }
-
-      let outcome: StepOutcome
-      try {
-        const handlerGen = handler(args, ctx)
-        outcome = await exhaustGenerator(handlerGen)
-      } catch (err: any) {
-        outcome = {
-          data: `工具执行错误: ${err.message}`,
-          nextPrompt: `工具 ${toolName} 执行失败 (${err.message})。请检查参数或尝试其他方式。`,
-        }
-      }
-
-      // Update working checkpoint from handler side effects
-      if (ctx.workingCheckpoint !== checkpoint) {
-        checkpoint = ctx.workingCheckpoint
-        setWorkingCheckpoint(sessionId, checkpoint)
-      }
-
-      // Yield tool result
-      const dataStr =
-        typeof outcome.data === 'object' && outcome.data !== null
-          ? JSON.stringify(outcome.data, null, 2)
-          : String(outcome.data)
-
-      yield {
-        type: 'tool_result',
-        toolName,
-        content: dataStr,
-        data: outcome.data,
-      }
-
-      // Track tool result for LLM
-      if (id) {
-        toolResults.push({
-          tool_call_id: id,
-          content: dataStr,
-        })
-      }
-
-      // Handle exit conditions
-      if (outcome.shouldExit) {
-        exitReason = 'ASK_USER'
-        yield {
-          type: 'done',
-          content: outcome.nextPrompt || '',
-          data: {
-            exitReason: 'ASK_USER',
-            question: outcome.data,
-          },
-        }
-        return
-      }
-
-      if (!outcome.nextPrompt) {
-        // Don't break — remaining parallel tool calls still need to execute.
-        // Mark exit condition; it takes effect after all tool calls are processed.
-        exitReason = 'CURRENT_TASK_DONE'
-      } else {
-        nextPrompts.push(outcome.nextPrompt)
-      }
-    }
-
-    if (exitReason) {
-      break
-    }
-
-    // Build next user message with tool results
-    let nextContent = nextPrompts.length > 0 ? nextPrompts.join('\n') : '请继续执行任务。'
-
-    // Force text generation after too many consecutive tool-only turns
-    if (consecutiveToolTurns >= MAX_CONSECUTIVE_TOOL_TURNS) {
-      nextContent += `\n\n[HINT] 您已连续${consecutiveToolTurns}轮仅使用工具未生成文字回复。请基于已收集的信息直接生成完整的文字回复给用户，不要再调用工具。用户需要看到您的分析和建议。`
-    }
-
-    // ============================================================
-    // Turn escalation warnings (ported from GenericAgent ga.py)
-    // ============================================================
-    if (turn >= 7 && turn % 7 === 0) {
-      nextContent += `\n\n[DANGER] 已连续执行第 ${turn} 轮。禁止无效重试。若无有效进展，必须切换策略：1. 探测物理边界 2. 请求用户协助。如有需要，可调用 update_working_checkpoint 保存关键上下文。`
-    }
-    if (turn >= 30 && turn % 10 === 0) {
-      nextContent += `\n\n[DANGER] 已接近最大轮次 (${maxTurns})。必须总结当前进展，调用 ask_user 向用户汇报并确认是否继续。`
-    }
-    if (turn >= 15 && exitReason === null && turn % 3 === 0) {
-      nextContent += `\n\n[HINT] 长任务进行中 (${turn} 轮)。如发现值得长期记忆的信息（避坑经验、环境配置），可调用 start_long_term_update。`
-    }
-
-    const nextMessage: AgentMessage = {
-      role: 'user',
-      content: nextContent,
-    }
-
-    // Attach tool results if using native tool calling
-    if (toolResults.length > 0) {
-      ;(nextMessage as any).tool_results = toolResults
-    }
-
-    messages.push(nextMessage)
-  }
-
-  if (!exitReason) {
-    exitReason = 'MAX_TURNS_EXCEEDED'
-  }
-
-  yield {
-    type: 'done',
-    content: fullResponse,
-    data: { exitReason, turns: turn, workingCheckpoint: checkpoint },
-  }
+  yield* runGaAgentLoop({
+    systemPrompt,
+    userInput,
+    caseId,
+    workDir,
+    maxTurns,
+    sessionId,
+    tools: (tools || AGENT_TOOLS) as any,
+    handlers: (handlers || TOOL_HANDLERS) as any,
+    llmCall: llmCall as any,
+  }) as AsyncGenerator<AgentProgress>
 }
-
-// ============================================================
-// Generator helpers
-// ============================================================
-
-/** Advance an async generator to completion, yielding all intermediate values */
-async function exhaustGenerator<T, R>(
-  gen: AsyncGenerator<T, R, unknown>
-): Promise<R> {
-  let result: IteratorResult<T, R>
-  do {
-    result = await gen.next()
-  } while (!result.done)
-  return result.value as R
-}
-
-
