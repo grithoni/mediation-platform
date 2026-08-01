@@ -43,7 +43,11 @@ async function viewDoc(path: string) {
   viewing.value = true
   viewError.value = ''
   try {
-    const res = await fetch(`/api/kb/file?path=${encodeURIComponent(path)}`)
+    // 带超时控制，避免请求挂起导致点击无反馈
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 15000)
+    const res = await fetch(`/api/kb/file?path=${encodeURIComponent(path)}`, { signal: ctrl.signal })
+    clearTimeout(timer)
     if (!res.ok) {
       let msg = '无法读取文件'
       try {
@@ -55,7 +59,7 @@ async function viewDoc(path: string) {
     viewingDoc.value = { fileName: fileName(path), content: await res.text() }
     viewDocOpen.value = true
   } catch (e: any) {
-    viewError.value = e?.message || '无法读取文件'
+    viewError.value = e?.name === 'AbortError' ? '读取超时，请重试' : e?.message || '无法读取文件'
     // 打开弹窗显示错误，避免点击无反馈
     viewingDoc.value = { fileName: fileName(path), content: '' }
     viewDocOpen.value = true
