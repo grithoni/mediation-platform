@@ -4,7 +4,7 @@ const { user, isAuthenticated, fetchUser } = useAuth()
 const checking = ref(true)
 const roleOk = ref(false)
 
-const skillCards = [
+const skillCards = ref([
   {
     title: '案情概要生成',
     desc: '读取案件材料，把人物、金额、时间、争议点收拢成一张可读的案件底图。',
@@ -29,12 +29,29 @@ const skillCards = [
     state: '待启用',
     icon: 'i-lucide-lightbulb',
   },
-]
+])
+
+async function refreshSkillStates() {
+  try {
+    const res = await $fetch('/api/skills')
+    const list = (res as any)?.skills || []
+    const enabledNames = new Set(list.filter((s: any) => s.enabled).map((s: any) => s.name))
+    // update skillCards
+    skillCards.value = skillCards.value.map(card => ({
+      ...card,
+      state: enabledNames.has(card.title) ? '已启用' : '待启用',
+    }))
+  } catch (e) {
+    // ignore auth errors here — user may not be logged in yet
+    // leave states as-is
+  }
+}
 
 onMounted(async () => {
   await fetchUser()
   checking.value = false
   roleOk.value = ['mediator', 'case_manager', 'admin'].includes(user.value?.role || '')
+  if (roleOk.value) await refreshSkillStates()
 })
 </script>
 

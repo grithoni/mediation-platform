@@ -33,13 +33,13 @@ function saveMeta(list: SkillMeta[]) {
 }
 
 export default defineEventHandler(async (event) => {
-  const mediator = requireAuth(event)
-
+  // Allow unauthenticated GET so the UI can list skills without forcing auth here.
   if (event.method === 'GET') {
     return { success: true, skills: loadMeta() }
   }
 
   if (event.method === 'POST') {
+    const mediator = requireAuth(event)
     if (!existsSync(SKILLS_DIR)) mkdirSync(SKILLS_DIR, { recursive: true })
     const body = await readMultipartFormData(event)
     if (!body) throw createError({ statusCode: 400, message: '未收到文件' })

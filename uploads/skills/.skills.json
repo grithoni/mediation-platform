@@ -1,0 +1,6 @@
+[
+  { "id": "summary-generation", "dirName": "summary-generation", "name": "案情概要生成", "enabled": true },
+  { "id": "claim-basis", "dirName": "claim-basis", "name": "请求权基础分析", "enabled": true },
+  { "id": "evidence-checklist", "dirName": "evidence-checklist", "name": "证据清单与缺口", "enabled": true },
+  { "id": "recommendation-generation", "dirName": "recommendation-generation", "name": "调解建议生成", "enabled": true }
+]

@@ -38,31 +38,25 @@ const viewDocOpen = ref(false)
 const viewingDoc = ref<{ fileName: string; content: string } | null>(null)
 const viewing = ref(false)
 const viewError = ref('')
+// inline-expanded docs: path -> content
+const expandedDocs = ref<Record<string, string>>({})
 
 async function viewDoc(path: string) {
-  viewing.value = true
+  // Toggle inline expansion: collapse if already expanded
   viewError.value = ''
+  if (expandedDocs.value[path]) {
+    delete expandedDocs.value[path]
+    // ensure reactivity
+    expandedDocs.value = { ...expandedDocs.value }
+    return
+  }
+  viewing.value = true
   try {
-    // 带超时控制，避免请求挂起导致点击无反馈
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 15000)
-    const res = await fetch(`/api/kb/file?path=${encodeURIComponent(path)}`, { signal: ctrl.signal })
-    clearTimeout(timer)
-    if (!res.ok) {
-      let msg = '无法读取文件'
-      try {
-        const j = await res.json()
-        msg = j?.message || j?.statusMessage || msg
-      } catch {}
-      throw new Error(msg)
-    }
-    viewingDoc.value = { fileName: fileName(path), content: await res.text() }
-    viewDocOpen.value = true
+    const content = await $fetch('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000 }) as string
+    expandedDocs.value = { ...expandedDocs.value, [path]: content }
   } catch (e: any) {
-    viewError.value = e?.name === 'AbortError' ? '读取超时，请重试' : e?.message || '无法读取文件'
-    // 打开弹窗显示错误，避免点击无反馈
-    viewingDoc.value = { fileName: fileName(path), content: '' }
-    viewDocOpen.value = true
+    viewError.value = e?.data?.message || e?.message || '无法读取文件'
+    expandedDocs.value = { ...expandedDocs.value, [path]: '' }
   } finally {
     viewing.value = false
   }
@@ -359,48 +353,55 @@ onMounted(async () => {
                 <!-- 分类内文档 -->
                 <table class="w-full text-sm">
                   <tbody>
-                    <tr
-                      v-for="doc in group.docs"
-                      :key="doc.path"
-                      class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-                    >
-                      <td class="px-4 py-2.5 pl-8">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <UIcon :name="fileIcon(doc.path)" class="w-4 h-4 text-blue-500 shrink-0" />
-                          <button
+                    <template v-for="doc in group.docs" :key="doc.path">
+                      <tr
+                        class="border-b border-gray-50 dark:border-gray-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                      >
+                        <td class="px-4 py-2.5 pl-8">
+                          <div class="flex items-center gap-2 min-w-0">
+                            <UIcon :name="fileIcon(doc.path)" class="w-4 h-4 text-blue-500 shrink-0" />
+                            <button
+                              v-if="isMd(doc.path)"
+                              class="truncate text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left min-w-0"
+                              :title="'查看原文：' + fileName(doc.path)"
+                              @click="viewDoc(doc.path)"
+                            >
+                              {{ fileName(doc.path) }}
+                            </button>
+                            <span v-else class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
+                          </div>
+                        </td>
+                        <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
+                        <td class="px-4 py-2.5 w-24 text-right">
+                          <UButton
                             v-if="isMd(doc.path)"
-                            class="truncate text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left min-w-0"
-                            :title="'查看原文：' + fileName(doc.path)"
+                            icon="i-lucide-eye"
+                            size="xs"
+                            color="gray"
+                            variant="ghost"
+                            :loading="viewing"
+                            title="查看原文"
                             @click="viewDoc(doc.path)"
-                          >
-                            {{ fileName(doc.path) }}
-                          </button>
-                          <span v-else class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
-                        </div>
-                      </td>
-                      <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
-                      <td class="px-4 py-2.5 w-24 text-right">
-                        <UButton
-                          v-if="isMd(doc.path)"
-                          icon="i-lucide-eye"
-                          size="xs"
-                          color="gray"
-                          variant="ghost"
-                          :loading="viewing"
-                          title="查看原文"
-                          @click="viewDoc(doc.path)"
-                        />
-                        <UButton
-                          icon="i-lucide-trash-2"
-                          size="xs"
-                          color="red"
-                          variant="ghost"
-                          :loading="deletingPath === doc.path"
-                          title="删除文档"
-                          @click="deleteDoc(doc.path)"
-                        />
-                      </td>
-                    </tr>
+                          />
+                          <UButton
+                            icon="i-lucide-trash-2"
+                            size="xs"
+                            color="red"
+                            variant="ghost"
+                            :loading="deletingPath === doc.path"
+                            title="删除文档"
+                            @click="deleteDoc(doc.path)"
+                          />
+                        </td>
+                      </tr>
+                      <tr v-if="expandedDocs[doc.path]" class="bg-white dark:bg-gray-900/70">
+                        <td colspan="3" class="px-6 py-3 border-b border-gray-100 dark:border-gray-800">
+                          <div class="max-h-[40vh] overflow-y-auto rounded-md bg-gray-50 dark:bg-gray-800/60 p-3">
+                            <pre class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300 font-mono">{{ expandedDocs[doc.path] }}</pre>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
                   </tbody>
                 </table>
               </div>

@@ -3,7 +3,7 @@
 // 查看知识库中的 .md 文档原文（支持 .data/kb/docs/ 与 .data/kb/uploads/）
 // 仅允许 .md 文件，其他格式不支持
 // ============================================================
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { resolve, relative, normalize, isAbsolute } from 'path'
 
 export default defineEventHandler(async (event) => {
@@ -22,20 +22,70 @@ export default defineEventHandler(async (event) => {
   let resolvedPath: string | null = null
   if (isAbsolute(filePath)) {
     const norm = normalize(filePath)
-    for (const root of allowedRoots) {
-      const rel = relative(root, norm)
-      if (!rel.startsWith('..') && !rel.startsWith('/')) {
-        resolvedPath = norm
-        break
+    // Allow absolute paths that are under the project root (common for engine-indexed files)
+    const projectRoot = resolve(process.cwd())
+    if (norm.startsWith(projectRoot + '/')) {
+      resolvedPath = norm
+    } else {
+      // Fallback to allowed KB roots for backward compatibility
+      for (const root of allowedRoots) {
+        const rel = relative(root, norm)
+        if (!rel.startsWith('..') && !rel.startsWith('/')) {
+          resolvedPath = norm
+          break
+        }
       }
     }
   } else {
+    // Try resolving under allowed KB roots first (normal case)
     for (const root of allowedRoots) {
       const candidate = resolve(root, filePath)
       const rel = relative(root, candidate)
       if (!rel.startsWith('..') && !rel.startsWith('/')) {
         resolvedPath = candidate
         break
+      }
+    }
+    // Some clients send a rel_path like "../../.data/kb/..." — resolve that
+    // relative to the project root and allow it if it lives under the project.
+    if (!resolvedPath) {
+      const projectRoot = resolve(process.cwd())
+      const candidate = resolve(projectRoot, filePath)
+      const rel = relative(projectRoot, candidate)
+      if (!rel.startsWith('..') && !rel.startsWith('/')) {
+        resolvedPath = candidate
+      } else {
+        // Fallback: search allowedRoots for a file with the same basename.
+        const basename = filePath.split('/').pop() || filePath
+        for (const root of allowedRoots) {
+          try {
+            const walk = (dir) => {
+              const entries = readdirSync(dir)
+              for (const e of entries) {
+                const p = resolve(dir, e)
+                try {
+                  const s = statSync(p)
+                  if (s.isDirectory()) {
+                    const found = walk(p)
+                    if (found) return found
+                  } else if (e === basename) {
+                    return p
+                  }
+                } catch (err) {
+                  // ignore
+                }
+              }
+              return null
+            }
+            const found = walk(root)
+            if (found) {
+              resolvedPath = found
+              break
+            }
+          } catch (err) {
+            // ignore
+          }
+        }
       }
     }
   }
