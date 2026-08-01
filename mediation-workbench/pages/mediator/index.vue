@@ -124,8 +124,12 @@ const chatInput = ref('')
 const chatSending = ref(false)
 const chatError = ref('')
 
-const modelName = 'deepseek-v4-flash' // 已接入的大模型
+const modelName = ref('deepseek-v4-flash') // 已接入的大模型（可在底部切换）
 const modelProvider = 'DeepSeek'
+const modelOptions = [
+  { label: 'deepseek-v4-flash', value: 'deepseek-v4-flash' },
+  { label: 'deepseek-v4-pro', value: 'deepseek-v4-pro' },
+]
 
 watch(
   () => cases.value,
@@ -155,6 +159,7 @@ async function sendChat() {
         caseId: activeCaseId.value,
         message: text,
         senderIdentifier: `mediator-${user.value?.username || 'anonymous'}`,
+        model: modelName.value,
       },
     })
     chatMessages.value.push({ role: 'assistant', content: data.data?.content || '（无回复）' })
@@ -312,37 +317,17 @@ function resetChat() {
 
       <!-- 下方：AI 对话框 + 接入的大模型 -->
       <div class="shrink-0 h-[340px] border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
-        <!-- Dialog header -->
-        <div class="h-12 px-5 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <div class="relative">
-              <div class="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                <UIcon name="i-lucide-bot" class="w-4 h-4 text-white" />
-              </div>
-              <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-900" />
-            </div>
-            <div class="min-w-0">
-              <div class="text-sm font-semibold text-gray-900 dark:text-white">智能调解助手</div>
-              <div class="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
-                <span>已接入</span>
-                <span class="px-1.5 py-px rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-mono">{{ modelProvider }} {{ modelName }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <USelect
-              v-model="activeCaseId"
-              :options="cases.map((c) => ({ label: `${c.id} · ${c.partyAName || ''} vs ${c.partyBName || ''}`, value: c.id }))"
-              placeholder="选择案件"
-              class="w-56"
-              size="xs"
-            />
-            <UButton icon="i-lucide-rotate-ccw" size="xs" color="gray" variant="ghost" title="清空对话" @click="resetChat" />
-          </div>
-        </div>
-
         <!-- Messages -->
-        <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
+        <div class="relative flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
+          <UButton
+            icon="i-lucide-rotate-ccw"
+            size="xs"
+            color="gray"
+            variant="ghost"
+            title="清空对话"
+            class="absolute top-2 right-2 z-10"
+            @click="resetChat"
+          />
           <div v-if="chatMessages.length === 0" class="h-full flex items-center justify-center">
             <p class="text-sm text-gray-400 dark:text-gray-500">选择案件后，可向 AI 助手咨询调解建议、争议焦点分析等</p>
           </div>
@@ -392,6 +377,25 @@ function resetChat() {
             >
               发送
             </UButton>
+          </div>
+          <!-- opencode 风格模型状态栏 -->
+          <div class="mt-2 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <UIcon name="i-lucide-cpu" class="w-3.5 h-3.5 text-gray-400" />
+              <span class="text-gray-400 dark:text-gray-500">模型</span>
+              <USelect
+                v-model="modelName"
+                :options="modelOptions"
+                size="xs"
+                class="w-36"
+                color="gray"
+                variant="soft"
+              />
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>{{ modelProvider }} {{ modelName }}</span>
+            </div>
           </div>
         </div>
       </div>

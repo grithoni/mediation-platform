@@ -247,7 +247,7 @@ ${issuesText}
         chatMessages.push({ role: 'user' as const, content: body.message })
       }
       const result = await generateText({
-        model: openai(config.openaiModel || 'gpt-4o-mini'),
+        model: openai(body.model || config.openaiModel || 'gpt-4o-mini'),
         system: systemPrompt,
         messages: chatMessages,
       })
