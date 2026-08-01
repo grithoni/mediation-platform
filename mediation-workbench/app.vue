@@ -1,8 +1,8 @@
 <script setup lang="ts">
 const route = useRoute()
 const layout = computed(() => {
-  // All routes use the party layout (mediator/admin workspaces removed)
-  return 'party'
+  // /mediator routes use the mediator layout, everything else uses the party layout
+  return route.path.startsWith('/mediator') ? 'mediator' : 'party'
 })
 
 const colorMode = useColorMode()
