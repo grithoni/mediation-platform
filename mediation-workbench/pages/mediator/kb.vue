@@ -254,7 +254,7 @@ onMounted(async () => {
           </div>
           <div class="flex items-center gap-2">
             <UButton icon="i-lucide-refresh-cw" color="gray" variant="ghost" size="sm" title="刷新列表" :loading="loadingDocs" @click="loadDocs" />
-            <UButton icon="i-lucide-upload" color="primary" variant="soft" :loading="uploading" @click="openUploadModal">上传文档</UButton>
+            <UButton icon="i-lucide-upload" color="primary" variant="soft" size="sm" title="上传文档" :loading="uploading" @click="openUploadModal" />
           </div>
         </div>
 
@@ -360,7 +360,15 @@ onMounted(async () => {
                       <td class="px-4 py-2.5 pl-8">
                         <div class="flex items-center gap-2 min-w-0">
                           <UIcon :name="fileIcon(doc.path)" class="w-4 h-4 text-blue-500 shrink-0" />
-                          <span class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
+                          <button
+                            v-if="isMd(doc.path)"
+                            class="truncate text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left min-w-0"
+                            :title="'查看原文：' + fileName(doc.path)"
+                            @click="viewDoc(doc.path)"
+                          >
+                            {{ fileName(doc.path) }}
+                          </button>
+                          <span v-else class="truncate text-gray-700 dark:text-gray-300" :title="doc.path">{{ fileName(doc.path) }}</span>
                         </div>
                       </td>
                       <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
