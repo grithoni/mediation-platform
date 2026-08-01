@@ -56,6 +56,9 @@ async function viewDoc(path: string) {
     viewDocOpen.value = true
   } catch (e: any) {
     viewError.value = e?.message || '无法读取文件'
+    // 打开弹窗显示错误，避免点击无反馈
+    viewingDoc.value = { fileName: fileName(path), content: '' }
+    viewDocOpen.value = true
   } finally {
     viewing.value = false
   }
