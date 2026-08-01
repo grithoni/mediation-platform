@@ -9,6 +9,10 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Offline mode: use local model cache only (avoids network download on startup).
+# Must be set BEFORE fastembed is imported anywhere.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 # Import reranker module (lazy model loading)
 try:
     from reranker import rerank as _rerank_fn, is_available as _reranker_available
