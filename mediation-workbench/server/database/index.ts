@@ -124,6 +124,43 @@ export function initTestDb() {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS case_applications (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      applicant_name TEXT,
+      applicant_address TEXT,
+      respondent_name TEXT,
+      respondent_address TEXT,
+      case_facts TEXT,
+      dispute_matters TEXT,
+      mediation_demands TEXT,
+      demands_basis TEXT,
+      agent_name TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      path TEXT NOT NULL,
+      mime_type TEXT,
+      size INTEGER,
+      uploaded_by TEXT,
+      category TEXT DEFAULT 'application',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS case_analyses (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      analysis_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      generated_at INTEGER NOT NULL
+    );
   `)
 
   return db

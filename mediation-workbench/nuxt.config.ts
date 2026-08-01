@@ -30,6 +30,8 @@ export default defineNuxtConfig({
     openaiApiKey: '',
     openaiBaseUrl: '',
     openaiModel: 'deepseek-v4-pro',
+    localNerBaseUrl: 'http://127.0.0.1:11434',
+    localNerModel: '',
     // Public (exposed to client)
     public: {
       appName: '全时在线的调解专家',

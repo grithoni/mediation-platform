@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
@@ -19,6 +19,10 @@ import {
   phaseAfterAgreementApproval,
   phaseAfterSigningStarted,
 } from '../server/utils/agreement-workflow'
+import {
+  buildSkillCatalog,
+  runDesensitizedSkillWorkflow,
+} from '../server/utils/case-analysis-orchestrator'
 
 function withTempProjectDir<T>(fn: () => T | Promise<T>) {
   const previousCwd = process.cwd()
@@ -141,4 +145,96 @@ test('agreement approval and signing use distinct workflow phases', () => {
   assert.equal(phaseAfterAgreementApproval(false), 'agreement_pending')
   assert.equal(phaseAfterAgreementApproval(true), 'agreement_pending')
   assert.equal(phaseAfterSigningStarted(), 'signing')
+})
+
+test('desensitized skill workflow masks outbound materials and restores final output', async () => {
+  const events: string[] = []
+
+  const result = await runDesensitizedSkillWorkflow({
+    analysisType: 'dynamic_file',
+    materials: '申请人张三主张被申请人李四支付货款，联系电话 13800138000。',
+    partyNames: ['张三', '李四'],
+    addresses: [],
+    skillCatalog: [
+      {
+        id: 'timeline-skill',
+        name: '时间线梳理',
+        description: '抽取关键时间线与争议节点',
+        source: 'builtin',
+      },
+    ],
+    desensitize: async (materials) => {
+      events.push('desensitize')
+      assert.equal(materials.includes('张三'), true)
+      return {
+        maskedText: '申请人[申请人_1]主张被申请人[被申请人_1]支付货款，联系电话 [电话_1]。',
+        traceId: 'trace-1',
+        mapping: {
+          '[申请人_1]': '张三',
+          '[被申请人_1]': '李四',
+          '[电话_1]': '13800138000',
+        },
+      }
+    },
+    analyzeWithCloudSkills: async ({ maskedMaterials, skillPrompt, analysisType }) => {
+      events.push('cloud')
+      assert.equal(analysisType, 'dynamic_file')
+      assert.equal(maskedMaterials.includes('张三'), false)
+      assert.equal(maskedMaterials.includes('[申请人_1]'), true)
+      assert.equal(skillPrompt.includes('时间线梳理'), true)
+      return JSON.stringify({
+        timeline: '[申请人_1]于2026年1月催款，[被申请人_1]未付款，可联系电话 [电话_1]。',
+        disputeChecklist: '货款支付争议',
+      })
+    },
+    restore: async ({ traceId, text, mapping }) => {
+      events.push('restore')
+      assert.equal(traceId, 'trace-1')
+      let restored = text
+      for (const [token, value] of Object.entries(mapping)) {
+        restored = restored.replaceAll(token, value)
+      }
+      return restored
+    },
+  })
+
+  assert.deepEqual(events, ['desensitize', 'cloud', 'restore'])
+  assert.equal(result.maskedMaterials.includes('张三'), false)
+  assert.equal(result.restoredOutput.includes('张三'), true)
+  assert.equal(result.restoredOutput.includes('13800138000'), true)
+})
+
+test('skill catalog includes uploaded enabled skills ahead of builtin defaults', () => {
+  return withTempProjectDir(() => {
+    mkdirSync(join(process.cwd(), 'uploads', 'skills', 'custom-skill'), { recursive: true })
+    writeFileSync(
+      join(process.cwd(), 'uploads', 'skills', '.skills.json'),
+      JSON.stringify([
+        {
+          id: 'custom-1',
+          name: '证据核验',
+          version: '1.0.0',
+          description: '检查证据链完整性',
+          dirName: 'custom-skill',
+          fileCount: 1,
+          installedAt: new Date().toISOString(),
+          installedBy: 'tester',
+          enabled: true,
+        },
+      ]),
+    )
+    writeFileSync(
+      join(process.cwd(), 'uploads', 'skills', 'custom-skill', 'manifest.json'),
+      JSON.stringify({
+        name: '证据核验',
+        description: '检查证据链完整性',
+        prompt: '重点检查证据原件、来源和证明目的是否一致。',
+      }),
+    )
+
+    const catalog = buildSkillCatalog()
+    assert.equal(catalog[0]?.name, '证据核验')
+    assert.equal(catalog.some(skill => skill.source === 'builtin'), true)
+    assert.equal(catalog[0]?.prompt?.includes('证据原件'), true)
+  })
 })

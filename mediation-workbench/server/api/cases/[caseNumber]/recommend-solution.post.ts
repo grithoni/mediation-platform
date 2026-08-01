@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '../../../database'
 import { cases, caseDynamicFiles } from '../../../database/schema'
 import { requireAuth } from '../../../middleware/auth'
-import { searchKb, formatKbResultsForPrompt } from '../../../utils/kb-search'
+import { getCachedAnalysis, saveAnalysis } from '../../../utils/analysis-cache'
 
 /** 检查动态文件是否有实质性内容（至少2个核心字段非空） */
 function hasSubstantiveData(df: any): boolean {
@@ -210,51 +210,20 @@ export default defineEventHandler(async (event) => {
 
   const df = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseNumber)).get()
 
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) {
-    throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
-  }
-
   // ── 判断：动态文件是否有足够数据？──────────────────────
   const useLightMode = hasSubstantiveData(df)
   console.log(`[recommend-solution] case=${caseNumber} mode=${useLightMode ? 'LIGHT(动态文件)' : 'FULL(全量分析)'}`)
-
-  // ── RAG: Search for relevant legal provisions ───────────
-  const searchQuery = `${caseData.title || ''} ${caseData.description || ''}`.slice(0, 200)
-  let systemPrompt = '你是一位拥有 15 年以上经验的商事调解专家，专长"哈佛利益谈判法"。你从利益交换角度设计方案，输出严格遵循用户指定的 10 节结构。'
-  try {
-    const kbResults = await searchKb(searchQuery, 3)
-    if (kbResults.length > 0) {
-      systemPrompt += formatKbResultsForPrompt(kbResults)
-      console.log(`[RAG] recommend-solution: Injected ${kbResults.length} KB results`)
-    }
-  } catch (err) {
-    console.warn('[recommend-solution] KB search failed, continuing without RAG:', err)
-  }
-
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey }
-  if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl
-  const openai = createOpenAI(openaiOptions)
-
-  // ── 选择 prompt 模式 ────────────────────────────────────
-  const prompt = useLightMode ? buildLightPrompt(caseData, df) : buildFullPrompt(caseData, df)
-
-  const result = await generateText({
-    model: openai(config.openaiModel || 'gpt-4o-mini'),
-    system: systemPrompt,
-    prompt,
-    temperature: 0.4,
-  }).catch((err: any) => {
-    console.error('[recommend-solution] generateText failed:', err.message, err.cause || '')
-    console.error('[recommend-solution] Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
-    throw err
-  })
+  const cached = getCachedAnalysis(caseNumber, 'recommend_solution')
+  const content = cached || await (async () => {
+    const { runAnalysis } = await import('../../../utils/analysis-core')
+    const generated = await runAnalysis(caseNumber, 'recommend_solution')
+    saveAnalysis(caseNumber, 'recommend_solution', generated)
+    return generated
+  })()
 
   // ── 写回动态文件（增量更新） ────────────────────────────
   try {
-    const extracted = extractForDynamicFile(result.text)
+    const extracted = extractForDynamicFile(content)
     if (Object.keys(extracted).length > 0) {
       const now = Date.now()
       if (df) {
@@ -294,8 +263,9 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: {
       caseId: caseNumber,
-      content: result.text,
+      content,
       generatedAt: new Date().toISOString(),
+      cached: Boolean(cached),
       mode: useLightMode ? 'light' : 'full',
     },
   }
