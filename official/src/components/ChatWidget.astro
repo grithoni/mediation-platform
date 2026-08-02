@@ -143,6 +143,30 @@ const SUGGESTED_QUESTIONS = [
   // 缓存已检索到的案情摘要，避免重复请求
   let cachedCaseSummary: string | null = null;
 
+  async function prefetchCaseSummary(caseNum: string, accessCode: string) {
+    if (!caseNum || !accessCode) return null;
+    if (cachedCaseSummary) return cachedCaseSummary;
+    try {
+      const resp = await fetch(`${WORKBENCH_API}/api/public/case-context`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseNumber: caseNum, accessCode }),
+      });
+      if (!resp.ok) {
+        console.warn('prefetchCaseSummary: verify failed', resp.status);
+        return null;
+      }
+      const j = await resp.json();
+      if (j?.success && j.summary) {
+        cachedCaseSummary = j.summary;
+        return cachedCaseSummary;
+      }
+    } catch (e) {
+      console.warn('prefetchCaseSummary error', e);
+    }
+    return null;
+  }
+
   const overlay = document.getElementById("ai-chat-overlay") as HTMLDivElement;
 
   const history: { role: "user" | "assistant"; content: string }[] = [];
@@ -171,7 +195,29 @@ const SUGGESTED_QUESTIONS = [
   fabBtn?.addEventListener("click", openPanel);
   closeBtn.addEventListener("click", closePanel);
   overlay.addEventListener("click", closePanel);
-  document.addEventListener("ai-chat:open", openPanel);
+  // 支持带 detail 的打开事件：{ caseNumber, accessCode }
+  document.addEventListener("ai-chat:open", async (e: any) => {
+    openPanel();
+    try {
+      const detail = e?.detail || {};
+      const caseNum = detail.caseNumber || caseNumberEl?.value?.trim();
+      const access = detail.accessCode || accessCodeEl?.value?.trim();
+      if (caseNum && access) {
+        // 填入输入框并预取摘要
+        if (caseNumberEl) caseNumberEl.value = caseNum;
+        if (accessCodeEl) accessCodeEl.value = access;
+        await prefetchCaseSummary(caseNum, access);
+      }
+      // If opener passed analyze param and wants immediate analysis, support that too
+      if (detail?.analyzeImmediately && caseNum) {
+        // focus input and trigger analyze flow if user expects full case analysis
+        input.focus();
+      }
+    } catch (err) {
+      console.warn('ai-chat:open handler failed', err);
+    }
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closePanel();
   });

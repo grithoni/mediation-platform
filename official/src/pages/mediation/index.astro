@@ -170,9 +170,12 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
       queryStatus.className = 'mt-3 text-sm text-green-600 dark:text-green-400';
       queryStatus.textContent = '';
 
-      // Wire up the AI analyze button
+      // Wire up the AI analyze button — open chat and pass caseNumber + accessCode as detail
       document.getElementById('ai-analyze-btn').addEventListener('click', () => {
-        window.location.href = `/?analyze=${encodeURIComponent(caseNumber)}`;
+        const evt = new CustomEvent('ai-chat:open', { detail: { caseNumber: caseNumber, accessCode: accessCode } });
+        document.dispatchEvent(evt);
+        // also scroll to top to ensure chat FAB is visible
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       });
 
     } catch (err) {
