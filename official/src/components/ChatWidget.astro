@@ -74,22 +74,41 @@ const SUGGESTED_QUESTIONS = [
     </div>
 
     <!-- 输入区 -->
-    <form id="ai-chat-form" class="flex items-center gap-2 px-4 pt-3 pb-2 shrink-0">
-      <input
-        id="ai-chat-input"
-        type="text"
-        autocomplete="off"
-        placeholder="请输入您的问题…"
-        class="flex-1 min-w-0 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition"
-      />
-      <button
-        id="ai-chat-send"
-        type="submit"
-        aria-label="发送"
-        class="inline-flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 transition-colors shrink-0"
-      >
-        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-      </button>
+    <form id="ai-chat-form" class="flex flex-col gap-2 px-4 pt-3 pb-2 shrink-0">
+      <div class="flex gap-2">
+        <input
+          id="ai-case-number"
+          type="text"
+          autocomplete="off"
+          placeholder="案号 (可选)"
+          class="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition"
+        />
+        <input
+          id="ai-access-code"
+          type="password"
+          autocomplete="off"
+          placeholder="访问验证码 (可选)"
+          class="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition"
+        />
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input
+          id="ai-chat-input"
+          type="text"
+          autocomplete="off"
+          placeholder="请输入您的问题…"
+          class="flex-1 min-w-0 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500 transition"
+        />
+        <button
+          id="ai-chat-send"
+          type="submit"
+          aria-label="发送"
+          class="inline-flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 transition-colors shrink-0"
+        >
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        </button>
+      </div>
     </form>
 
     <p class="px-4 pb-3 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed shrink-0">
@@ -101,6 +120,8 @@ const SUGGESTED_QUESTIONS = [
 <script>
   const API_URL = "http://localhost:3005/api/chat";
   const ANALYZE_URL = "http://localhost:3005/api/analyze-case";
+  // mediation-workbench public API base (adjust port as needed)
+  const WORKBENCH_API = "http://localhost:6080";
 
   // 案件编号检测：12位hex（如 469dd022f187）或 C2026-001 格式
   const CASE_ID_PATTERN = /(?:案件编号?\s*[:：]?\s*)?([a-f0-9]{12}|C\d{4}-\d{3})\s*$/i;
@@ -111,11 +132,16 @@ const SUGGESTED_QUESTIONS = [
   const messagesEl = document.getElementById("ai-chat-messages") as HTMLDivElement;
   const form = document.getElementById("ai-chat-form") as HTMLFormElement;
   const input = document.getElementById("ai-chat-input") as HTMLInputElement;
+  const caseNumberEl = document.getElementById("ai-case-number") as HTMLInputElement | null;
+  const accessCodeEl = document.getElementById("ai-access-code") as HTMLInputElement | null;
   const sendBtn = document.getElementById("ai-chat-send") as HTMLButtonElement;
   const closeBtn = document.getElementById("ai-chat-close") as HTMLButtonElement;
   const openBtn = document.getElementById("ai-chat-open-btn");
   const fabBtn = document.getElementById("ai-chat-fab");
   const suggestionsEl = document.getElementById("ai-chat-suggestions");
+
+  // 缓存已检索到的案情摘要，避免重复请求
+  let cachedCaseSummary: string | null = null;
 
   const overlay = document.getElementById("ai-chat-overlay") as HTMLDivElement;
 
@@ -335,6 +361,36 @@ const SUGGESTED_QUESTIONS = [
       return;
     }
 
+    // 如果用户填写了案号与访问码，尝试从工作台获取案情摘要作为会话上下文（仅本次请求）
+    let caseContextMsg: string | null = null;
+    try {
+      const caseNum = caseNumberEl?.value?.trim();
+      const accessCode = accessCodeEl?.value?.trim();
+      if (caseNum && accessCode && !cachedCaseSummary) {
+        // 请求工作台公共接口以验证并获取摘要
+        try {
+          const resp = await fetch(`${WORKBENCH_API}/api/public/case-context`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseNumber: caseNum, accessCode }),
+          });
+          if (resp.ok) {
+            const j = await resp.json();
+            if (j?.success && j.summary) cachedCaseSummary = j.summary;
+          } else {
+            console.warn("获取案情摘要失败", resp.status);
+          }
+        } catch (e) {
+          console.warn("获取案情摘要错误", e);
+        }
+      }
+      if (cachedCaseSummary) {
+        caseContextMsg = `【案情摘要】\n${cachedCaseSummary}`;
+      }
+    } catch (e) {
+      console.warn("预取案情摘要失败", e);
+    }
+
     setBusy(true);
     addUserMessage(trimmed);
     history.push({ role: "user", content: trimmed });
@@ -345,10 +401,13 @@ const SUGGESTED_QUESTIONS = [
     let answer = "";
 
     try {
+      // 如果有案情摘要，将其作为额外的近期用户消息一起发送（不持久写入本地 history）
+      const messagesToSend = caseContextMsg ? [{ role: "user", content: caseContextMsg }, ...history] : history;
+
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: messagesToSend }),
       });
 
       if (!res.ok || !res.body) {
