@@ -3,6 +3,7 @@ import { getDb } from '~/server/database'
 import { cases, caseDynamicFiles, messages } from '~/server/database/schema'
 import { eq, desc } from 'drizzle-orm'
 import { searchKb, formatKbResultsForPrompt } from '~/server/utils/kb-search'
+import { nanobotChat } from '~/server/utils/nanobot'
 
 export default defineEventHandler(async (event) => {
   const user = requireMediator(event)
@@ -12,11 +13,6 @@ export default defineEventHandler(async (event) => {
 
   if (!caseId) {
     throw createError({ statusCode: 400, message: '案件ID不能为空' })
-  }
-
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) {
-    throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
   }
 
   const db = getDb()
@@ -55,14 +51,7 @@ export default defineEventHandler(async (event) => {
     if (kbResults.length > 0) kbContext = formatKbResultsForPrompt(kbResults)
   } catch {}
 
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey as string }
-  if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl as string
-  const openai = createOpenAI(openaiOptions)
-
-  const result = await generateText({
-    model: openai(config.openaiModel || 'gpt-4o-mini'),
+  const content = await nanobotChat({
     system: '你是专业的商事调解文档生成智能体。生成规范、专业的法律调解文书。' + kbContext,
     prompt,
     temperature: 0.4,
@@ -72,7 +61,7 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: {
       documentType,
-      content: result.text,
+      content,
       caseId,
       generatedAt: new Date().toISOString(),
     },

@@ -11,6 +11,7 @@ import {
   documents,
 } from '../database/schema'
 import { formatKbResultsForPrompt, searchKb } from './kb-search'
+import { nanobotChat } from './nanobot'
 
 export type WorkflowAnalysisType =
   | 'dynamic_file'
@@ -542,17 +543,6 @@ async function defaultCloudSkillAnalysis(input: {
   prompt: string
   system: string
 }): Promise<string> {
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) throw new Error('未配置 AI API Key')
-
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-
-  const openai = createOpenAI({
-    apiKey: config.openaiApiKey as string,
-    baseURL: config.openaiBaseUrl as string,
-  })
-
   const userPrompt = [
     '## Skills',
     input.skillPrompt,
@@ -564,8 +554,7 @@ async function defaultCloudSkillAnalysis(input: {
     input.prompt,
   ].join('\n')
 
-  const result = await generateText({
-    model: openai((config.openaiModel as string) || 'deepseek-v4-pro'),
+  const text = await nanobotChat({
     system: input.system,
     prompt: userPrompt,
     temperature: 0.3,
@@ -574,7 +563,7 @@ async function defaultCloudSkillAnalysis(input: {
     throw new Error(`AI调用失败: ${error.message}`)
   })
 
-  return result.text.trim()
+  return text.trim()
 }
 
 async function defaultRestore(input: {

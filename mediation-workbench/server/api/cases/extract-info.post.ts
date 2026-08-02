@@ -5,6 +5,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { searchKb } from '../../utils/kb-search'
+import { nanobotChat } from '../../utils/nanobot'
 
 function parseDocument(filename: string, buffer: Buffer): string {
   const lower = filename.toLowerCase()
@@ -68,11 +69,6 @@ export default defineEventHandler(async (event) => {
     }
   } catch {}
 
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) {
-    return { success: true, data: { partyName: '', respondentName: '', caseType: '', description: '' } }
-  }
-
   const prompt = `从以下法律/案件材料中提取信息。请参照最高人民法院《民事案件案由规定》确定案由。
 
 ${materialText}
@@ -87,21 +83,13 @@ ${kbCaseTypes}
 只输出: {"partyName":"...","respondentName":"...","caseType":"...","description":"..."}`
 
   try {
-    const { generateText } = await import('ai')
-    const { createOpenAI } = await import('@ai-sdk/openai')
-    const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey as string }
-    if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl as string
-    const openai = createOpenAI(openaiOptions)
-
-    const result = await generateText({
-      model: openai((config.openaiModel as string) || 'deepseek-v4-pro'),
+    const text = (await nanobotChat({
       system: '只返回JSON，不要其他文字。',
-      messages: [{ role: 'user' as const, content: prompt }],
+      prompt,
       temperature: 0.1,
       maxTokens: 500,
-    })
+    })).trim()
 
-    const text = result.text.trim()
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.warn('[extract-info] No JSON in response:', text.slice(0, 200))

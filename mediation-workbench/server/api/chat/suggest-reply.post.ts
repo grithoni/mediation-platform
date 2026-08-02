@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '../../database'
 import { cases, caseDynamicFiles, messages } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
+import { nanobotChat } from '../../utils/nanobot'
 
 // POST /api/chat/suggest-reply
 // Generate a suggested reply for the mediator based on latest party message
@@ -79,17 +80,7 @@ ${partyMessage}
 请生成一条专业的调解员回复：`
 
   try {
-    const config = useRuntimeConfig()
-    const baseURL = String(config.openaiBaseUrl || process.env.NUXT_OPENAI_BASE_URL || 'https://api.deepseek.com/v1')
-    const model = String(config.openaiModel || process.env.NUXT_OPENAI_MODEL || 'deepseek-v4-pro')
-    const apiKey = String(config.openaiApiKey || process.env.NUXT_OPENAI_API_KEY || '')
-
-    const { createOpenAI } = await import('@ai-sdk/openai')
-    const openai = createOpenAI({ baseURL, apiKey })
-    const { generateText } = await import('ai')
-
-    const result = await generateText({
-      model: openai(model),
+    const content = await nanobotChat({
       system: systemPrompt,
       prompt: userPrompt,
       temperature: 0.5,
@@ -99,7 +90,7 @@ ${partyMessage}
     return {
       success: true,
       data: {
-        content: result.text.trim(),
+        content: content.trim(),
         generatedAt: new Date().toISOString(),
       },
     }

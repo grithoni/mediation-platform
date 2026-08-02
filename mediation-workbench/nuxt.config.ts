@@ -30,6 +30,9 @@ export default defineNuxtConfig({
     openaiApiKey: '',
     openaiBaseUrl: '',
     openaiModel: 'deepseek-v4-pro',
+    // nanobot AI 引擎（OpenAI 兼容 API）
+    nanobotBaseUrl: 'http://127.0.0.1:8900/v1',
+    nanobotModel: 'deepseek-v4-flash',
     localNerBaseUrl: 'http://127.0.0.1:11434',
     localNerModel: '',
     // Public (exposed to client)

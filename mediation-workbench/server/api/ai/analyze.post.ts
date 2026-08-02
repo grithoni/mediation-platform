@@ -3,6 +3,7 @@ import { getDb } from '~/server/database'
 import { cases, caseDynamicFiles, messages } from '~/server/database/schema'
 import { eq, desc } from 'drizzle-orm'
 import { searchKb, formatKbResultsForPrompt } from '~/server/utils/kb-search'
+import { nanobotChat } from '~/server/utils/nanobot'
 
 export default defineEventHandler(async (event) => {
   const user = requireMediator(event)
@@ -12,11 +13,6 @@ export default defineEventHandler(async (event) => {
 
   if (!caseId) {
     throw createError({ statusCode: 400, message: '案件ID不能为空' })
-  }
-
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) {
-    throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
   }
 
   const db = getDb()
@@ -45,7 +41,7 @@ export default defineEventHandler(async (event) => {
     comprehensive: `请对案件进行综合分析，返回 JSON：{"caseType":"","keyFacts":[],"legalIssues":[],"riskAssessment":{"level":"high/medium/low","factors":[]},"suggestedApproach":"","estimatedDuration":""}\n\n案件：${caseData.title}\n描述：${caseData.description || '无'}\n甲方：${caseData.partyAName}\n乙方：${caseData.partyBName}\n争议清单：${df?.disputeChecklist || '无'}\n时间线：${df?.timeline || '无'}`,
   }
 
-  const prompt = prompts[analysisType] || prompts.comprehensive
+  const prompt = (prompts[analysisType] || prompts.comprehensive)!
 
   let kbContext = ''
   try {
@@ -53,14 +49,7 @@ export default defineEventHandler(async (event) => {
     if (kbResults.length > 0) kbContext = formatKbResultsForPrompt(kbResults)
   } catch {}
 
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey as string }
-  if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl as string
-  const openai = createOpenAI(openaiOptions)
-
-  const result = await generateText({
-    model: openai(config.openaiModel || 'gpt-4o-mini'),
+  const text = await nanobotChat({
     system: '你是专业的商事调解案件分析智能体。使用结构化 JSON 格式输出分析结果。' + kbContext,
     prompt,
     temperature: 0.3,
@@ -68,10 +57,10 @@ export default defineEventHandler(async (event) => {
 
   let data: any
   try {
-    const jsonMatch = result.text.match(/\{[\s\S]*\}/)
-    data = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: result.text }
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    data = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: text }
   } catch {
-    data = { raw: result.text }
+    data = { raw: text }
   }
 
   return { success: true, data }

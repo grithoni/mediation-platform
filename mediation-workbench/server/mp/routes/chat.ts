@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { messages, cases } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
+import { nanobotChat } from '../../utils/nanobot'
 
 /**
  * POST /api/mp/chat — AI chat
@@ -49,27 +50,20 @@ export function chatRoutes(router: Router) {
 ${kbContext ? `参考法律知识：\n${kbContext}\n` : ''}
 要求：分阶段心理咨询（倾听→共情→重塑→协商），前3-4轮以倾听为主，回复100-200字，不编造法律条文。`
 
-    const aiMessages = [
-      { role: 'system' as const, content: systemPrompt },
-      ...recentMsgs.map(m => ({
-        role: (m.senderType === 'ai' ? 'assistant' : 'user') as 'assistant' | 'user',
-        content: m.content,
-      })),
-    ]
-
-    const baseUrl = process.env.NUXT_OPENAI_BASE_URL || ''
-    const apiKey = process.env.NUXT_OPENAI_API_KEY || ''
-    const model = process.env.NUXT_OPENAI_MODEL || 'gpt-4o-mini'
-    if (!baseUrl || !apiKey) throw createError({ statusCode: 500, message: 'AI 服务未配置' })
+    const historyMessages = recentMsgs.map(m => ({
+      role: (m.senderType === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
+      content: m.content,
+    }))
 
     let aiContent: string
     try {
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages: aiMessages, temperature: 0.7, max_tokens: 500 }),
-      }).then(r => r.json()) as any
-      aiContent = resp.choices?.[0]?.message?.content || '抱歉，AI 暂时无法回复。'
+      aiContent = await nanobotChat({
+        system: systemPrompt,
+        prompt: message,
+        history: historyMessages,
+        temperature: 0.7,
+        maxTokens: 500,
+      })
     } catch (err: any) {
       throw createError({ statusCode: 500, message: `AI 调用失败: ${err.message}` })
     }

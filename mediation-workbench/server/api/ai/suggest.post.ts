@@ -3,6 +3,7 @@ import { getDb } from '~/server/database'
 import { cases, caseDynamicFiles, messages } from '~/server/database/schema'
 import { eq, desc } from 'drizzle-orm'
 import { searchKb, formatKbResultsForPrompt } from '~/server/utils/kb-search'
+import { nanobotChat } from '~/server/utils/nanobot'
 
 export default defineEventHandler(async (event) => {
   const user = requireMediator(event)
@@ -12,11 +13,6 @@ export default defineEventHandler(async (event) => {
 
   if (!caseId) {
     throw createError({ statusCode: 400, message: '案件ID不能为空' })
-  }
-
-  const config = useRuntimeConfig()
-  if (!config.openaiApiKey) {
-    throw createError({ statusCode: 500, message: '未配置 AI 模型 API Key' })
   }
 
   const db = getDb()
@@ -49,7 +45,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '调解场景不能为空' })
   }
 
-  const prompt = prompts[suggestType] || prompts.settlement
+  const prompt = (prompts[suggestType] || prompts.settlement)!
 
   let kbContext = ''
   try {
@@ -57,14 +53,7 @@ export default defineEventHandler(async (event) => {
     if (kbResults.length > 0) kbContext = formatKbResultsForPrompt(kbResults)
   } catch {}
 
-  const { generateText } = await import('ai')
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey as string }
-  if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl as string
-  const openai = createOpenAI(openaiOptions)
-
-  const result = await generateText({
-    model: openai(config.openaiModel || 'gpt-4o-mini'),
+  const text = await nanobotChat({
     system: '你是专业的商事调解智能体，专长调解策略和方案生成。输出严格 JSON。' + kbContext,
     prompt,
     temperature: 0.5,
@@ -72,10 +61,10 @@ export default defineEventHandler(async (event) => {
 
   let data: any
   try {
-    const jsonMatch = result.text.match(/\{[\s\S]*\}/)
-    data = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: result.text }
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    data = jsonMatch ? JSON.parse(jsonMatch[0]) : { raw: text }
   } catch {
-    data = { raw: result.text }
+    data = { raw: text }
   }
 
   return { success: true, data }

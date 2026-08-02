@@ -8,6 +8,7 @@ import { getDb } from '../../../database'
 import { cases, caseDynamicFiles } from '../../../database/schema'
 import { requireAuth } from '../../../middleware/auth'
 import { searchKb } from '../../../utils/kb-search'
+import { nanobotChat } from '../../../utils/nanobot'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -51,17 +52,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 用 AI 生成案例摘要 ───────────────────────────────
-  const config = useRuntimeConfig()
   let summaries: Array<{ path: string; fileName: string; dirName: string; summary: string }> = []
 
-  if (config.openaiApiKey && caseResults.length > 0) {
+  if (caseResults.length > 0) {
     try {
-      const { generateText } = await import('ai')
-      const { createOpenAI } = await import('@ai-sdk/openai')
-      const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey }
-      if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl
-      const openai = createOpenAI(openaiOptions)
-
       // 构建候选案例文本
       const candidatesText = caseResults.map((r, i) => {
         const parts = r.path.split('/')
@@ -97,23 +91,23 @@ ${candidatesText}
 
 如果所有案例都不太相关，返回空数组 []。只输出 JSON。`
 
-      const result = await generateText({
-        model: openai(config.openaiModel || 'gpt-4o-mini'),
+      const text = await nanobotChat({
+        system: '你是资深商事调解与案例检索专家。只输出 JSON。',
         prompt: summaryPrompt,
         temperature: 0.3,
       })
 
       // 解析 JSON
-      const jsonMatch = result.text.match(/\[[\s\S]*\]/)
+      const jsonMatch = text.match(/\[[\s\S]*\]/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Array<{ index: number; summary: string }>
         for (const item of parsed) {
           const idx = item.index - 1
           if (idx >= 0 && idx < caseResults.length) {
-            const r = caseResults[idx]
+            const r = caseResults[idx]!
             const parts = r.path.split('/')
             const fileName = (parts[parts.length - 1] || r.path).replace(/\.md$/i, '')
-            const dirName = parts.length > 1 ? parts[parts.length - 2] : ''
+            const dirName = parts.length > 1 ? (parts[parts.length - 2] ?? '') : ''
             summaries.push({ path: r.path, fileName, dirName, summary: item.summary })
           }
         }
@@ -129,7 +123,7 @@ ${candidatesText}
     summaries = caseResults.slice(0, 2).map(r => {
       const parts = r.path.split('/')
       const fileName = (parts[parts.length - 1] || r.path).replace(/\.md$/i, '')
-      const dirName = parts.length > 1 ? parts[parts.length - 2] : ''
+      const dirName = parts.length > 1 ? (parts[parts.length - 2] ?? '') : ''
       return { path: r.path, fileName, dirName, summary: r.content.slice(0, 300) + '...' }
     })
   }

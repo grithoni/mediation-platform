@@ -1,4 +1,5 @@
 import { verifyPartyAccess } from '../../utils/auth'
+import { desensitizeCaseMaterials } from '../../utils/case-analysis-orchestrator'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: '访问码错误或无权访问' })
   }
 
-  // 构建简洁的案情摘要供智能咨询作为上下文使用（避免泄露敏感字段）
+  // 构建简洁的案情摘要
   const parts: string[] = []
   if (caseData.title) parts.push(`标题：${caseData.title}`)
   if (caseData.partyAName) parts.push(`申请人：${caseData.partyAName}`)
@@ -29,8 +30,25 @@ export default defineEventHandler(async (event) => {
 
   const summary = parts.join('\n')
 
-  return {
-    success: true,
-    summary,
+  // 对摘要进行本地脱敏，确保返回给前端的内容安全（不含真实 PII）
+  try {
+    const des = await desensitizeCaseMaterials(summary, {
+      knownEntities: [],
+      partyNames: [caseData.partyAName, caseData.partyBName].filter(Boolean),
+      addresses: [],
+    })
+
+    return {
+      success: true,
+      summary: des.maskedText || summary,
+      traceId: des.traceId,
+    }
+  } catch (e) {
+    // 如果脱敏过程失败，退回到不包含个人姓名的最小摘要
+    const safeParts = parts.filter(p => !/^申请人：|^被申请人：/.test(p))
+    return {
+      success: true,
+      summary: safeParts.join('\n'),
+    }
   }
 })

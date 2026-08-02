@@ -5,6 +5,7 @@ import { cases, messages, caseDynamicFiles } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { isEndDialogIntent } from '../../utils/dialog-intent'
 import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
+import { nanobotChat } from '../../utils/nanobot'
 
 // ============================================================
 // System prompt templates
@@ -165,25 +166,23 @@ export default defineEventHandler(async (event) => {
   } catch {}
 
   let aiContent: string
-  const config = useRuntimeConfig()
-  if (config.openaiApiKey) {
-    try {
-      // ── First message: build materials review reply ──
-      if (history.length === 0) {
-        const name = caseData.partyAName && caseData.partyAName !== '当事人' ? caseData.partyAName : ''
-        const greeting = name ? `${name}您好` : '您好'
-        const caseDesc = caseData.description || ''
+  try {
+    // ── First message: build materials review reply ──
+    if (history.length === 0) {
+      const name = caseData.partyAName && caseData.partyAName !== '当事人' ? caseData.partyAName : ''
+      const greeting = name ? `${name}您好` : '您好'
+      const caseDesc = caseData.description || ''
 
-        // Search KB for GZAC arbitration rules about material requirements
-        let rulesContext = ''
-        try {
-          const rulesResults = await searchKb('广州仲裁委员会仲裁规则 申请仲裁 材料要求 第18条 第19条 第20条 第21条 第22条', 3)
-          if (rulesResults.length > 0) {
-            rulesContext = rulesResults.slice(0, 2).map(r => r.content.slice(0, 600)).join('\n---\n')
-          }
-        } catch {}
+      // Search KB for GZAC arbitration rules about material requirements
+      let rulesContext = ''
+      try {
+        const rulesResults = await searchKb('广州仲裁委员会仲裁规则 申请仲裁 材料要求 第18条 第19条 第20条 第21条 第22条', 3)
+        if (rulesResults.length > 0) {
+          rulesContext = rulesResults.slice(0, 2).map(r => r.content.slice(0, 600)).join('\n---\n')
+        }
+      } catch {}
 
-        const reviewPrompt = `请审查以下案件材料，参照《广州仲裁委员会仲裁规则》第18-22条的要求，找出材料中存在的具体问题。
+      const reviewPrompt = `请审查以下案件材料，参照《广州仲裁委员会仲裁规则》第18-22条的要求，找出材料中存在的具体问题。
 
 案件：${caseData.title}
 ${caseDesc ? '描述：' + caseDesc : ''}
@@ -194,70 +193,50 @@ ${rulesContext ? '\n仲裁规则参考：\n' + rulesContext : ''}
 
 每条问题应尽量具体，指出缺失什么材料或信息不明确的点。只输出JSON。`
 
-        const { generateText: genQ } = await import('ai')
-        const { createOpenAI: coQ } = await import('@ai-sdk/openai')
-        const oqOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey }
-        if (config.openaiBaseUrl) oqOptions.baseURL = config.openaiBaseUrl
-        const oq = coQ(oqOptions)
-        const qResult = await genQ({
-          model: oq(config.openaiModel || 'deepseek-v4-pro'),
-          system: '你是仲裁材料审查助手。只输出JSON。',
-          messages: [{ role: 'user' as const, content: reviewPrompt }],
-          temperature: 0.3,
-          maxTokens: 500,
-        })
-        const qText = qResult.text.trim()
+      const qText = (await nanobotChat({
+        system: '你是仲裁材料审查助手。只输出JSON。',
+        prompt: reviewPrompt,
+        temperature: 0.3,
+        maxTokens: 500,
+      })).trim()
 
-        // Parse issues from JSON
-        let issues: string[] = []
-        try {
-          const jsonMatch = qText.match(/\{[\s\S]*\}/)
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0])
-            issues = (parsed.issues || []).slice(0, 4)
-          }
-        } catch {
-          // Fallback: extract from text
-          issues = qText.split(/\n/).filter((l: string) => l.trim()).slice(0, 4)
+      // Parse issues from JSON
+      let issues: string[] = []
+      try {
+        const jsonMatch = qText.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          issues = (parsed.issues || []).slice(0, 4)
         }
+      } catch {
+        // Fallback: extract from text
+        issues = qText.split(/\n/).filter((l: string) => l.trim()).slice(0, 4)
+      }
 
-        const numbers = ['一', '二', '三', '四']
-        const issuesText = issues.length > 0
-          ? issues.map((issue: string, i: number) => `${numbers[i]}、${issue.replace(/^[一二三四]、?\s*/, '')}`).join('\n')
-          : '目前暂未发现明显问题，我们将进一步分析材料。'
+      const numbers = ['一', '二', '三', '四']
+      const issuesText = issues.length > 0
+        ? issues.map((issue: string, i: number) => `${numbers[i]}、${issue.replace(/^[一二三四]、?\s*/, '')}`).join('\n')
+        : '目前暂未发现明显问题，我们将进一步分析材料。'
 
-        aiContent = `${greeting}：
+      aiContent = `${greeting}：
 
 AI助手已审核您的材料，有如下问题需要和您核实。
 ${issuesText}
 
 请就上述问题逐一回复，以便我们进一步完善案件材料。`
-      } else {
-      const { generateText } = await import('ai')
-      const { createOpenAI } = await import('@ai-sdk/openai')
-      const openaiOptions: { apiKey: string; baseURL?: string } = { apiKey: config.openaiApiKey }
-      if (config.openaiBaseUrl) openaiOptions.baseURL = config.openaiBaseUrl
-      const openai = createOpenAI(openaiOptions)
-      const chatMessages = history.map((m) => ({
-        role: (m.senderType === 'ai' ? 'assistant' : 'user') as 'assistant' | 'user',
+    } else {
+      const chatHistory = history.map((m) => ({
+        role: (m.senderType === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
         content: `${m.senderName ? `[${m.senderName}] ` : ''}${m.content}`,
       }))
-      // Ensure at least one message (AI SDK requires non-empty messages)
-      if (chatMessages.length === 0) {
-        chatMessages.push({ role: 'user' as const, content: body.message })
-      }
-      const result = await generateText({
-        model: openai(body.model || config.openaiModel || 'gpt-4o-mini'),
+      aiContent = await nanobotChat({
         system: systemPrompt,
-        messages: chatMessages,
+        prompt: body.message,
+        history: chatHistory,
       })
-      aiContent = result.text
-      }
-    } catch (err: any) {
-      console.error('AI call failed:', err.message)
-      aiContent = generateMockResponse(body.message)
     }
-  } else {
+  } catch (err: any) {
+    console.error('AI call failed:', err.message)
     aiContent = generateMockResponse(body.message)
   }
 
