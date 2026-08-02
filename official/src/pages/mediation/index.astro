@@ -37,6 +37,7 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
                 <label for="case-number-input" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">案号</label>
                 <div class="flex gap-2">
                   <input type="text" id="case-number-input" placeholder="如 2026-1" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition" />
+                  <input type="password" id="case-access-code" placeholder="访问验证码" class="w-40 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition" />
                   <button type="button" id="query-btn" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition flex items-center gap-1.5">
                     <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <span id="query-btn-text">查询</span>
@@ -75,7 +76,9 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
 
 <script is:inline>
   const CASE_API_URL = 'http://localhost:6080/api/public/cases';
+  const CASE_VERIFY_URL = 'http://localhost:6080/api/public/case-context';
   const caseInput = document.getElementById('case-number-input');
+  const accessInput = document.getElementById('case-access-code');
   const queryBtn = document.getElementById('query-btn');
   const queryBtnText = document.getElementById('query-btn-text');
   const queryResult = document.getElementById('query-result');
@@ -83,9 +86,15 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
 
   async function queryCase() {
     const caseNumber = caseInput.value.trim();
+    const accessCode = accessInput.value.trim();
     if (!caseNumber) {
       queryStatus.className = 'mt-3 text-sm text-red-600 dark:text-red-400';
       queryStatus.textContent = '请输入案号';
+      return;
+    }
+    if (!accessCode) {
+      queryStatus.className = 'mt-3 text-sm text-red-600 dark:text-red-400';
+      queryStatus.textContent = '请输入访问验证码以查看案件详情';
       return;
     }
 
@@ -94,15 +103,36 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
     queryBtnText.textContent = '查询中...';
     queryResult.classList.add('hidden');
     queryStatus.className = 'mt-3 text-sm text-blue-600 dark:text-blue-400';
-    queryStatus.textContent = '正在查询...';
+    queryStatus.textContent = '正在验证访问码...';
 
     try {
+      // 先验证访问码并获取受限的案情摘要
+      const verifyResp = await fetch(CASE_VERIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseNumber: caseNumber, accessCode: accessCode }),
+      });
+      if (!verifyResp.ok) {
+        const err = await verifyResp.json().catch(() => ({ detail: '验证失败' }));
+        throw new Error(err.detail || '访问码验证失败');
+      }
+      const v = await verifyResp.json();
+      if (!v?.success) throw new Error('访问码验证失败');
+
+      queryStatus.className = 'mt-3 text-sm text-blue-600 dark:text-blue-400';
+      queryStatus.textContent = '正在查询案件信息...';
+
+      // 验证通过后获取公开案件信息（仍为精简字段）
       const res = await fetch(`${CASE_API_URL}/${encodeURIComponent(caseNumber)}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: '查询失败' }));
         throw new Error(err.detail || `案号 ${caseNumber} 未找到`);
       }
       const data = await res.json();
+
+      // attach summary from verification
+      data.summary = v.summary || '';
+
 
       // Build result card
       const statusMap = {
@@ -129,6 +159,7 @@ import OfficialLayout from '../../layouts/OfficialLayout.astro'
             <div><span class="text-gray-500 dark:text-gray-400">状态：</span><span class="text-gray-900 dark:text-white">${escapeHtml(statusMap[data.status] || data.status || '—')}</span></div>
             <div class="col-span-2"><span class="text-gray-500 dark:text-gray-400">提交时间：</span><span class="text-gray-900 dark:text-white">${escapeHtml(data.created_at ? new Date(data.created_at).toLocaleString('zh-CN') : '—')}</span></div>
           </div>
+          <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line mt-2 p-2 rounded bg-white/50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800">${escapeHtml(data.summary || data.title || '')}</div>
           <button type="button" id="ai-analyze-btn" class="w-full mt-1 px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition flex items-center justify-center gap-2">
             <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4Z"/><path d="M20 12v4a8 8 0 0 1-16 0v-4"/><path d="M12 18v4"/></svg>
             进入智能咨询分析案件
