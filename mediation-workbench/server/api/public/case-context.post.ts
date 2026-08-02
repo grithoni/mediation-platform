@@ -1,4 +1,4 @@
-import { verifyPartyAccess } from '../../../utils/auth'
+import { verifyPartyAccess } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
