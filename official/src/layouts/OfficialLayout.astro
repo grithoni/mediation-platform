@@ -54,8 +54,8 @@ function navClass(path: string, matchStartsWith = false) {
               <svg class="w-3.5 h-3.5 transition-transform duration-200" data-dropdown-arrow xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="absolute left-0 mt-1 w-44 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-50 hidden" data-dropdown-panel>
-              <a href="/mediation" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">我要调解</a>
-              <a href="/mediation/guide" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">流程指引</a>
+              <a href="http://localhost:6080/apply" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">我要调解</a>
+              <a href="http://localhost:6080/guide" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">流程指引</a>
             </div>
           </div>
 
@@ -122,8 +122,8 @@ function navClass(path: string, matchStartsWith = false) {
           <svg id="mobileSubArrow-mediation" class="w-4 h-4 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div id="mobileSub-mediation" class="ml-4 space-y-0.5 mt-0.5 overflow-hidden max-h-0 transition-all duration-200">
-          <a href="/mediation" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">我要调解</a>
-          <a href="/mediation/guide" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">流程指引</a>
+          <a href="http://localhost:6080/apply" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">我要调解</a>
+          <a href="http://localhost:6080/guide" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">流程指引</a>
         </div>
       </div>
 
@@ -175,7 +175,7 @@ function navClass(path: string, matchStartsWith = false) {
             <li><a href="/dispute-review" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">争议评审</a></li>
             <li><a href="/consulting" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">咨询服务</a></li>
             <li><a href="/training" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">培训服务</a></li>
-            <li><a href="/mediation/guide" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">流程指引</a></li>
+            <li><a href="http://localhost:6080/guide" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">流程指引</a></li>
             <li><a href="/contact" class="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">联系我们</a></li>
             <li><a href="/admin" class="text-sm text-gray-400 dark:text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors">⚙ 管理后台</a></li>
           </ul>
