@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
     if (!part.data) continue
     const isFile = part.filename
     if (isFile) {
-      const category = FILE_CATEGORY_MAP[part.name] || 'application'
+      const category = FILE_CATEGORY_MAP[part.name ?? ''] || 'application'
       files.push({ name: part.filename!, data: part.data, type: part.type || '', category })
       continue
     }
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
     } else {
       // 其余文本字段全部收进 appFields（22字段 + 标志位）
       // 兼容 snake_case 字段名（官网表单），统一转为 camelCase
-      appFields[toCamelCase(part.name)] = value
+      appFields[toCamelCase(part.name ?? '')] = value
     }
   }
 

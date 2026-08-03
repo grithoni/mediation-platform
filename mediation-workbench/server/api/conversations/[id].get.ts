@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     .get()
 
   if (!row) throw createError({ statusCode: 404, message: '对话不存在' })
-  if (row.mediatorId !== mediator.id) throw createError({ statusCode: 403, message: '无权访问' })
+  if (row.mediatorId !== mediator.userId) throw createError({ statusCode: 403, message: '无权访问' })
 
   let messages: any[] = []
   try { messages = JSON.parse(row.messagesJson) } catch {}

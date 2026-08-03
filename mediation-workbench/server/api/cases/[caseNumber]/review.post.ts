@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const now = new Date()
+  const now = Date.now()
 
   if (action === 'approve') {
     // 审核通过 -> 进入预评估

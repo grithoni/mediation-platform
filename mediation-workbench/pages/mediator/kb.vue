@@ -52,7 +52,7 @@ async function viewDoc(path: string) {
   }
   viewing.value = true
   try {
-    const content = await $fetch('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000 }) as string
+    const content = await $fetch<string>('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000 }) as string
     expandedDocs.value = { ...expandedDocs.value, [path]: content }
   } catch (e: any) {
     viewError.value = e?.data?.message || e?.message || '无法读取文件'
@@ -109,7 +109,7 @@ const docGroups = computed(() => {
     .map((title) => ({
       title,
       icon: CATEGORY_RULES.find((c) => c.title === title)?.icon || 'i-lucide-folder',
-      docs: groups[title],
+      docs: groups[title] ?? [],
     }))
 })
 
@@ -254,7 +254,7 @@ onMounted(async () => {
             <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">调解业务知识 · 支持上传、删除与检索</p>
           </div>
           <div class="flex items-center gap-2">
-            <UButton icon="i-lucide-refresh-cw" color="gray" variant="ghost" size="sm" title="刷新列表" :loading="loadingDocs" @click="loadDocs" />
+            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" title="刷新列表" :loading="loadingDocs" @click="loadDocs" />
             <UButton icon="i-lucide-upload" color="primary" variant="soft" size="sm" title="上传文档" :loading="uploading" @click="openUploadModal" />
           </div>
         </div>
@@ -377,7 +377,7 @@ onMounted(async () => {
                             v-if="isMd(doc.path)"
                             icon="i-lucide-eye"
                             size="xs"
-                            color="gray"
+                            color="neutral"
                             variant="ghost"
                             :loading="viewing"
                             title="查看原文"
@@ -386,7 +386,7 @@ onMounted(async () => {
                           <UButton
                             icon="i-lucide-trash-2"
                             size="xs"
-                            color="red"
+                            color="error"
                             variant="ghost"
                             :loading="deletingPath === doc.path"
                             title="删除文档"
@@ -412,14 +412,14 @@ onMounted(async () => {
     </div>
 
     <!-- 上传文档弹窗（Dify 风格分段配置） -->
-    <UModal v-model="uploadModalOpen" :ui="{ width: 'max-w-2xl' }">
+    <UModal v-model="uploadModalOpen" :ui="{ content: 'max-w-2xl' }">
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
           <div>
             <h3 class="text-lg font-bold text-gray-900 dark:text-white">上传文档</h3>
             <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">设置分段与清洗规则后建立索引</p>
           </div>
-          <UButton icon="i-lucide-x" color="gray" variant="ghost" size="sm" @click="uploadModalOpen = false" />
+          <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="() => { uploadModalOpen = false }" />
         </div>
 
         <!-- 1. 选择文件 -->
@@ -497,7 +497,7 @@ onMounted(async () => {
 
         <!-- 4. 操作按钮 -->
         <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <UButton color="gray" variant="ghost" @click="uploadModalOpen = false">取消</UButton>
+          <UButton color="neutral" variant="ghost" @click="() => { uploadModalOpen = false }">取消</UButton>
           <UButton color="primary" :loading="uploading" :disabled="selectedFiles.length === 0" @click="confirmUpload">
             <UIcon name="i-lucide-upload" class="w-4 h-4" /> 确认上传
           </UButton>
@@ -506,17 +506,17 @@ onMounted(async () => {
     </UModal>
 
     <!-- 查看原文弹窗（仅 .md） -->
-    <UModal v-model="viewDocOpen" :ui="{ width: 'max-w-3xl' }">
+    <UModal v-model="viewDocOpen" :ui="{ content: 'max-w-3xl' }">
       <div class="p-5">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2 min-w-0">
             <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500 shrink-0" />
             <h3 class="text-lg font-bold text-gray-900 dark:text-white truncate">{{ viewingDoc?.fileName }}</h3>
           </div>
-          <UButton icon="i-lucide-x" color="gray" variant="ghost" size="sm" @click="viewDocOpen = false" />
+          <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="() => { viewDocOpen = false }" />
         </div>
         <p v-if="viewError" class="mb-3">
-          <UAlert color="red" :title="viewError" icon="i-lucide-alert-circle" />
+          <UAlert color="error" :title="viewError" icon="i-lucide-alert-circle" />
         </p>
         <div
           v-if="viewingDoc"

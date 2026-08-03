@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     partyAContact: body.partyAContact || null,
     partyBContact: body.partyBContact || null,
     status: 'pending' as const,
-    mediatorId: body.mediatorId || mediator.id,
+    mediatorId: body.mediatorId || mediator.userId,
     accessCode: body.accessCode || uuidv4().slice(0, 8).toUpperCase(),
     createdAt: Date.now(),
     updatedAt: Date.now(),

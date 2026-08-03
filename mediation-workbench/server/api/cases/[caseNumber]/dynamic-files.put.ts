@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '没有需要更新的字段' })
   }
 
-  const now = new Date()
+  const now = Date.now()
   const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseNumber)).get()
 
   if (existing) {

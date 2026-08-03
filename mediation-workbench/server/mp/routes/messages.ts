@@ -10,10 +10,10 @@ import { messages, cases } from '../../database/schema'
  * POST /api/mp/messages/:caseId — Send message
  */
 export function messageRoutes(router: Router) {
+  const db = getDb()
   router.get('/api/mp/messages/:caseId', defineEventHandler(async (event) => {
     const caseId = (event as any).context.params?.caseId
     if (!caseId) throw createError({ statusCode: 400, message: '缺少案件编号' })
-    const db = getDb()
     const caseRow = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
     const msgs = db.select().from(messages).where(eq(messages.caseId, caseId)).orderBy(desc(messages.createdAt)).limit(100).all()

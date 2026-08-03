@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: '权限不足' })
   }
 
-  const now = new Date()
+  const now = Date.now()
   const updateData: any = {
     updatedAt: now,
   }

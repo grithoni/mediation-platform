@@ -67,7 +67,7 @@ export const CaseStatusColors: Record<CaseStatusType, string> = {
 }
 
 // 状态分组
-export const CaseStatusGroups = {
+export const CaseStatusGroups: Record<'OPEN' | 'ACTIVE' | 'AGREEMENT' | 'CLOSED', CaseStatusType[]> = {
   OPEN: [CaseStatus.INTAKE, CaseStatus.ANALYSIS, CaseStatus.REVIEWING, CaseStatus.SCREENING, CaseStatus.ACCEPTED, CaseStatus.MEDIATOR_SELECTION],
   ACTIVE: [CaseStatus.MEDIATING, CaseStatus.CAUCUS, CaseStatus.NEGOTIATING],
   AGREEMENT: [CaseStatus.AGREEMENT_DRAFTING, CaseStatus.AGREEMENT_PENDING, CaseStatus.SIGNING],

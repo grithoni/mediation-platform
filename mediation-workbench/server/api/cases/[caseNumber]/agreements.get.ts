@@ -47,7 +47,6 @@ export default defineEventHandler(async (event) => {
         breachClauses: a.breachClauses ? JSON.parse(a.breachClauses) : null,
         status: a.status,
         version: a.version,
-        isAiGenerated: a.isAiGenerated,
         approvedByPartyA: a.approvedByPartyA,
         approvedByPartyB: a.approvedByPartyB,
         approvedAt: a.approvedAt,

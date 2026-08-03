@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import type { Message } from '~/composables/useChat'
+// Local message shape used by this panel (matches ChatMessage component props)
+interface Message {
+  id: string
+  senderType: 'party' | 'mediator' | 'ai' | 'system'
+  senderName: string
+  content: string
+  timestamp: string
+  isSelf: boolean
+}
 
 interface Props {
   caseId: string
@@ -119,7 +127,7 @@ function handleQuickAction(prompt: string) {
       <ChatMessage
         v-for="msg in messages"
         :key="msg.id"
-        :sender-type="msg.senderType"
+        :sender-type="msg.senderType as 'party' | 'mediator' | 'ai'"
         :sender-name="msg.senderName"
         :content="msg.content"
         :timestamp="msg.timestamp"

@@ -10,9 +10,9 @@ import { cases, caseDynamicFiles, documents } from '../../database/schema'
  * GET /api/mp/cases/:id/files — Case files
  */
 export function caseRoutes(router: Router) {
+  const db = getDb()
   router.get('/api/mp/cases', defineEventHandler(async (event) => {
     const user = (event as any).context.mpUser
-    const db = getDb()
     const allCases = db.select().from(cases).orderBy(desc(cases.createdAt)).all()
     const userCases = allCases.filter(c => {
       if (user.openid.startsWith('demo_')) return user.openid === `demo_${c.id}`

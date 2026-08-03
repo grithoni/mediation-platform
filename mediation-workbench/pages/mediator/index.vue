@@ -134,8 +134,9 @@ const modelOptions = [
 watch(
   () => cases.value,
   (list) => {
-    if (list.length > 0 && !list.some((c) => c.id === activeCaseId.value)) {
-      activeCaseId.value = list[0].id
+    const first = list[0]
+    if (first && !list.some((c) => c.id === activeCaseId.value)) {
+      activeCaseId.value = first.id
     }
   },
   { immediate: true },
@@ -232,7 +233,7 @@ function resetChat() {
               <h1 class="text-2xl font-bold text-gray-900 dark:text-white">案件工作台</h1>
               <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">共 {{ filteredCases.length }} 个案件 · 调解员 {{ user?.name }}</p>
             </div>
-            <UButton icon="i-lucide-refresh-cw" color="gray" variant="soft" :loading="loadingCases" @click="loadCases">
+            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="soft" :loading="loadingCases" @click="loadCases">
               刷新
             </UButton>
           </div>
@@ -301,7 +302,7 @@ function resetChat() {
                   <div class="text-xs text-gray-400 dark:text-gray-500">提交于 {{ fmtTime(c.createdAt) }}</div>
                   <UButton
                     size="sm"
-                    color="gray"
+                    color="neutral"
                     variant="soft"
                     icon="i-lucide-arrow-right"
                     :to="`/mediator/cases/${c.id}`"
@@ -322,7 +323,7 @@ function resetChat() {
           <UButton
             icon="i-lucide-rotate-ccw"
             size="xs"
-            color="gray"
+            color="neutral"
             variant="ghost"
             title="清空对话"
             class="absolute top-2 right-2 z-10"
@@ -388,7 +389,7 @@ function resetChat() {
                 :options="modelOptions"
                 size="xs"
                 class="w-36"
-                color="gray"
+                color="neutral"
                 variant="soft"
               />
             </div>

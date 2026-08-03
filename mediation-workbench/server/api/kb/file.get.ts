@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
         const basename = filePath.split('/').pop() || filePath
         for (const root of allowedRoots) {
           try {
-            const walk = (dir) => {
+            const walk = (dir: string): string | null => {
               const entries = readdirSync(dir)
               for (const e of entries) {
                 const p = resolve(dir, e)

@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '指定用户不是调解员' })
   }
 
-  const now = new Date()
+  const now = Date.now()
 
   // 更新案件
   await db.update(cases).set({

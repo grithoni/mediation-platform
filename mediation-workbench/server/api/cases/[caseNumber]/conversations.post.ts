@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     title,
     messagesJson: JSON.stringify(msgs),
     messageCount: msgs.length,
-    createdAt: now,
+    createdAt: Date.now(),
   }).run()
 
   return { success: true, data: { id, title, messageCount: msgs.length, createdAt: now.toISOString() } }

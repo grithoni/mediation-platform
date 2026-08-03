@@ -317,7 +317,7 @@ onMounted(async () => {
     pending.value = false
   }
 
-  chat.connectWebSocket(sessionToken.value || accessCode, 'party')
+  chat.connectWebSocket(sessionToken.value || accessCode)
 })
 
 onUnmounted(() => {

@@ -1,6 +1,7 @@
 import { getDb } from '~/server/database'
 import { cases, caseActivities } from '~/server/database/schema'
 import { requireApiAuth } from '~/server/utils/api-auth'
+import { count } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 export default defineEventHandler(async (event) => {
@@ -34,7 +35,7 @@ export default defineEventHandler(async (event) => {
   const year = new Date().getFullYear()
   const db = getDb()
   const countResult = await db
-    .select({ count: db.fn.count() })
+    .select({ count: count() })
     .from(cases)
     .get()
   const caseNumber = `${year}-${(countResult?.count || 0) + 1}`
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
   // 生成访问码
   const accessCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
-  const now = new Date()
+  const now = Date.now()
 
   // 创建案件
   await db.insert(cases).values({

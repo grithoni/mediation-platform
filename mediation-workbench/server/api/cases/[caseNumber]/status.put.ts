@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 更新案件状态
-  const now = new Date()
+  const now = Date.now()
   const updateData: any = {
     phase: newStatus,
     updatedAt: now,

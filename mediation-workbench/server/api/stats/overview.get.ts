@@ -6,10 +6,11 @@ import { eq, and, gte, lte, count, sql } from 'drizzle-orm'
 export default defineEventHandler(async (event) => {
   // 需要管理员或案件管理员权限
   const user = requireRole(event, ['admin', 'case_manager'])
+  const db = getDb()
 
   const query = getQuery(event)
-  const startDate = query.startDate ? new Date(query.startDate as string) : null
-  const endDate = query.endDate ? new Date(query.endDate as string) : null
+  const startDate = query.startDate ? new Date(query.startDate as string).getTime() : null
+  const endDate = query.endDate ? new Date(query.endDate as string).getTime() : null
 
   // 构建时间过滤条件
   const timeFilter = startDate && endDate

@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
     ? await db.select().from(users).where(eq(users.id, caseData.partyBUserId)).get()
     : null
 
-  const now = new Date()
+  const now = Date.now()
 
   // 创建签署记录
   const signatures = []

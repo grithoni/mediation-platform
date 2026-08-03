@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     })
     .from(savedConversations)
     .leftJoin(cases, eq(savedConversations.caseId, cases.id))
-    .where(eq(savedConversations.mediatorId, mediator.id))
+    .where(eq(savedConversations.mediatorId, mediator.userId))
     .orderBy(desc(savedConversations.createdAt))
     .limit(limit)
     .all()

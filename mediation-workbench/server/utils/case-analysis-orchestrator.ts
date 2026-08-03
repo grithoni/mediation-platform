@@ -376,12 +376,12 @@ async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowBundle> 
     application?.applicantName,
     application?.respondentName,
     application?.agentName,
-  ].filter(Boolean)))
+  ].filter((name): name is string => !!name)))
 
   const addresses = Array.from(new Set([
     application?.applicantAddress,
     application?.respondentAddress,
-  ].filter(Boolean)))
+  ].filter((addr): addr is string => !!addr)))
 
   const knownEntities: KnownEntity[] = []
   if (caseData.partyAName) knownEntities.push({ value: caseData.partyAName, category: '申请人' })
@@ -636,7 +636,7 @@ export async function desensitizeCaseMaterials(
   let roleMatch: RegExpExecArray | null
   while ((roleMatch = ROLE_NAME_PATTERN.exec(text)) !== null) {
     spans.push({
-      start: roleMatch.index + roleMatch[1].length,
+      start: roleMatch.index + roleMatch[1]!.length,
       end: roleMatch.index + roleMatch[0].length,
       value: roleMatch[2] || '',
       category: roleMatch[1] || '姓名',

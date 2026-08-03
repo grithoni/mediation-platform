@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const noteId = uuidv4()
-  const now = new Date()
+  const now = Date.now()
 
   // 创建笔记
   await db.insert(caseNotes).values({

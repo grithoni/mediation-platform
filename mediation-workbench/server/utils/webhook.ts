@@ -82,8 +82,9 @@ async function sendSingleWebhook(
   webhook: any,
   payload: string
 ): Promise<void> {
+  const db = getDb()
   const logId = uuidv4()
-  const now = new Date()
+  const now = Date.now()
 
   try {
     // 生成签名
@@ -163,6 +164,7 @@ async function sendSingleWebhook(
  * 重试失败的 Webhook
  */
 export async function retryFailedWebhooks(): Promise<void> {
+  const db = getDb()
   // 查询需要重试的 Webhook 日志
   const failedLogs = await db
     .select()
@@ -171,7 +173,7 @@ export async function retryFailedWebhooks(): Promise<void> {
     .all()
 
   for (const log of failedLogs) {
-    if (log.retryCount >= 3) continue
+    if ((log.retryCount ?? 0) >= 3) continue
 
     const webhook = await db
       .select()
@@ -187,7 +189,7 @@ export async function retryFailedWebhooks(): Promise<void> {
     // 更新重试次数
     await db
       .update(webhookLogs)
-      .set({ retryCount: log.retryCount + 1 })
+      .set({ retryCount: (log.retryCount ?? 0) + 1 })
       .where(eq(webhookLogs.id, log.id))
       .run()
   }

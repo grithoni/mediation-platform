@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { sessions } from '../database/schema'
 
 type SessionRow = InferSelectModel<typeof sessions>
@@ -33,13 +34,7 @@ export function classifyMessageActor(context: MessageActorContext): MessageActor
 }
 
 export function resolvePartySessionToken(
-  db: {
-    select: () => {
-      from: (table: typeof sessions) => {
-        where: (condition: unknown) => { get: () => SessionRow | undefined }
-      }
-    }
-  },
+  db: BetterSQLite3Database<Record<string, unknown>>,
   args: {
     caseId: string
     sessionToken?: string

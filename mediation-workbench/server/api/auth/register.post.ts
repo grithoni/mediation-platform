@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
 
   // 创建用户
   const userId = uuidv4()
-  const now = new Date()
+  const now = Date.now()
 
   await db.insert(users).values({
     id: userId,

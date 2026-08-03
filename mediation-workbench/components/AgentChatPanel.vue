@@ -6,14 +6,14 @@
       <div class="flex items-center gap-2">
         <UIcon name="i-lucide-bot" class="w-5 h-5 text-blue-500" />
         <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">调解智能体</span>
-        <UBadge v-if="isStreaming" color="blue" variant="subtle" size="xs">执行中</UBadge>
+        <UBadge v-if="isStreaming" color="primary" variant="subtle" size="xs">执行中</UBadge>
         <span v-else class="text-[10px] text-gray-400 font-mono">AUTONOMOUS AGENT</span>
       </div>
       <div class="flex items-center gap-1">
         <UButton
           v-if="messages.length > 0"
           size="xs"
-          color="blue"
+          color="primary"
           variant="soft"
           @click="emit('endDialog')"
         >
@@ -133,7 +133,7 @@
         <UButton
           icon="i-lucide-send"
           size="sm"
-          color="blue"
+          color="primary"
           variant="solid"
           :disabled="isStreaming || !inputText.trim()"
           @click="submitMessage"
@@ -182,6 +182,12 @@ const inputText = ref('')
 const containerRef = ref<HTMLElement | null>(null)
 const idleTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const submitting = ref(false) // debounce guard
+
+// Reset idle timer (used to track conversation inactivity)
+function resetIdleTimer() {
+  if (idleTimer.value) clearTimeout(idleTimer.value)
+  idleTimer.value = null
+}
 
 // Use the same keyword list as the server-side dialog-intent.ts
 import { getEndDialogKeywords } from '~/server/utils/dialog-intent'

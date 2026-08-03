@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   // 构建转发 FormData
   const body = new FormData()
-  const blob = new Blob([filePart.data], {
+  const blob = new Blob([new Uint8Array(filePart.data)], {
     type: (filePart.type as string) || 'application/octet-stream',
   })
   body.append('file', blob, filePart.filename as string)

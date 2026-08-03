@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   setResponseHeader(event, 'Content-Type', doc.mimeType || 'application/octet-stream')
   setResponseHeader(event, 'Content-Disposition', `inline; filename="${encodeURIComponent(doc.originalName)}"`)
   if (doc.size) {
-    setResponseHeader(event, 'Content-Length', String(doc.size))
+    setResponseHeader(event, 'Content-Length', doc.size)
   }
 
   return readFileSync(filePath)

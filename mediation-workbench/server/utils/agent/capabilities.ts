@@ -1,8 +1,6 @@
 import { and, eq } from 'drizzle-orm'
-import type { InferSelectModel } from 'drizzle-orm'
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { caseDynamicFiles, cases } from '../../database/schema'
-
-type CaseDynamicFileRow = InferSelectModel<typeof caseDynamicFiles>
 
 const ENABLED_AGENT_TOOL_NAMES = [
   'ask_user',
@@ -46,23 +44,7 @@ export interface PendingAgentCase {
 }
 
 export function claimPendingAgentCases(
-  db: {
-    select: (fields?: Record<string, unknown>) => {
-      from: (table: typeof caseDynamicFiles) => {
-        innerJoin: (
-          table: typeof cases,
-          on: unknown,
-        ) => {
-          where: (condition: unknown) => { all: () => PendingAgentCase[] }
-        }
-      }
-    }
-    update: (table: typeof caseDynamicFiles) => {
-      set: (values: Partial<CaseDynamicFileRow>) => {
-        where: (condition: unknown) => { run: () => unknown }
-      }
-    }
-  },
+  db: BetterSQLite3Database<Record<string, unknown>>,
   options: {
     limit?: number
     now?: number

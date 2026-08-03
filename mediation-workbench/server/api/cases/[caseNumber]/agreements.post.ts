@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const agreementId = uuidv4()
-  const now = new Date()
+  const now = Date.now()
 
   // 创建协议
   await db.insert(agreements).values({
@@ -49,7 +49,6 @@ export default defineEventHandler(async (event) => {
     breachClauses: breachClauses ? JSON.stringify(breachClauses) : null,
     status: 'draft',
     version: 1,
-    isAiGenerated,
     createdBy: user.userId,
     createdAt: now,
     updatedAt: now,

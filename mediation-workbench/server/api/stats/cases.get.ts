@@ -5,10 +5,11 @@ import { and, gte, lte, count, sql } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   const user = requireRole(event, ['admin', 'case_manager'])
+  const db = getDb()
 
   const query = getQuery(event)
-  const startDate = query.startDate ? new Date(query.startDate as string) : null
-  const endDate = query.endDate ? new Date(query.endDate as string) : null
+  const startDate = query.startDate ? new Date(query.startDate as string).getTime() : null
+  const endDate = query.endDate ? new Date(query.endDate as string).getTime() : null
   const groupBy = (query.groupBy as string) || 'month' // month | disputeType | phase
 
   // 构建时间过滤条件

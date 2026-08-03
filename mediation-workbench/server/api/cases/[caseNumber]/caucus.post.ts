@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
 
   // 生成 Caucus 会话 ID
   const caucusSessionId = `caucus_${caseId}_${targetParty}_${Date.now()}`
-  const now = new Date()
+  const now = Date.now()
 
   // 更新案件状态为 caucus
   await db.update(cases).set({
