@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nuxt dev --port 6080",
-    "dev:mp": "tsx server/mp/index.ts",
+    "dev:mp": "NANOBOT_AI_PROBE_ONLY=1 tsx server/mp/index.ts",
     "build": "nuxt build",
     "test": "node --import tsx --test tests/**/*.test.ts",
     "generate": "nuxt generate",
@@ -16,7 +16,12 @@
     "db:seed": "npx tsx server/database/seed.ts",
     "db:seed-mediators": "npx tsx server/database/seed-mediators.ts",
     "db:seed-cases": "npx tsx server/database/seed-cases.ts",
-    "kb": ".venv-kb/bin/python3 server/kb/server.py 8700"
+    "kb": ".venv-kb/bin/python3 server/kb/server.py 8700",
+    "ai:setup": "bash python/ai-engine/scripts/setup.sh",
+    "ai:start": "bash python/ai-engine/scripts/engine.sh start",
+    "ai:stop": "bash python/ai-engine/scripts/engine.sh stop",
+    "ai:status": "bash python/ai-engine/scripts/engine.sh status",
+    "ai:health": "bash python/ai-engine/scripts/engine.sh health"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",

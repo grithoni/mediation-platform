@@ -31,6 +31,23 @@ app.use(defineEventHandler((event) => {
   }
 }))
 
+// AI engine status — probe only, NEVER spawns (the Nitro plugin is the single
+// spawn owner; this standalone process only reports). Shared by the /health/ai
+// route and the startup probe.
+async function reportAiEngineStatus() {
+  const { aiEngineStatus } = await import('../utils/ai-engine-manager')
+  const status = await aiEngineStatus()
+  return {
+    healthy: status.healthy,
+    status: status.status,
+    detail: status.detail || null,
+    note: 'probe only — engine lifecycle is owned by the Nuxt server plugin',
+  }
+}
+
+// 必须先于 /health 注册，否则 /health 会按前缀匹配吃掉 /health/ai。
+app.use('/health/ai', defineEventHandler(() => reportAiEngineStatus()))
+
 // Health
 app.use('/health', defineEventHandler(() => ({
   status: 'ok',
@@ -75,8 +92,17 @@ const server = createServer(toNodeListener(app))
 server.listen(PORT, () => {
   console.log(`[MP API] 小程序接口服务启动 http://localhost:${PORT}`)
   console.log(`[MP API] 健康检查: GET  http://localhost:${PORT}/health`)
+  console.log(`[MP API] AI引擎状态: GET http://localhost:${PORT}/health/ai`)
   console.log(`[MP API] 登录接口: POST http://localhost:${PORT}/api/mp/auth/login`)
   console.log(`[MP API] 案件列表: GET  http://localhost:${PORT}/api/mp/cases`)
   console.log(`[MP API] 消息接口: GET  http://localhost:${PORT}/api/mp/messages/:caseId`)
   console.log(`[MP API] AI对话:   POST http://localhost:${PORT}/api/mp/chat`)
+  // 启动时探测一次内置 AI 引擎状态并报告（不 spawn，避免与 Nitro 插件双重启动）
+  reportAiEngineStatus()
+    .then((s) => {
+      console.log(`[MP API] 内置AI引擎: ${s.status}${s.detail ? ` (${s.detail})` : ''}`)
+    })
+    .catch((err: any) => {
+      console.log(`[MP API] 内置AI引擎: 探测失败 ${err?.message || err}`)
+    })
 })

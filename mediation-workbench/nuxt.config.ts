@@ -9,11 +9,8 @@ export default defineNuxtConfig({
     fallback: 'light',
   },
 
-  nitro: {
-    experimental: {
-      websocket: true,
-    },
-  },
+  // @nuxt/schema 4.x 类型中移除了顶层 `nitro` 键，运行时仍生效；以展开方式传入避免类型报错
+  ...({ nitro: { experimental: { websocket: true } } } as const),
 
   devServer: {
     host: '0.0.0.0',
@@ -30,7 +27,9 @@ export default defineNuxtConfig({
     openaiApiKey: '',
     openaiBaseUrl: '',
     openaiModel: 'deepseek-v4-pro',
-    // nanobot AI 引擎（OpenAI 兼容 API）
+    // 内置 nanobot AI 引擎（OpenAI 兼容 API）——vendored engine，端口固定 8900
+    // 客户端 server/utils/nanobot.ts 按 环境变量 > 此处 runtimeConfig > 默认值 解析，
+    // 引擎进程由 server/plugins/ai-engine.ts 在项目内 .venv-ai + .data/ai/config.json 启动。
     nanobotBaseUrl: 'http://127.0.0.1:8900/v1',
     nanobotModel: 'deepseek-v4-flash',
     localNerBaseUrl: 'http://127.0.0.1:11434',
