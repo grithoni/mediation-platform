@@ -17,8 +17,24 @@ export default defineNuxtConfig({
     port: 6080,
   },
 
+  // 排除 vendored Python 引擎 / venv / 运行时数据，避免文件监听器耗尽 fd（EMFILE）
+  ignore: ['python/**', '.venv-ai/**', '.venv-kb/**', '.data/**'],
+
   vite: {
     cacheDir: 'node_modules/.cache/vite',
+    server: {
+      watch: {
+        // 覆盖 chokidar ignored 时需保留 node_modules 等默认项
+        ignored: [
+          '**/python/**',
+          '**/.venv-ai/**',
+          '**/.venv-kb/**',
+          '**/.data/**',
+          '**/.git/**',
+          '**/node_modules/**',
+        ],
+      },
+    },
   },
 
   runtimeConfig: {
