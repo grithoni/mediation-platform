@@ -9,6 +9,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -68,7 +69,10 @@ async def ocr(file: UploadFile = File(...)):
     if not file_bytes:
         raise HTTPException(status_code=400, detail="文件为空")
 
-    text, method, used_ocr = extract_text(file.filename, file_bytes)
+    # extract_text（RapidOCR / pdf2image / pdfplumber）与 extract_fields_with_llm
+    # （同步 OpenAI 调用）均为 CPU/IO 密集的阻塞操作；放入线程池执行，
+    # 避免阻塞事件循环导致并发请求串行化（并发 DoS）。
+    text, method, used_ocr = await asyncio.to_thread(extract_text, file.filename, file_bytes)
     if not text.strip():
         return {
             "success": False,
@@ -79,7 +83,7 @@ async def ocr(file: UploadFile = File(...)):
             "fields": {},
         }
 
-    fields = extract_fields_with_llm(text)
+    fields = await asyncio.to_thread(extract_fields_with_llm, text)
     if "error" in fields:
         return {
             "success": False,

@@ -3,6 +3,16 @@
 // Agent Chat Composable — SSE streaming agent execution
 // ============================================================
 
+// 客户端 SSE 整体超时：服务端 /api/chat/agent 内部引擎请求超时为 125s
+// （server/utils/nanobot.ts），浏览器端略高于服务端，让服务端自身的
+// 超时/错误事件先返回；引擎挂死时浏览器也能兜底中断。
+const AI_STREAM_TIMEOUT_MS = 130_000
+
+function isTimeoutError(err: unknown): boolean {
+  const name = (err as { name?: string } | undefined)?.name
+  return name === 'AbortError' || name === 'TimeoutError'
+}
+
 export interface AgentEvent {
   type: 'thinking' | 'tool_call' | 'tool_result' | 'text' | 'done' | 'error' | 'finished'
   turn?: number
@@ -64,10 +74,16 @@ export function useAgentChat(caseId: Ref<string>) {
     currentTurn.value = 0
     error.value = null
 
+    // Stream completion tracking — must live outside try/finally so the
+    // finally block can decide whether partial content should be persisted.
+    let completed = false // Received a 'done' completion marker
+    let streamError: string | null = null // Received an explicit 'error' event
+
     try {
       const response = await fetch('/api/chat/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(AI_STREAM_TIMEOUT_MS),
         body: JSON.stringify({
           caseId: caseId.value,
           message,
@@ -87,6 +103,19 @@ export function useAgentChat(caseId: Ref<string>) {
       const decoder = new TextDecoder()
       let leftover = '' // Buffer for incomplete lines across chunks
 
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr) return
+
+        try {
+          const event: AgentEvent = JSON.parse(jsonStr)
+          if (event.type === 'done') completed = true
+          if (event.type === 'error') streamError = event.content || '未知错误'
+          handleAgentEvent(event)
+        } catch {}
+      }
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -99,35 +128,33 @@ export function useAgentChat(caseId: Ref<string>) {
         leftover = lines.pop() || ''
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const jsonStr = line.slice(6).trim()
-          if (!jsonStr) continue
-
-          try {
-            const event: AgentEvent = JSON.parse(jsonStr)
-            handleAgentEvent(event)
-          } catch {}
+          processLine(line)
         }
       }
 
       // Process any remaining data in the buffer
       if (leftover.trim()) {
-        const line = leftover.trim()
-        if (line.startsWith('data: ')) {
-          try {
-            const event: AgentEvent = JSON.parse(line.slice(6).trim())
-            handleAgentEvent(event)
-          } catch {}
-        }
+        processLine(leftover)
+      }
+
+      // EOF 且未收到完成标记：上游异常中断。若服务端已发送显式 error
+      // 事件（handleAgentEvent 已展示错误），则不重复抛出；否则抛错让
+      // 调用方感知，避免把半截内容当作成功结果。
+      if (streamError) {
+        // already surfaced by handleAgentEvent('error')
+      } else if (!completed) {
+        throw new Error('AI 响应中断，未收到完成标记，请重试。')
       }
     } catch (err: any) {
-      error.value = err.message
-      addAgentMessage(`⚠️ 智能体执行出错: ${err.message}`)
+      const msg = isTimeoutError(err) ? 'AI 响应超时，请稍后重试。' : err.message
+      error.value = msg
+      addAgentMessage(`⚠️ 智能体执行出错: ${msg}`)
     } finally {
       isStreaming.value = false
 
-      // Save final agent message
-      if (currentContent.value) {
+      // 仅在正常完成时持久化累积内容；异常中断时绝不把半截内容
+      // 当作成功消息（'done' 事件处理时已清空 currentContent）。
+      if (completed && currentContent.value) {
         addAgentMessage(currentContent.value)
       }
     }

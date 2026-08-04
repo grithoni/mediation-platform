@@ -8,6 +8,16 @@ export interface ChatMessage {
   createdAt: string | Date
 }
 
+// 客户端 SSE 整体超时：服务端 /api/chat/agent 内部引擎请求超时为 125s
+// （server/utils/nanobot.ts），浏览器端略高于服务端，让服务端自身的
+// 超时/错误事件先返回；引擎挂死时浏览器也能兜底中断。
+const AI_STREAM_TIMEOUT_MS = 130_000
+
+function isTimeoutError(err: unknown): boolean {
+  const name = (err as { name?: string } | undefined)?.name
+  return name === 'AbortError' || name === 'TimeoutError'
+}
+
 export function useChat(caseId: Ref<string>) {
   const messages = ref<ChatMessage[]>([])
   const isTyping = ref(false)
@@ -179,6 +189,7 @@ export function useChat(caseId: Ref<string>) {
       const response = await fetch('/api/chat/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(AI_STREAM_TIMEOUT_MS),
         body: JSON.stringify({
           caseId: caseId.value,
           message,
@@ -198,6 +209,63 @@ export function useChat(caseId: Ref<string>) {
       let fullContent = ''
       let leftover = ''
       let dialogEnded = false
+      let receivedDone = false
+      let streamError: string | null = null
+
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr) return
+
+        try {
+          const event = JSON.parse(jsonStr)
+          if (event.type === 'error') {
+            // 引擎/服务端显式报错：记录下来，流结束后以可处理错误抛出
+            streamError = event.content || 'AI 服务异常'
+            return
+          }
+          if (event.type === 'text' && event.content) {
+            fullContent += event.content
+            aiStreamContent.value = fullContent
+          }
+          if (event.type === 'thinking' && event.content) {
+            // Show simple thinking indicator (hide round number)
+            aiStreamContent.value = '思考中...'
+          }
+          if (event.type === 'tool_call' && event.toolName) {
+            aiStreamContent.value = `正在调用工具: ${event.toolName}...`
+          }
+          if (event.type === 'tool_result' && event.content) {
+            // Brief show of tool result before next thinking round
+            const preview = event.content.length > 80 ? event.content.slice(0, 80) + '...' : event.content
+            aiStreamContent.value = `工具返回: ${preview}`
+          }
+          if (event.type === 'done') {
+            receivedDone = true
+            if (event.content) {
+              fullContent = event.content
+              aiStreamContent.value = fullContent
+            }
+            if (event.data?.exitReason === 'DIALOG_ENDED') {
+              dialogEnded = true
+            }
+            // Generate fallback message when agent returned empty content
+            if (!fullContent && event.data?.exitReason) {
+              const reason = event.data.exitReason
+              if (reason === 'MAX_TURNS_EXCEEDED') {
+                fullContent = 'AI正在分析您的案件材料，请稍候继续对话。'
+              } else if (reason === 'TASK_DONE') {
+                fullContent = '已为您完成分析。'
+              } else if (reason === 'DIALOG_ENDED') {
+                fullContent = '信息收集完毕，请选择调解员继续。'
+              } else {
+                fullContent = 'AI助手已完成处理。'
+              }
+              aiStreamContent.value = fullContent
+            }
+          }
+        } catch {}
+      }
 
       while (true) {
         const { done, value } = await reader.read()
@@ -209,53 +277,21 @@ export function useChat(caseId: Ref<string>) {
         leftover = lines.pop() || ''
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const jsonStr = line.slice(6).trim()
-          if (!jsonStr) continue
-
-          try {
-            const event = JSON.parse(jsonStr)
-            if (event.type === 'text' && event.content) {
-              fullContent += event.content
-              aiStreamContent.value = fullContent
-            }
-            if (event.type === 'thinking' && event.content) {
-              // Show simple thinking indicator (hide round number)
-              aiStreamContent.value = '思考中...'
-            }
-            if (event.type === 'tool_call' && event.toolName) {
-              aiStreamContent.value = `正在调用工具: ${event.toolName}...`
-            }
-            if (event.type === 'tool_result' && event.content) {
-              // Brief show of tool result before next thinking round
-              const preview = event.content.length > 80 ? event.content.slice(0, 80) + '...' : event.content
-              aiStreamContent.value = `工具返回: ${preview}`
-            }
-            if (event.type === 'done') {
-              if (event.content) {
-                fullContent = event.content
-                aiStreamContent.value = fullContent
-              }
-              if (event.data?.exitReason === 'DIALOG_ENDED') {
-                dialogEnded = true
-              }
-              // Generate fallback message when agent returned empty content
-              if (!fullContent && event.data?.exitReason) {
-                const reason = event.data.exitReason
-                if (reason === 'MAX_TURNS_EXCEEDED') {
-                  fullContent = 'AI正在分析您的案件材料，请稍候继续对话。'
-                } else if (reason === 'TASK_DONE') {
-                  fullContent = '已为您完成分析。'
-                } else if (reason === 'DIALOG_ENDED') {
-                  fullContent = '信息收集完毕，请选择调解员继续。'
-                } else {
-                  fullContent = 'AI助手已完成处理。'
-                }
-                aiStreamContent.value = fullContent
-              }
-            }
-          } catch {}
+          processLine(line)
         }
+      }
+      // Flush any residual line not terminated by \n (e.g. trailing "done")
+      if (leftover.trim()) {
+        processLine(leftover)
+      }
+
+      // 流已 EOF 但未收到完成标记（done），说明上游异常中断：
+      // 不要静默返回半截内容，抛出可处理错误让调用方感知。
+      if (streamError) {
+        throw new Error(streamError)
+      }
+      if (!receivedDone) {
+        throw new Error('AI 响应中断，未收到完成标记，请稍后重试。')
       }
 
       if (fullContent) {
@@ -273,7 +309,9 @@ export function useChat(caseId: Ref<string>) {
       return { content: fullContent, dialogEnded }
     }
     catch (err) {
-      const errorMsg = `AI服务暂时不可用，请稍后重试。${(err as Error).message ? `(${(err as Error).message})` : ''}`
+      const errorMsg = isTimeoutError(err)
+        ? 'AI 响应超时，请稍后重试。'
+        : `AI服务暂时不可用，请稍后重试。${(err as Error).message ? `(${(err as Error).message})` : ''}`
       messages.value.push({
         id: `ai-error-${Date.now()}`,
         caseId: caseId.value,

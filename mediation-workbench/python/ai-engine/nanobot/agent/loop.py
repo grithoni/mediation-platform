@@ -1017,7 +1017,8 @@ class AgentLoop:
                 await on_stream(result.final_content or "")
                 await on_stream_end(resuming=False)
         elif result.stop_reason == "error":
-            logger.error("LLM returned error: {}", (result.final_content or "")[:200])
+            # 只记录长度，不记录 LLM 返回内容（可能回显案件文本等 PII）。
+            logger.error("LLM returned error (content_len={})", len(result.final_content or ""))
         return result.final_content, result.tools_used, result.messages, result.stop_reason, result.had_injections
 
     async def run(self) -> None:
@@ -1419,8 +1420,11 @@ class AgentLoop:
             if not had_injections or stop_reason == "empty_final_response":
                 return None
 
-        preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
-        logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
+        # 日志不记录响应正文（可能回显案件文本等 PII），只记录长度。
+        logger.info(
+            "Response to {}:{} (content_len={})",
+            msg.channel, msg.sender_id, len(final_content),
+        )
 
         event = None
         meta = dict(msg.metadata or {})
@@ -1446,11 +1450,14 @@ class AgentLoop:
             ctx.msg = dataclasses.replace(msg, content=new_content, media=image_only)
             msg = ctx.msg
 
-        preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
+        # 日志不记录消息正文（可能含案件文本等 PII），只记录来源与长度。
         if ctx.kind is TurnKind.SYSTEM:
             logger.info("Processing system message from {}", msg.sender_id)
         else:
-            logger.info("Processing message from {}:{}: {}", msg.channel, msg.sender_id, preview)
+            logger.info(
+                "Processing message from {}:{} (content_len={})",
+                msg.channel, msg.sender_id, len(msg.content),
+            )
 
         # Session is already fetched by the caller (_process_message) but
         # ensure it exists in case this handler is invoked independently.

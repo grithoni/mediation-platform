@@ -17,6 +17,7 @@ from typing import Any
 from aiohttp import web
 from loguru import logger
 
+from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.config.paths import get_media_dir
 from nanobot.utils.helpers import safe_filename
 from nanobot.utils.media_decode import (
@@ -45,7 +46,20 @@ _AGENT_LOOP_KEY = web.AppKey[Any]("agent_loop")
 _MODEL_NAME_KEY = web.AppKey[str]("model_name")
 _REQUEST_TIMEOUT_KEY = web.AppKey[float]("request_timeout")
 _SESSION_LOCKS_KEY = web.AppKey[dict]("session_locks")
+_API_TOOLS_KEY = web.AppKey[ToolRegistry]("api_tools")
 _MISSING = object()
+
+
+def _restricted_api_tools() -> ToolRegistry:
+    """Tool registry used for every API session.
+
+    The workbench-dedicated engine must never let API conversations trigger
+    shell execution, file writes, code execution, or other privileged tools.
+    Registering an empty registry means the model is offered no tools at all
+    (pure text generation). If a minimal read-only allowlist is ever needed,
+    register those tools here instead.
+    """
+    return ToolRegistry()
 
 
 def _app_value(
@@ -135,6 +149,17 @@ def _sse_chunk(delta: str, model: str, chunk_id: str, finish_reason: str | None 
 
 
 _SSE_DONE = b"data: [DONE]\n\n"
+
+
+def _sse_error_chunk(message: str, err_type: str = "server_error") -> bytes:
+    """OpenAI-compatible SSE error payload written before closing on failure.
+
+    Keeps the success contract untouched (finish_reason=stop + [DONE]) while
+    making abnormal termination explicit so clients can distinguish a real
+    failure from a clean end-of-stream.
+    """
+    payload = {"error": {"message": message, "type": err_type, "code": 500}}
+    return f"data: {_json.dumps(payload)}\n\n".encode()
 
 # ---------------------------------------------------------------------------
 # Upload helpers
@@ -237,6 +262,12 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
         120.0,
     )
     model_name: str = _app_value(request.app, _MODEL_NAME_KEY, "model_name", "nanobot")
+    api_tools: ToolRegistry = _app_value(
+        request.app,
+        _API_TOOLS_KEY,
+        "api_tools",
+        _restricted_api_tools(),
+    )
 
     stream = False
     try:
@@ -270,9 +301,10 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
     )
     session_lock = session_locks.setdefault(session_key, asyncio.Lock())
 
+    # 日志不记录请求正文（可能含案件文本等 PII），只记录长度与标识。
     logger.info(
-        "API request session_key={} media={} text={} stream={}",
-        session_key, len(media_paths), text[:80], stream,
+        "API request session_key={} media={} text_len={} stream={}",
+        session_key, len(media_paths), len(text), stream,
     )
     # -- streaming path --
     if stream:
@@ -312,6 +344,7 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
                             chat_id=API_CHAT_ID,
                             on_stream=_on_stream,
                             on_stream_end=_on_stream_end,
+                            tools=api_tools,
                         ),
                         timeout=timeout_s,
                     )
@@ -319,9 +352,13 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
                         response_text = _response_text(response)
                         if response_text.strip():
                             await queue.put(response_text)
-            except Exception:
+            except Exception as exc:
                 stream_failed = True
-                logger.exception("Streaming error for session {}", session_key)
+                # 只记录异常类型与 session 标识，不记录异常消息/正文（避免 PII）。
+                logger.error(
+                    "Streaming error for session {} (type={})",
+                    session_key, type(exc).__name__,
+                )
             finally:
                 await queue.put(None)
 
@@ -341,6 +378,10 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
         if not stream_failed:
             await resp.write(_sse_chunk("", model_name, chunk_id, finish_reason="stop"))
             await resp.write(_SSE_DONE)
+        else:
+            # 异常收尾：不发送 finish_reason=stop/[DONE]，改用显式错误块，
+            # 客户端据此识别「非正常完成」而非静默半截成功。
+            await resp.write(_sse_error_chunk("Request failed or timed out"))
         return resp
 
     # -- non-streaming path (original logic) --
@@ -354,6 +395,7 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
                         session_key=session_key,
                         channel="api",
                         chat_id=API_CHAT_ID,
+                        tools=api_tools,
                     ),
                     timeout=timeout_s,
                 )
@@ -364,11 +406,18 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
 
             except asyncio.TimeoutError:
                 return _error_json(504, f"Request timed out after {timeout_s}s")
-            except Exception:
-                logger.exception("Error processing request for session {}", session_key)
+            except Exception as exc:
+                # 只记录异常类型与 session 标识，不记录异常消息/正文（避免 PII）。
+                logger.error(
+                    "Error processing request for session {} (type={})",
+                    session_key, type(exc).__name__,
+                )
                 return _error_json(500, "Internal server error", err_type="server_error")
-    except Exception:
-        logger.exception("Unexpected API lock error for session {}", session_key)
+    except Exception as exc:
+        logger.error(
+            "Unexpected API lock error for session {} (type={})",
+            session_key, type(exc).__name__,
+        )
         return _error_json(500, "Internal server error", err_type="server_error")
 
     return web.json_response(
@@ -423,6 +472,7 @@ def create_app(
     app[_MODEL_NAME_KEY] = model_name
     app[_REQUEST_TIMEOUT_KEY] = request_timeout
     app[_SESSION_LOCKS_KEY] = {}  # per-user locks, keyed by session_key
+    app[_API_TOOLS_KEY] = _restricted_api_tools()  # API 会话禁用特权工具
 
     @web.middleware
     async def auth_middleware(request: web.Request, handler) -> web.StreamResponse:
