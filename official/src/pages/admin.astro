@@ -1,5 +1,6 @@
 ---
 import OfficialLayout from '../layouts/OfficialLayout.astro'
+import { WORKBENCH_URL } from '../config'
 ---
 
 <OfficialLayout title="管理后台" description="系统管理后台">
@@ -65,7 +66,7 @@ import OfficialLayout from '../layouts/OfficialLayout.astro'
             <svg class="w-5 h-5 text-blue-600 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
             <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">首次使用？当事人在官网提交调解申请后，案件将自动进入调解工作台；调解员登录工作台即可查看案件，并通过内置 AI 智能体进行脱敏案件分析、风险评估与报告生成。</p>
           </div>
-          <a href="http://localhost:6080/mediator" target="_blank"
+          <a href={`${WORKBENCH_URL}/mediator`} target="_blank"
              class="block w-full text-center py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-sm hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/30 active:scale-[0.98] transition-all">
             <span class="flex items-center justify-center gap-2">
               <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -73,7 +74,7 @@ import OfficialLayout from '../layouts/OfficialLayout.astro'
             </span>
           </a>
           <div class="flex items-center justify-center gap-3 text-xs text-gray-400">
-            <a href="http://localhost:6080/mediator" target="_blank" class="hover:text-blue-600 transition-colors">调解工作台</a>
+            <a href={`${WORKBENCH_URL}/mediator`} target="_blank" class="hover:text-blue-600 transition-colors">调解工作台</a>
             <span>·</span>
             <button onclick="closeMediatorModal()" class="hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer">关闭</button>
           </div>
@@ -99,11 +100,11 @@ import OfficialLayout from '../layouts/OfficialLayout.astro'
     <!-- Quick Links -->
     <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider">快捷入口</h2>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
-      <a href="http://localhost:6080/mediator" target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
+      <a href={`${WORKBENCH_URL}/mediator`} target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all">
         <svg class="w-6 h-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span class="text-xs font-medium text-gray-700 dark:text-gray-300">调解工作台</span>
       </a>
-      <a href="http://localhost:6080/api/ai/status" target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-sm transition-all">
+      <a href={`${WORKBENCH_URL}/api/ai/status`} target="_blank" class="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-sm transition-all">
         <svg class="w-6 h-6 text-purple-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
         <span class="text-xs font-medium text-gray-700 dark:text-gray-300">AI 引擎状态</span>
       </a>
@@ -127,7 +128,7 @@ import OfficialLayout from '../layouts/OfficialLayout.astro'
     <div id="caseError" class="hidden bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6 text-center">
       <p class="text-amber-700 dark:text-amber-400 text-sm font-medium">案件服务不可用</p>
       <p id="caseErrorMsg" class="text-amber-600 dark:text-amber-500 text-xs mt-1"></p>
-      <a href="http://localhost:6080/mediator" target="_blank" class="inline-block mt-3 text-xs text-blue-600 dark:text-blue-400 hover:underline">直接打开调解工作台 →</a>
+      <a href={`${WORKBENCH_URL}/mediator`} target="_blank" class="inline-block mt-3 text-xs text-blue-600 dark:text-blue-400 hover:underline">直接打开调解工作台 →</a>
     </div>
 
     <div id="caseEmpty" class="hidden bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-10 text-center">
@@ -156,10 +157,10 @@ import OfficialLayout from '../layouts/OfficialLayout.astro'
   </div>
 </OfficialLayout>
 
-<script is:inline>
+<script is:inline define:vars={{ WORKBENCH_URL }}>
 const SERVICES = [
-  { name: '调解工作台', url: 'http://localhost:6080/', admin: 'http://localhost:6080/mediator', desc: '案件管理 · 调解全流程 · 智能分析' },
-  { name: 'AI 智能体服务', url: 'http://localhost:6080/api/ai/status', admin: 'http://localhost:6080/mediator', desc: '内置 AI 引擎 · 案件分析 · 智能对话' },
+  { name: '调解工作台', url: `${WORKBENCH_URL}/`, admin: `${WORKBENCH_URL}/mediator`, desc: '案件管理 · 调解全流程 · 智能分析' },
+  { name: 'AI 智能体服务', url: `${WORKBENCH_URL}/api/ai/status`, admin: `${WORKBENCH_URL}/mediator`, desc: '内置 AI 引擎 · 案件分析 · 智能对话' },
 ]
 
 function esc(s) {
@@ -216,7 +217,7 @@ async function loadCases() {
 
   var apps = []
   try {
-    var r = await fetch('http://localhost:6080/api/public/cases', { signal: AbortSignal.timeout(3000) })
+    var r = await fetch(`${WORKBENCH_URL}/api/public/cases`, { signal: AbortSignal.timeout(3000) })
     if (!r.ok) { throw new Error('HTTP ' + r.status) }
     var data = await r.json()
     apps = data.applications || []
@@ -252,7 +253,7 @@ async function loadCases() {
       + '<td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">' + w + '</td>'
       + '<td class="px-4 py-3"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">' + esc(st) + '</span></td>'
       + '<td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">' + t + '</td>'
-      + '<td class="px-4 py-3"><a href="http://localhost:6080/mediator/cases/' + esc(cn) + '" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">查看</a></td>'
+      + '<td class="px-4 py-3"><a href="' + WORKBENCH_URL + '/mediator/cases/' + esc(cn) + '" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium">查看</a></td>'
       + '</tr>'
   }
   tbody.innerHTML = html

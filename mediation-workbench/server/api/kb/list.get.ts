@@ -1,6 +1,8 @@
+import { getKbUrl } from '~/server/utils/service-urls'
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
-  const kbUrl = process.env.KB_URL || 'http://localhost:8700'
+  const kbUrl = getKbUrl()
   const query = getQuery(event)
 
   try {

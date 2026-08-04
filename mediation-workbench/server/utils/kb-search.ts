@@ -5,6 +5,8 @@
  * semantic search over indexed legal documents.
  */
 
+import { getKbUrl } from './service-urls'
+
 export interface KbSearchResult {
   path: string
   content: string
@@ -42,7 +44,7 @@ export async function searchKb(query: string, topK = 3, mode: 'hybrid' | 'vector
     return []
   }
 
-  const kbUrl = process.env.KB_URL || 'http://localhost:8700'
+  const kbUrl = getKbUrl()
 
   try {
     const resp = await $fetch<KbSearchResponse>(`${kbUrl}/search`, {

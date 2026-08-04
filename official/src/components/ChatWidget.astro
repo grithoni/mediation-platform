@@ -6,9 +6,11 @@
  * 或在任意页面派发事件 document.dispatchEvent(new Event('ai-chat:open'))。
  *
  * 后端服务：mediation-workbench/ (Nuxt + 内置 nanobot AI 引擎 + KB 知识库)
- * 接口契约：POST http://localhost:6080/api/public/chat
+ * 接口契约：POST {WORKBENCH_URL}/api/public/chat
  *   Body: {"messages": [{"role": "user"|"assistant", "content": "..."}]}
  *   Response: SSE — data: {"content": "token"} ... data: [DONE]
+ *
+ * 服务地址由环境变量 PUBLIC_WORKBENCH_URL 覆盖，开发环境默认 http://localhost:6080。
  */
 const SUGGESTED_QUESTIONS = [
   "申请商事调解需要什么材料？",
@@ -118,10 +120,12 @@ const SUGGESTED_QUESTIONS = [
 </div>
 
 <script>
-  const API_URL = "http://localhost:6080/api/public/chat";
-  const ANALYZE_URL = "http://localhost:6080/api/public/analyze-case";
-  // mediation-workbench public API base (adjust port as needed)
-  const WORKBENCH_API = "http://localhost:6080";
+  // 工作台地址：环境变量 PUBLIC_WORKBENCH_URL 覆盖，开发环境默认 http://localhost:6080
+  const WORKBENCH_URL = (import.meta.env.PUBLIC_WORKBENCH_URL || 'http://localhost:6080').replace(/\/+$/, '');
+  const API_URL = `${WORKBENCH_URL}/api/public/chat`;
+  const ANALYZE_URL = `${WORKBENCH_URL}/api/public/analyze-case`;
+  // mediation-workbench public API base
+  const WORKBENCH_API = WORKBENCH_URL;
 
   // 案件编号检测：12位hex（如 469dd022f187）、C2026-001 或 2026-1 格式
   const CASE_ID_PATTERN = /(?:案件编号?\s*[:：]?\s*)?([a-f0-9]{12}|C\d{4}-\d{1,4}|\d{4}-\d{1,4})\s*$/i;

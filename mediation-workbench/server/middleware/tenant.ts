@@ -104,7 +104,6 @@ export default defineEventHandler(async (event: H3Event) => {
   const skipPaths = [
     '/',
     '/about',
-    '/mediation',
     '/neutral-evaluation',
     '/dispute-review',
     '/consulting',

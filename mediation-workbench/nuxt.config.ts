@@ -50,6 +50,9 @@ export default defineNuxtConfig({
     nanobotModel: 'deepseek-v4-flash',
     localNerBaseUrl: 'http://127.0.0.1:11434',
     localNerModel: '',
+    // OCR / KB 微服务地址：环境变量（NUXT_OCR_URL / NUXT_KB_URL）可覆盖，默认指向本地开发服务
+    ocrUrl: 'http://localhost:8701',
+    kbUrl: 'http://localhost:8700',
     // Public (exposed to client)
     public: {
       appName: '全时在线的调解专家',
