@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
 import { getDb } from '../../database'
 import { documents } from '../../database/schema'
 import { requireAuth } from '../../middleware/auth'
@@ -44,22 +44,33 @@ export default defineEventHandler(async (event) => {
   }
 
   const filePath = join(uploadDir, safeName)
-  writeFileSync(filePath, fileField.data)
 
-  // Insert document record
-  const docRecord = {
-    id: docId,
-    caseId,
-    filename: safeName,
-    originalName: fileField.filename,
-    path: `uploads/${caseId}/${safeName}`,
-    mimeType: fileField.type,
-    size: fileField.data.length,
-    uploadedBy: mediator.userId,
-    createdAt: Date.now(),
+  try {
+    writeFileSync(filePath, fileField.data)
+
+    // Insert document record
+    const docRecord = {
+      id: docId,
+      caseId,
+      filename: safeName,
+      originalName: fileField.filename,
+      path: `uploads/${caseId}/${safeName}`, // 相对项目数据路径，读取方 join(process.cwd(), path) 兼容
+      mimeType: fileField.type,
+      size: fileField.data.length,
+      uploadedBy: mediator.userId,
+      createdAt: Date.now(),
+    }
+
+    db.insert(documents).values(docRecord).run()
+
+    return { success: true, data: docRecord }
+  } catch (err) {
+    // 写库失败时清理已写文件，避免留下孤儿文件
+    try {
+      unlinkSync(filePath)
+    } catch {
+      // 文件可能未写入成功，忽略
+    }
+    throw err
   }
-
-  db.insert(documents).values(docRecord).run()
-
-  return { success: true, data: docRecord }
 })
