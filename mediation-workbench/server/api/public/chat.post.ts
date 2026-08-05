@@ -1,8 +1,8 @@
 // ============================================================
 // server/api/public/chat.post.ts
-// 官方门户智能咨询 — 替代 ai-consulting(3005) POST /api/chat
+// 官方门户智能咨询
 //
-// 契约（与 3005 保持一致，官方门户 ChatWidget 依赖）：
+// 契约（官方门户 ChatWidget 依赖）：
 //   Body: { "messages": [{ "role": "user"|"assistant", "content": "..." }] }
 //   Response: SSE 流
 //     data: {"content": "token"}\n\n
@@ -13,12 +13,11 @@
 //   - RAG：以最后一条 user 消息 searchKb(topK=4)，格式化为【参考资料】注入 system
 //   - history 取最近 12 条 messages
 //   - nanobotChatStream({ system, prompt, history, temperature: 0.3 }) 流式输出
-//   - 异常时输出与 3005 相同的固定错误文案
+//   - 异常时输出固定的错误文案
 // ============================================================
 import { searchKb } from '../../utils/kb-search'
 import { nanobotChatStream } from '../../utils/nanobot'
 
-// 系统提示词 — 原文复制自 ai-consulting/app/main.py (59-73 行)
 const SYSTEM_PROMPT = `你是「珠江国际商事调解院」官方网站的智能咨询助手，负责解答来访者的业务咨询。
 
 【你的职责范围】
@@ -35,7 +34,7 @@ const SYSTEM_PROMPT = `你是「珠江国际商事调解院」官方网站的智
 4. 涉及具体案件分析时，可以给出一般性说明，但须提示最终以与调解院工作人员的正式沟通为准。
 5. 不要在回答中提及「参考资料」「知识库」等内部实现细节。`
 
-// 3005 同款异常 fallback 文案
+// 异常 fallback 文案
 const FALLBACK_ERROR = '抱歉，智能咨询服务暂时不可用。请稍后重试，或拨打 020-83288530 与我们联系。'
 
 export default defineEventHandler(async (event) => {

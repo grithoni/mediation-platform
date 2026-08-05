@@ -24,8 +24,9 @@ python/ai-engine/**/__pycache__/
 python/ai-engine/**/*.pyc
 
 # Uploads
-uploads/*
-!uploads/.gitkeep
+# 运行时上传（案件文件）忽略；技能库 uploads/skills 入库追踪
+uploads/cases/
+uploads/.gitkeep
 
 # Environment & API keys (模型配置、密钥等敏感信息)
 .env

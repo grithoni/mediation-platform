@@ -1,8 +1,8 @@
 // ============================================================
 // server/api/public/analyze-case.post.ts
-// 案件分析 — 替代 ai-consulting(3005) POST /api/analyze-case
+// 案件分析（SSE 流式）
 //
-// 契约（与 3005 保持一致）：
+// 契约：
 //   Body: { "case_id": "..." }
 //   Response: SSE 流
 //     data: {"status": "desensitizing"}\n\n
@@ -14,10 +14,10 @@
 // 流程：读工作台数据库 → 组装案件材料 → 本地脱敏 → nanobot 6部分分析
 //       → 反脱敏还原 → 按 8 字符分块 SSE 流式返回
 //
-// case_id 映射（复刻 case-mcp-server/.env 配置）：
-//   CASE_DB_TABLE=case_applications, CASE_DB_ID_FIELD=case_id
-//   CASE_DB_TEXT_FIELDS=case_facts,dispute_matters,mediation_demands,demands_basis
-//   CASE_DB_PARTIES_FIELDS=applicant_name,respondent_name
+// case_id 映射：
+//   case_applications 表，CASE_DB_ID_FIELD=case_id
+//   TEXT_FIELDS=case_facts,dispute_matters,mediation_demands,demands_basis
+//   PARTIES_FIELDS=applicant_name,respondent_name
 //   CASE_DB_ADDRESSES_FIELDS=applicant_address,respondent_address
 //   → case_id 对应 workbench .data/mediation.db 的 case_applications.case_id（与 cases.id 相同）
 // ============================================================
@@ -27,7 +27,7 @@ import { cases, caseApplications } from '../../database/schema'
 import { desensitizeCaseMaterials } from '../../utils/case-analysis-orchestrator'
 import { nanobotChat } from '../../utils/nanobot'
 
-// 案件分析系统提示词 — 原文复制自 ai-consulting/app/main.py (236-267 行)
+// 案件分析系统提示词
 const CASE_ANALYSIS_PROMPT = `你是「珠江国际商事调解院」的案情分析助手。请基于以下案件材料，进行结构化案情分析。
 
 【硬性约束】
@@ -74,7 +74,7 @@ function restoreText(text: string, mapping: Record<string, string>): string {
   return restored
 }
 
-// 按 8 字符分块（与 3005 chunk_size = 8 一致），保留 markdown 结构
+// 按 8 字符分块，保留 markdown 结构
 function chunkBy(text: string, size = 8): string[] {
   const chunks: string[] = []
   for (let i = 0; i < text.length; i += size) {
@@ -106,7 +106,7 @@ export default defineEventHandler(async (event) => {
 
         const db = getDb()
 
-        // 查询案件材料：case_id → case_applications.case_id（与 case-mcp-server 映射一致）
+        // 查询案件材料：case_id → case_applications.case_id
         const application = db
           .select()
           .from(caseApplications)
@@ -115,7 +115,7 @@ export default defineEventHandler(async (event) => {
         const caseData = db.select().from(cases).where(eq(cases.id, caseId)).get()
 
         if (!application && !caseData) {
-          // 与 3005 行为一致：案件不存在时输出错误
+          // 案件不存在时输出错误
           throw new Error(`案件不存在: ${caseId}`)
         }
 
