@@ -134,7 +134,7 @@ export const documents = sqliteTable('documents', {
 })
 
 // ============================================================
-// 调解申请详情表 (1:1 关联 cases，方案C迁移：3006 表单数据)
+// 调解申请详情表 (1:1 关联 cases；申请表单已迁入工作台，原 3006 服务已退役)
 // ============================================================
 export const caseApplications = sqliteTable('case_applications', {
   id: text('id').primaryKey(), // 与 caseId 相同（案件号）
@@ -413,6 +413,15 @@ export const webhooks = sqliteTable('webhooks', {
 // ============================================================
 // Webhook 调用日志表
 // ============================================================
+export const desensitizationMappings = sqliteTable('desensitization_mappings', {
+  traceId: text('trace_id').primaryKey(),
+  caseId: text('case_id').notNull(),
+  mappingEnc: text('mapping_enc').notNull(), // AES-256-GCM 加密后的 mapping JSON（base64）
+  categories: text('categories'), // 令牌类别映射 JSON（可选）
+  createdAt: integer('created_at', { mode: 'number' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'number' }).notNull(), // TTL 7200s
+})
+
 export const webhookLogs = sqliteTable('webhook_logs', {
   id: text('id').primaryKey(),
   webhookId: text('webhook_id').notNull().references(() => webhooks.id),

@@ -236,7 +236,7 @@ export function runMigrations(db: Database.Database): MigrationResult {
   addColumnIfMissing(db, 'case_dynamic_files', 'agent_updated_at', `agent_updated_at INTEGER`, result)
 
   // ============================================================
-  // 调解申请详情表 (1:1 关联 cases，方案C：3006 表单数据)
+  // 调解申请详情表 (1:1 关联 cases；申请表单已迁入工作台，原 3006 服务已退役)
   // ============================================================
   createTableIfMissing(db, 'case_applications', `
     CREATE TABLE IF NOT EXISTS case_applications (
@@ -446,6 +446,21 @@ export function runMigrations(db: Database.Database): MigrationResult {
       error_message TEXT,
       retry_count INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL
+    )
+  `, result)
+
+  // ============================================================
+  // 脱敏映射加密存储（对齐已退役 case-mcp-server/mapping_store.py）
+  // 表由 desensitization-store.ts 读写：mapping_enc 为 AES-256-GCM 加密后的 JSON。
+  // ============================================================
+  createTableIfMissing(db, 'desensitization_mappings', `
+    CREATE TABLE IF NOT EXISTS desensitization_mappings (
+      trace_id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      mapping_enc TEXT NOT NULL,
+      categories TEXT,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
     )
   `, result)
 

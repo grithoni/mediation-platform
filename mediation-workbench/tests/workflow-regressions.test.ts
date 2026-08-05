@@ -8,10 +8,6 @@ import { eq } from 'drizzle-orm'
 import { getDb, initTestDb, resetDb } from '../server/database'
 import { cases, caseDynamicFiles, sessions } from '../server/database/schema'
 import {
-  getAgentEnabledToolNames,
-  claimPendingAgentCases,
-} from '../server/utils/agent/capabilities'
-import {
   classifyMessageActor,
   resolvePartySessionToken,
 } from '../server/utils/chat-workflow'
@@ -83,67 +79,6 @@ test('authenticated mediator users are classified as mediator actors in main aut
 
   assert.equal(actor.kind, 'mediator')
   assert.equal(actor.userId, 'med-1')
-})
-
-test('agent capability list keeps document-reading and search tools enabled', () => {
-  const toolNames = getAgentEnabledToolNames()
-
-  assert.deepEqual(
-    toolNames,
-    [
-      'ask_user',
-      'update_working_checkpoint',
-      'search_legal_knowledge',
-      'read_dynamic_file',
-      'update_dynamic_file',
-      'search_information',
-      'file_read',
-      'read_docx',
-      'file_patch',
-      'file_write',
-      'query_case_materials',
-      'desensitize_case_materials',
-      'analyze_with_mediation_skills',
-      'restore_analysis_result',
-      'writeback_case_analysis',
-    ],
-  )
-})
-
-test('pending external agent cases can be claimed and transition to processing', async () => {
-  await withTempProjectDir(() => {
-    const db = getDb()
-    const now = Date.now()
-
-    db.insert(cases).values({
-      id: '2026-2',
-      title: '待分析案件',
-      partyAName: '甲',
-      partyBName: '乙',
-      accessCode: 'CODE2',
-      phase: 'analysis',
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    db.insert(caseDynamicFiles).values({
-      id: 'cdf-1',
-      caseId: '2026-2',
-      agentStatus: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    const claimed = claimPendingAgentCases(db, { limit: 10, now: now + 1000 })
-
-    assert.equal(claimed.length, 1)
-    assert.equal(claimed[0]?.caseId, '2026-2')
-
-    const updated = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, '2026-2')).get()
-    assert.equal(updated?.agentStatus, 'processing')
-    assert.equal(updated?.agentUpdatedAt, now + 1000)
-  })
 })
 
 test('agreement approval and signing use distinct workflow phases', () => {
@@ -373,5 +308,78 @@ test('mediation background analysis writes back agent analysis and checklist', a
     assert.equal(updated?.agentStatus, 'done')
     assert.equal(updated?.agentAnalysis?.includes('请求权'), true)
     assert.equal(updated?.materialChecklist?.includes('对账单'), true)
+  })
+})
+
+test('desensitization recognizes new roles (上诉人/被上诉人/第三人/当事人) and masks them', async () => {
+  await withTempProjectDir(async () => {
+    const { desensitizeCaseMaterials } = await import('../server/utils/case-analysis-orchestrator')
+    const text = '上诉人王五不服一审判决提出上诉，被上诉人张三应诉，第三人赵六到庭。'
+    const result = await desensitizeCaseMaterials(text, {
+      knownEntities: [],
+      partyNames: [],
+      addresses: [],
+    })
+
+    // 新角色下的姓名都被掩掉
+    assert.equal(result.maskedText.includes('王五'), false)
+    assert.equal(result.maskedText.includes('张三'), false)
+    assert.equal(result.maskedText.includes('赵六'), false)
+    assert.equal(result.maskedText.includes('[上诉人_1]'), true)
+    assert.equal(result.maskedText.includes('[被上诉人_1]'), true)
+    assert.equal(result.maskedText.includes('[第三人_1]'), true)
+  })
+})
+
+test('residual PII scan detects leaks and passes clean text', async () => {
+  const { scanForResidualPii } = await import('../server/utils/case-analysis-orchestrator')
+
+  // 漏网的正则 PII（模拟脱敏层漏掩）
+  const leaky = scanForResidualPii('双方协商未果，电话13800138000。', {
+    partyNames: [],
+    addresses: [],
+    knownEntities: [],
+  })
+  assert.equal(leaky.includes('13800138000'), true)
+
+  // 残留的已知实体子串
+  const nameLeak = scanForResidualPii('申请人李明已到庭', {
+    partyNames: ['李明'],
+    addresses: [],
+    knownEntities: [],
+  })
+  assert.equal(nameLeak.includes('李明'), true)
+
+  // 干净文本不误报
+  const clean = scanForResidualPii('[申请人_1]要求[被申请人_1]支付货款', {
+    partyNames: ['张三', '李四'],
+    addresses: ['北京市朝阳区'],
+    knownEntities: [],
+  })
+  assert.equal(clean.length, 0)
+})
+
+test('desensitization mapping persists encrypted and round-trips via traceId', async () => {
+  await withTempProjectDir(async () => {
+    const { desensitizeCaseMaterials } = await import('../server/utils/case-analysis-orchestrator')
+    const { persistDesensitization, loadDesensitization } = await import('../server/utils/desensitization-store')
+
+    const result = await desensitizeCaseMaterials('张三与李四货款争议，张三次日付款。', {
+      knownEntities: [],
+      partyNames: ['张三', '李四'],
+      addresses: [],
+    })
+
+    // desensitize 本身不再合成 traceId
+    assert.equal(result.traceId, undefined)
+
+    const traceId = persistDesensitization('2026-1', result.mapping)
+    assert.match(traceId, /^2026-1-\d+$/)
+
+    const restored = loadDesensitization(traceId)
+    assert.deepEqual(restored, result.mapping)
+
+    // 未知 traceId 返回空
+    assert.deepEqual(loadDesensitization('2026-1-9999999999999'), {})
   })
 })

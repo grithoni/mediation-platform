@@ -9,6 +9,7 @@ import {
   documents,
 } from '../database/schema'
 import { buildSkillCatalog, desensitizeCaseMaterials, runStructuredWorkflowAnalysis } from './case-analysis-orchestrator'
+import { persistDesensitization } from './desensitization-store'
 import { runGaAgentLoop } from './ga-core/loop'
 import type {
   GaMessage,
@@ -121,12 +122,14 @@ export function buildMediationToolHandlers(
     },
     desensitize_case_materials: async () => {
       const result = await desensitizeCaseMaterials(runtimeState.materials, inferKnownEntities(caseId))
-      runtimeState.traceId = result.traceId
+      // 持久化脱敏映射，获得真 traceId（供反脱敏关联 / 审计）
+      const traceId = result.traceId || persistDesensitization(caseId, result.mapping)
+      runtimeState.traceId = traceId
       runtimeState.maskedMaterials = result.maskedText
       runtimeState.mapping = result.mapping
       return {
         data: {
-          traceId: result.traceId,
+          traceId,
           maskedMaterials: result.maskedText,
         },
         nextPrompt: '已完成本地脱敏，请基于脱敏材料继续分析。',

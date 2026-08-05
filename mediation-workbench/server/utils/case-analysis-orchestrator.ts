@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import { getDb } from '../database'
+import { persistDesensitization } from './desensitization-store'
 import {
   caseAnalyses,
   caseApplications,
@@ -30,7 +31,8 @@ export interface SkillCatalogEntry {
 
 export interface DesensitizedPayload {
   maskedText: string
-  traceId: string
+  /** 由调用方持久化后赋予；desensitizeCaseMaterials 本身不合成 */
+  traceId?: string
   mapping: Record<string, string>
 }
 
@@ -124,7 +126,7 @@ const PII_PATTERNS: Array<{ category: string; pattern: RegExp }> = [
   { category: '信用代码', pattern: /\b[0-9A-HJ-NPQRTUWXY]{18}\b/g },
 ]
 
-const ROLE_NAME_PATTERN = /(原告|被告|申请人|被申请人|甲方|乙方|委托代理人|法定代表人)\s*([\u4e00-\u9fa5]{2,4})/g
+const ROLE_NAME_PATTERN = /(原告|被告|申请人|被申请人|上诉人|被上诉人|甲方|乙方|委托代理人|法定代表人|第三人|当事人)\s*([\u4e00-\u9fa5]{2,4})/g
 const DEFAULT_DYNAMIC_FIELDS = ['timeline', 'disputeChecklist', 'positions', 'partyAnalysis', 'potentialInterests', 'batna'] as const
 
 export function buildSkillCatalog(): SkillCatalogEntry[] {
@@ -188,47 +190,13 @@ export async function runDesensitizedSkillWorkflow(options: WorkflowRunOptions) 
 
   const desensitized = await desensitize(options.materials)
 
-  // Persist mapping to central MappingStore via Python CLI if available.
-  // If a caller already supplied a traceId (for tests or external stores), preserve it.
+  // 加密持久化脱敏映射（AES-256-GCM → .data/mediation.db）。
+  // desensitizeCaseMaterials 本身不再合成 traceId；若调用方已注入（测试/外部 store）则保留。
   if (!desensitized.traceId) {
-    try {
-      const script = resolve(process.cwd(), 'case-mcp-server', 'cli_save_mapping.py')
-      const payload = {
-        case_id: (options as any).caseNumber || (options as any).caseId || 'TEXT',
-        mapping: desensitized.mapping || {},
-        categories: desensitized.mapping ? Object.fromEntries(Object.keys(desensitized.mapping).map(k => [k, desensitized.mapping[k]])) : {},
-      }
-      try {
-        const out = execSync(`python3 "${script}"`, { input: JSON.stringify(payload), encoding: 'utf-8', timeout: 20000 })
-        if (out) {
-          try {
-            const parsed = JSON.parse(String(out))
-            if (parsed.trace_id) {
-              desensitized.traceId = parsed.trace_id
-            }
-          } catch (e) {
-            console.warn('[persistMapping] parse output failed:', e)
-          }
-        }
-      } catch (e: any) {
-        console.warn('[persistMapping] CLI call failed:', e?.message || e)
-        // Fallback: persist mapping to local file (unencrypted) with restrictive permissions.
-        try {
-          const fs = await import('node:fs')
-          const path = resolve(process.cwd(), 'data', 'mappings')
-          await fs.promises.mkdir(path, { recursive: true })
-          const trace = `local-${Date.now()}`
-          const filepath = resolve(path, `${trace}.json`)
-          await fs.promises.writeFile(filepath, JSON.stringify({ payload, trace }, null, 2), { encoding: 'utf-8', mode: 0o600 })
-          console.warn(`[persistMapping] persisted fallback mapping to ${filepath}`)
-          desensitized.traceId = trace
-        } catch (e2: any) {
-          console.warn('[persistMapping] fallback persist failed:', e2?.message || e2)
-        }
-      }
-    } catch (e: any) {
-      console.warn('[persistMapping] prepare failed:', e?.message || e)
-    }
+    desensitized.traceId = persistDesensitization(
+      (options as any).caseNumber || (options as any).caseId || 'TEXT',
+      desensitized.mapping || {},
+    )
   }
 
   const cloudOutput = await analyzeWithCloudSkills({
@@ -674,17 +642,68 @@ export async function desensitizeCaseMaterials(
     maskedText = `${maskedText.slice(0, span.start)}${token}${maskedText.slice(span.end)}`
   }
 
+  // ── 残余扫描门禁（对齐已退役 case-mcp-server/gateway.py）──────────────
+  // 脱敏后重扫 5 类强格式 PII + 已知实体子串；发现残留即抛错，阻止出域。
+  // 注意：与 Python 版一致，不重扫角色姓名模式（其由上层角色正则覆盖）。
+  const residual = scanForResidualPii(maskedText, {
+    partyNames: options.partyNames,
+    addresses: options.addresses,
+    knownEntities: options.knownEntities,
+  })
+  if (residual.length > 0) {
+    throw new Error(`[脱敏漏检] 发现疑似未脱敏数据: ${residual.join(', ')}`)
+  }
+
   return {
     maskedText,
-    traceId: `trace-${Date.now()}`,
+    // traceId 由调用方通过 persistDesensitization 持久化后赋予
     mapping,
   }
 }
 
+export function scanForResidualPii(
+  text: string,
+  options: { partyNames: string[]; addresses: string[]; knownEntities: KnownEntity[] },
+): string[] {
+  const found: string[] = []
+  const seen = new Set<string>()
+  const add = (value: string) => {
+    if (value && !seen.has(value)) {
+      seen.add(value)
+      found.push(value)
+    }
+  }
+
+  for (const { pattern } of PII_PATTERNS) {
+    for (const match of text.matchAll(pattern)) {
+      if (match[0]) add(match[0])
+    }
+  }
+  for (const name of options.partyNames) {
+    if (name && text.includes(name)) add(name)
+  }
+  for (const address of options.addresses) {
+    if (address && text.includes(address)) add(address)
+  }
+  for (const entity of options.knownEntities) {
+    if (entity?.value && text.includes(entity.value)) add(entity.value)
+  }
+  return found
+}
+
 async function detectLocalNerEntities(text: string) {
-  const config = useRuntimeConfig()
-  const model = String((config as any).localNerModel || process.env.LOCAL_NER_MODEL || '').trim()
-  const baseUrl = String((config as any).localNerBaseUrl || process.env.LOCAL_NER_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
+  // 安全读取 Nuxt runtimeConfig（独立进程 / 测试环境无 useRuntimeConfig 时降级到 env）
+  let localNerModel: string | undefined
+  let localNerBaseUrl: string | undefined
+  try {
+    const config = useRuntimeConfig() as any
+    localNerModel = config?.localNerModel
+    localNerBaseUrl = config?.localNerBaseUrl
+  } catch {
+    // noop — 无 Nuxt runtimeConfig
+  }
+  const model = String(localNerModel || process.env.LOCAL_NER_MODEL || '').trim()
+  const baseUrl = String(localNerBaseUrl || process.env.LOCAL_NER_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
   if (!model) return []
 
   try {

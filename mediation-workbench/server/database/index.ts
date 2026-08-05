@@ -161,6 +161,15 @@ export function initTestDb() {
       content TEXT NOT NULL,
       generated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS desensitization_mappings (
+      trace_id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL,
+      mapping_enc TEXT NOT NULL,
+      categories TEXT,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `)
 
   return db

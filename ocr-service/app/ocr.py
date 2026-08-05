@@ -219,7 +219,7 @@ def extract_fields_with_llm(text: str) -> dict[str, Any]:
     if not text.strip():
         return {"error": "提取文本为空"}
 
-    # Load DeepSeek config from env (reuse ai-consulting .env or mediation-apply .env)
+    # Load DeepSeek config from env
     api_key = os.getenv("DEEPSEEK_API_KEY", "")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
