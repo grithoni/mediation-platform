@@ -20,7 +20,8 @@ const uploadInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const uploadMsg = ref('')
 const uploadMsgType = ref<'success' | 'error' | 'warning'>('success')
-const uploadModalOpen = ref(false)
+// 上传面板（默认折叠，点击展开）
+const uploadOpen = ref(false)
 const selectedFiles = ref<File[]>([])
 // 分段配置
 const chunkMode = ref<'auto' | 'custom'>('auto')
@@ -29,36 +30,23 @@ const chunkSize = ref(2000)
 const chunkOverlap = ref(200)
 const cleanRules = ref<string[]>(['clean_whitespace'])
 
-// ── 删除 ──
-const deletingPath = ref('')
-const deleteError = ref('')
-
-// ── 查看原文（仅 .md） ──
-const viewDocOpen = ref(false)
-const viewingDoc = ref<{ fileName: string; content: string } | null>(null)
-const viewing = ref(false)
-const viewError = ref('')
+// ── 查看原文（仅 .md，inline 展开） ──
 // inline-expanded docs: path -> content
 const expandedDocs = ref<Record<string, string>>({})
 
 async function viewDoc(path: string) {
   // Toggle inline expansion: collapse if already expanded
-  viewError.value = ''
   if (expandedDocs.value[path]) {
     delete expandedDocs.value[path]
     // ensure reactivity
     expandedDocs.value = { ...expandedDocs.value }
     return
   }
-  viewing.value = true
   try {
     const content = await $fetch<string>('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000 }) as string
     expandedDocs.value = { ...expandedDocs.value, [path]: content }
-  } catch (e: any) {
-    viewError.value = e?.data?.message || e?.message || '无法读取文件'
+  } catch {
     expandedDocs.value = { ...expandedDocs.value, [path]: '' }
-  } finally {
-    viewing.value = false
   }
 }
 
@@ -126,17 +114,18 @@ async function loadDocs() {
   }
 }
 
-function openUploadModal() {
-  uploadModalOpen.value = true
-  uploadMsg.value = ''
-  selectedFiles.value = []
-}
-
 function onFileSelect(e: Event) {
   const input = e.target as HTMLInputElement
   const files = input.files
   if (!files || files.length === 0) return
   selectedFiles.value = Array.from(files)
+}
+
+// 收起上传面板并清空状态
+function resetUpload() {
+  uploadOpen.value = false
+  selectedFiles.value = []
+  uploadMsg.value = ''
 }
 
 // 自定义分隔符：用户输入 \n\n 字面量，转为真实换行符
@@ -172,27 +161,13 @@ async function confirmUpload() {
     uploadMsgType.value = failed.length ? 'warning' : 'success'
     uploadMsg.value = `已上传 ${uploadedCount} 个文件并完成索引` + (failed.length ? `，${failed.length} 个失败：${failed.join('、')}` : '')
     await loadDocs()
-    uploadModalOpen.value = false
+    uploadOpen.value = false
     selectedFiles.value = []
   } catch (e: any) {
     uploadMsgType.value = 'error'
     uploadMsg.value = e?.data?.message || e?.message || '上传失败'
   } finally {
     uploading.value = false
-  }
-}
-
-async function deleteDoc(path: string) {
-  if (!confirm(`确定删除该文档？\n${path.split('/').pop()}`)) return
-  deletingPath.value = path
-  deleteError.value = ''
-  try {
-    await $fetch('/api/kb/delete', { method: 'POST', body: { paths: [path] } })
-    await loadDocs()
-  } catch (e: any) {
-    deleteError.value = e?.data?.message || e?.message || '删除失败'
-  } finally {
-    deletingPath.value = ''
   }
 }
 
@@ -253,10 +228,6 @@ onMounted(async () => {
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">知识库</h1>
             <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">调解业务知识 · 支持上传、删除与检索</p>
           </div>
-          <div class="flex items-center gap-2">
-            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" title="刷新列表" :loading="loadingDocs" @click="loadDocs" />
-            <UButton icon="i-lucide-upload" color="primary" variant="soft" size="sm" title="上传文档" :loading="uploading" @click="openUploadModal" />
-          </div>
         </div>
 
         <!-- 上传提示 -->
@@ -312,6 +283,105 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- 上传文档（默认折叠，点击展开显示详情） -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden mb-6">
+          <button
+            class="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+            @click="uploadOpen = !uploadOpen"
+          >
+            <div class="flex items-center gap-2">
+              <UIcon :name="uploadOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="w-4 h-4 text-gray-400" />
+              <UIcon name="i-lucide-upload" class="w-4 h-4 text-blue-500" />
+              <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">上传文档</h2>
+              <span class="text-xs text-gray-400 dark:text-gray-500">设置分段与清洗规则后建立索引</span>
+            </div>
+            <span class="text-xs text-gray-400 shrink-0">{{ uploadOpen ? '点击收起' : '点击展开' }}</span>
+          </button>
+
+          <div v-if="uploadOpen" class="border-t border-gray-100 dark:border-gray-800 p-5">
+            <!-- 1. 选择文件 -->
+            <div class="mb-5">
+              <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">① 选择文件</label>
+              <button
+                class="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl px-4 py-6 text-center hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
+                @click="uploadInput?.click()"
+              >
+                <UIcon name="i-lucide-file-up" class="w-7 h-7 text-gray-400 mx-auto mb-2" />
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ selectedFiles.length ? `已选择 ${selectedFiles.length} 个文件，点击可继续添加` : '点击选择文件（支持多选 .md/.txt/.pdf/.doc/.docx/.html/.json/.csv）' }}
+                </p>
+              </button>
+              <input ref="uploadInput" type="file" multiple accept=".md,.txt,.pdf,.doc,.docx,.html,.json,.csv" class="hidden" @change="onFileSelect" />
+              <ul v-if="selectedFiles.length" class="mt-2 space-y-1">
+                <li v-for="(f, i) in selectedFiles" :key="i" class="flex items-center justify-between px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-300">
+                  <span class="flex items-center gap-1.5 min-w-0">
+                    <UIcon name="i-lucide-file-text" class="w-3.5 h-3.5 shrink-0" />
+                    <span class="truncate">{{ f.name }}</span>
+                  </span>
+                  <span class="text-gray-400 shrink-0">{{ (f.size / 1024).toFixed(1) }} KB</span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- 2. 分段设置 -->
+            <div class="mb-5">
+              <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">② 分段设置</label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="text-[11px] text-gray-400 mb-1 block">分段方式</label>
+                  <USelect
+                    v-model="chunkMode"
+                    :options="[
+                      { label: '自动分段', value: 'auto' },
+                      { label: '自定义分隔符', value: 'custom' },
+                    ]"
+                    size="sm"
+                  />
+                </div>
+                <div v-if="chunkMode === 'custom'">
+                  <label class="text-[11px] text-gray-400 mb-1 block">分隔符</label>
+                  <UInput v-model="customSeparator" placeholder="如：\\n\\n" size="sm" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-gray-400 mb-1 block">分段最大长度（字符）</label>
+                  <UInput v-model.number="chunkSize" type="number" min="50" max="10000" size="sm" />
+                </div>
+                <div>
+                  <label class="text-[11px] text-gray-400 mb-1 block">分段重叠（字符）</label>
+                  <UInput v-model.number="chunkOverlap" type="number" min="0" max="2000" size="sm" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 清洗规则 -->
+            <div class="mb-5">
+              <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">③ 文本预处理（清洗规则）</label>
+              <div class="flex flex-wrap gap-2">
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                  <input type="checkbox" v-model="cleanRules" value="clean_whitespace" class="accent-blue-600" />
+                  <span class="text-xs text-gray-600 dark:text-gray-300">替换连续空格/换行/制表符</span>
+                </label>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                  <input type="checkbox" v-model="cleanRules" value="remove_urls" class="accent-blue-600" />
+                  <span class="text-xs text-gray-600 dark:text-gray-300">删除所有 URL</span>
+                </label>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                  <input type="checkbox" v-model="cleanRules" value="remove_emails" class="accent-blue-600" />
+                  <span class="text-xs text-gray-600 dark:text-gray-300">删除电子邮件地址</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 4. 操作按钮 -->
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <UButton color="neutral" variant="ghost" @click="resetUpload">取消</UButton>
+              <UButton color="primary" :loading="uploading" :disabled="selectedFiles.length === 0" @click="confirmUpload">
+                <UIcon name="i-lucide-upload" class="w-4 h-4" /> 确认上传
+              </UButton>
+            </div>
+          </div>
+        </div>
+
         <!-- 文档列表（默认折叠，点击展开按分类显示） -->
         <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
           <button
@@ -329,9 +399,6 @@ onMounted(async () => {
             <div v-if="docError" class="px-4 py-3">
               <UAlert :title="docError" color="error" variant="soft" />
             </div>
-            <div v-if="deleteError" class="px-4 py-3">
-              <UAlert :title="deleteError" color="error" variant="soft" @close="deleteError = ''" />
-            </div>
 
             <div v-if="loadingDocs" class="flex items-center justify-center py-16">
               <UIcon name="i-lucide-loader-2" class="w-6 h-6 text-blue-500 animate-spin" />
@@ -339,7 +406,7 @@ onMounted(async () => {
 
             <div v-else-if="docs.length === 0" class="p-10 text-center">
               <UIcon name="i-lucide-folder-open" class="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p class="text-sm text-gray-400 dark:text-gray-500">知识库暂无文档，点击右上角「上传文档」添加</p>
+              <p class="text-sm text-gray-400 dark:text-gray-500">知识库暂无文档</p>
             </div>
 
             <template v-else>
@@ -372,30 +439,9 @@ onMounted(async () => {
                           </div>
                         </td>
                         <td class="px-4 py-2.5 w-20 text-gray-500 dark:text-gray-400">{{ doc.chunks }} 块</td>
-                        <td class="px-4 py-2.5 w-24 text-right">
-                          <UButton
-                            v-if="isMd(doc.path)"
-                            icon="i-lucide-eye"
-                            size="xs"
-                            color="neutral"
-                            variant="ghost"
-                            :loading="viewing"
-                            title="查看原文"
-                            @click="viewDoc(doc.path)"
-                          />
-                          <UButton
-                            icon="i-lucide-trash-2"
-                            size="xs"
-                            color="error"
-                            variant="ghost"
-                            :loading="deletingPath === doc.path"
-                            title="删除文档"
-                            @click="deleteDoc(doc.path)"
-                          />
-                        </td>
                       </tr>
                       <tr v-if="expandedDocs[doc.path]" class="bg-white dark:bg-gray-900/70">
-                        <td colspan="3" class="px-6 py-3 border-b border-gray-100 dark:border-gray-800">
+                        <td colspan="2" class="px-6 py-3 border-b border-gray-100 dark:border-gray-800">
                           <div class="max-h-[40vh] overflow-y-auto rounded-md bg-gray-50 dark:bg-gray-800/60 p-3">
                             <pre class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300 font-mono">{{ expandedDocs[doc.path] }}</pre>
                           </div>
@@ -411,120 +457,5 @@ onMounted(async () => {
       </template>
     </div>
 
-    <!-- 上传文档弹窗（Dify 风格分段配置） -->
-    <UModal v-model="uploadModalOpen" :ui="{ content: 'max-w-2xl' }">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-5">
-          <div>
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white">上传文档</h3>
-            <p class="text-sm text-gray-400 dark:text-gray-500 mt-0.5">设置分段与清洗规则后建立索引</p>
-          </div>
-          <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="() => { uploadModalOpen = false }" />
-        </div>
-
-        <!-- 1. 选择文件 -->
-        <div class="mb-5">
-          <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">① 选择文件</label>
-          <button
-            class="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl px-4 py-6 text-center hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors"
-            @click="uploadInput?.click()"
-          >
-            <UIcon name="i-lucide-file-up" class="w-7 h-7 text-gray-400 mx-auto mb-2" />
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              {{ selectedFiles.length ? `已选择 ${selectedFiles.length} 个文件，点击可继续添加` : '点击选择文件（支持多选 .md/.txt/.pdf/.doc/.docx/.html/.json/.csv）' }}
-            </p>
-          </button>
-          <input ref="uploadInput" type="file" multiple accept=".md,.txt,.pdf,.doc,.docx,.html,.json,.csv" class="hidden" @change="onFileSelect" />
-          <ul v-if="selectedFiles.length" class="mt-2 space-y-1">
-            <li v-for="(f, i) in selectedFiles" :key="i" class="flex items-center justify-between px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-300">
-              <span class="flex items-center gap-1.5 min-w-0">
-                <UIcon name="i-lucide-file-text" class="w-3.5 h-3.5 shrink-0" />
-                <span class="truncate">{{ f.name }}</span>
-              </span>
-              <span class="text-gray-400 shrink-0">{{ (f.size / 1024).toFixed(1) }} KB</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- 2. 分段设置 -->
-        <div class="mb-5">
-          <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">② 分段设置</label>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label class="text-[11px] text-gray-400 mb-1 block">分段方式</label>
-              <USelect
-                v-model="chunkMode"
-                :options="[
-                  { label: '自动分段', value: 'auto' },
-                  { label: '自定义分隔符', value: 'custom' },
-                ]"
-                size="sm"
-              />
-            </div>
-            <div v-if="chunkMode === 'custom'">
-              <label class="text-[11px] text-gray-400 mb-1 block">分隔符</label>
-              <UInput v-model="customSeparator" placeholder="如：\\n\\n" size="sm" />
-            </div>
-            <div>
-              <label class="text-[11px] text-gray-400 mb-1 block">分段最大长度（字符）</label>
-              <UInput v-model.number="chunkSize" type="number" min="50" max="10000" size="sm" />
-            </div>
-            <div>
-              <label class="text-[11px] text-gray-400 mb-1 block">分段重叠（字符）</label>
-              <UInput v-model.number="chunkOverlap" type="number" min="0" max="2000" size="sm" />
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. 清洗规则 -->
-        <div class="mb-5">
-          <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">③ 文本预处理（清洗规则）</label>
-          <div class="flex flex-wrap gap-2">
-            <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
-              <input type="checkbox" v-model="cleanRules" value="clean_whitespace" class="accent-blue-600" />
-              <span class="text-xs text-gray-600 dark:text-gray-300">替换连续空格/换行/制表符</span>
-            </label>
-            <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
-              <input type="checkbox" v-model="cleanRules" value="remove_urls" class="accent-blue-600" />
-              <span class="text-xs text-gray-600 dark:text-gray-300">删除所有 URL</span>
-            </label>
-            <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
-              <input type="checkbox" v-model="cleanRules" value="remove_emails" class="accent-blue-600" />
-              <span class="text-xs text-gray-600 dark:text-gray-300">删除电子邮件地址</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 4. 操作按钮 -->
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <UButton color="neutral" variant="ghost" @click="() => { uploadModalOpen = false }">取消</UButton>
-          <UButton color="primary" :loading="uploading" :disabled="selectedFiles.length === 0" @click="confirmUpload">
-            <UIcon name="i-lucide-upload" class="w-4 h-4" /> 确认上传
-          </UButton>
-        </div>
-      </div>
-    </UModal>
-
-    <!-- 查看原文弹窗（仅 .md） -->
-    <UModal v-model="viewDocOpen" :ui="{ content: 'max-w-3xl' }">
-      <div class="p-5">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2 min-w-0">
-            <UIcon name="i-lucide-file-text" class="w-5 h-5 text-blue-500 shrink-0" />
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white truncate">{{ viewingDoc?.fileName }}</h3>
-          </div>
-          <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="() => { viewDocOpen = false }" />
-        </div>
-        <p v-if="viewError" class="mb-3">
-          <UAlert color="error" :title="viewError" icon="i-lucide-alert-circle" />
-        </p>
-        <div
-          v-if="viewingDoc"
-          class="max-h-[60vh] overflow-y-auto rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-4"
-        >
-          <pre class="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300 font-mono">{{ viewingDoc.content }}</pre>
-        </div>
-      </div>
-    </UModal>
   </div>
 </template>

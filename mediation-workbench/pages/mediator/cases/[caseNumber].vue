@@ -204,7 +204,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-6 lg:h-screen lg:flex lg:flex-col lg:overflow-hidden">
     <NuxtLink to="/mediator" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 mb-4 transition-colors">
       <UIcon name="i-lucide-arrow-left" class="w-4 h-4" />返回案件列表
     </NuxtLink>
@@ -215,9 +215,9 @@ onUnmounted(() => {
 
     <UAlert v-else-if="error" color="error" variant="soft" :title="error" class="mb-4" />
 
-    <div v-else-if="caseData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-      <!-- ══ 左栏：案件信息区 ══ -->
-      <div class="min-w-0 space-y-6">
+    <div v-else-if="caseData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:flex-1 lg:min-h-0 lg:grid-rows-1">
+      <!-- ══ 左栏：案件信息区（独立滚动） ══ -->
+      <div class="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
         <!-- 案件概览 -->
         <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 sm:p-6">
           <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -397,8 +397,8 @@ onUnmounted(() => {
       </div>
       <!-- ══ 左栏结束 ══ -->
 
-      <!-- ══ 右栏：调解智能体区（sticky，大屏下独立滚动） ══ -->
-      <div class="lg:sticky lg:top-6 lg:self-start min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl flex flex-col lg:max-h-[calc(100vh-3rem)]">
+      <!-- ══ 右栏：调解智能体区（整体独立滚动） ══ -->
+      <div class="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl lg:min-h-0 lg:overflow-y-auto">
         <!-- 头部：标题 + 整体状态 + 操作 -->
         <div class="p-5 sm:p-6 pb-4">
           <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -489,8 +489,8 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- 内容展示区 -->
-        <div class="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6">
+        <!-- 内容展示区（随右栏整体滚动） -->
+        <div class="p-5 sm:p-6">
           <!-- 总览视图：案件分析 + 材料补正清单 -->
           <div v-if="selectedAgent === 'overview'" class="space-y-4">
             <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
