@@ -20,6 +20,8 @@ export type WorkflowAnalysisType =
   | 'anticipate_defense'
   | 'evidence_checklist'
   | 'recommend_solution'
+  | 'evaluation'
+  | 'solve'
 
 export interface SkillCatalogEntry {
   id: string
@@ -318,7 +320,7 @@ export async function runStructuredWorkflowAnalysis(
   return result.restoredOutput.trim()
 }
 
-async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowBundle> {
+export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowBundle> {
   const db = getDb()
   const caseData = db.select().from(cases).where(eq(cases.id, caseNumber)).get()
   if (!caseData) throw new Error('案件不存在')
@@ -460,6 +462,38 @@ async function buildStructuredPrompt(
     prompt = `案件：${safe(bundle.caseData.title)}\n申请人：${safe(bundle.caseData.partyAName)}\n被申请人：${safe(bundle.caseData.partyBName)}\n描述：${safe(bundle.caseData.description)}\n时间线：${safe(bundle.dynamicFile?.timeline)}\n争议：${safe(bundle.dynamicFile?.disputeChecklist)}\n立场：${safe(bundle.dynamicFile?.positions)}\n利益：${safe(bundle.dynamicFile?.potentialInterests)}\nBATNA：${safe(bundle.dynamicFile?.batna)}\n材料：\n${bundle.materials}\n\n请预测程序抗辩、实体抗辩、举证抗辩、和解空间，800-1500字。`
   } else if (analysisType === 'evidence_checklist') {
     prompt = `案件：${safe(bundle.caseData.title)}\n当事人：${safe(bundle.caseData.partyAName)} vs ${safe(bundle.caseData.partyBName)}\n描述：${safe(bundle.caseData.description)}\n时间线：${safe(bundle.dynamicFile?.timeline)}\n争议：${safe(bundle.dynamicFile?.disputeChecklist)}\n已上传材料：${bundle.docs.map(doc => doc.originalName).join('、') || '（暂无）'}\n材料：\n${bundle.materials}\n\n请输出证据清单，包含待证事实、现有证据、缺口、补强建议、取证优先级，1000-1500字。`
+  } else if (analysisType === 'evaluation') {
+    prompt = `你是专业的商事案件分析评估专家。请基于以下案件材料，生成一份完整的《案情分析评估报告》，严格按以下 6 个部分输出（顺序固定，每部分用中文序号标题）：
+
+一、案件基本信息
+（案由、仲裁机构/规则、争议金额、关键时间节点等，只依据材料写明，材料未载明的标注"材料未载明"）
+
+二、当事人基本情况
+（申请人、被申请人，自然人或公司主体、联系方式、身份信息等，材料未载明的标注"材料未载明"）
+
+三、本案仲裁请求分析
+（仲裁请求、金额及计算方式、利息/违约金依据、构成要件与事实匹配、关键证据、举证责任）
+
+四、全案综合风险评估
+（重点风险、证据缺口、执行/抗辩焦点、程序与时效风险，逐条列出并注明来源）
+
+五、解纷策略建议
+（优先考虑调解路径，从时间与经济成本角度给出可选方案、BATNA/WATNA、推荐路径与下一步）
+
+六、补充说明
+（需要补充的信息、材料缺口，不超过300字）
+
+## 硬性约束
+- 只依据以下材料作答，不自行推算、不补全、不猜测；材料未载明的一律写"材料未载明/无法判断"。
+- 各项分析要写成归纳要点句，不得直接截断原文。
+- 正文不使用表格，用分段文字。
+- 使用简体中文。
+
+案件材料：
+${bundle.materials}
+
+请输出完整报告，总长度 800-3000 字。`
+    query = `${query} 案情分析评估报告`
   } else {
     prompt = `你是调解专家。请综合案件材料与现有分析生成利益重构方案。\n\n案件：${safe(bundle.caseData.title)}\n申请人：${safe(bundle.caseData.partyAName)}\n被申请人：${safe(bundle.caseData.partyBName)}\n立场：${safe(bundle.dynamicFile?.positions)}\n利益：${safe(bundle.dynamicFile?.potentialInterests)}\nBATNA：${safe(bundle.dynamicFile?.batna)}\n\n请求权基础分析：\n${bundle.priorAnalyses.claim_basis || '（尚未分析）'}\n\n抗辩预测：\n${bundle.priorAnalyses.anticipate_defense || '（尚未分析）'}\n\n证据清单：\n${bundle.priorAnalyses.evidence_checklist || '（尚未分析）'}\n\n案件材料：\n${bundle.materials}\n\n请输出关键信息摘要、方案A/B/C、比较表、BATNA/WATNA、推荐方案、条款清单、履行时间表、风险提示，总长度 2000-3500 字。`
     query = `${query} 利益重构方案`
@@ -512,9 +546,6 @@ async function defaultCloudSkillAnalysis(input: {
   system: string
 }): Promise<string> {
   const userPrompt = [
-    '## Skills',
-    input.skillPrompt,
-    '',
     '## 待分析的脱敏案件材料',
     input.maskedMaterials,
     '',
@@ -526,7 +557,7 @@ async function defaultCloudSkillAnalysis(input: {
     system: input.system,
     prompt: userPrompt,
     temperature: 0.3,
-    maxTokens: input.analysisType === 'recommend_solution' ? 4000 : 3200,
+    maxTokens: input.analysisType === 'recommend_solution' || input.analysisType === 'evaluation' ? 4000 : 3200,
   }).catch((error: any) => {
     throw new Error(`AI调用失败: ${error.message}`)
   })

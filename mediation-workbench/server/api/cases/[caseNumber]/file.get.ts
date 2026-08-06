@@ -3,12 +3,24 @@
 // ============================================================
 import { existsSync, statSync, realpathSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import { requireAuth } from '../../../middleware/auth'
+import { verifyPartyAccess } from '../../../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event)
   const caseNumber = getRouterParam(event, 'caseNumber') as string
   const name = getQuery(event).name as string
+  const code = getQuery(event).code as string | undefined
+
+  // 鉴权：登录用户 或 案件访问验证码（party 端材料列表下载）
+  const user = event.context.user
+  if (!user) {
+    if (!code) {
+      throw createError({ statusCode: 401, message: '请先登录或提供访问验证码' })
+    }
+    const { valid } = verifyPartyAccess(caseNumber, code)
+    if (!valid) {
+      throw createError({ statusCode: 403, message: '访问验证码无效' })
+    }
+  }
 
   if (!name || name.includes('/') || name.includes('..') || name.includes('\\')) {
     throw createError({ statusCode: 400, message: '非法文件名' })

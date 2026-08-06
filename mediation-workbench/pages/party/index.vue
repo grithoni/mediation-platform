@@ -67,62 +67,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Lower: AI Chat -->
-      <div class="flex-1 flex flex-col min-h-0">
-        <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-3">
-          <div v-if="chatMessages.length === 0 && !chatLoading" class="flex items-center justify-center h-full">
-            <div class="text-center">
-              <UIcon name="i-lucide-message-circle" class="w-10 h-10 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-              <p class="text-sm text-gray-400 dark:text-gray-500">AI助手：有什么可以帮您？</p>
-            </div>
-          </div>
-
-          <div v-for="(msg, i) in chatMessages" :key="i" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-            <div
-              class="max-w-[70%] rounded-lg px-3 py-2"
-              :class="msg.role === 'user'
-                ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'"
-            >
-              <div v-if="msg.role === 'ai'" class="text-xs font-medium mb-1 opacity-60 text-blue-600 dark:text-blue-400">AI助手</div>
-              <div class="text-base whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
-              <div class="text-xs mt-1 opacity-40 text-right font-mono">{{ msg.time }}</div>
-            </div>
-          </div>
-
-          <div v-if="chatLoading" class="flex justify-start">
-            <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2 max-w-[70%]">
-              <div class="text-xs font-medium mb-1 opacity-60 text-blue-600 dark:text-blue-400">AI助手</div>
-              <div class="text-base whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-                {{ chatStreamContent || '思考中...' }}
-                <span class="animate-pulse text-blue-500 dark:text-blue-400">▌</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="border-t border-gray-200 dark:border-gray-800 p-3 shrink-0 bg-white dark:bg-gray-900">
-          <form @submit.prevent="sendChat" class="flex gap-2">
-            <UTextarea
-              v-model="chatInput"
-              placeholder="向AI助手提问..."
-              :rows="1" autoresize :maxrows="4"
-              class="flex-1"
-              @keydown.enter.exact.prevent="sendChat"
-            />
-            <UButton
-              type="submit"
-              icon="i-lucide-send"
-              size="lg"
-              :disabled="!chatInput.trim() || chatLoading"
-              class="self-end bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100"
-            >
-              发送
-            </UButton>
-          </form>
-        </div>
-      </div>
     </template>
 
     <!-- ================================================================== -->
@@ -281,8 +225,8 @@
                 <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 咨询</h3>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
-                <p>在首页 <strong>进入我的案件</strong> 页面底部，您可以直接与 AI 助手对话，描述您遇到的商事纠纷。</p>
-                <p>AI 会采用分阶段心理咨询模式（倾听 → 共情 → 重塑 → 协商），前 3-4 轮以倾听和了解情况为主，不会直接提供解决方案。</p>
+                <p>在案件详情页，您可以查看案件信息、<strong>案件材料列表</strong>，并使用 <strong>智能评估</strong> 获取 AI 基于材料的分析报告。</p>
+                <p>智能评估会生成《案情分析评估报告》，涵盖案件基本信息、当事人情况、仲裁请求分析、全案风险评估、解纷策略建议与补充说明六部分。</p>
                 <p>当您确认需要正式申请调解时，点击左侧菜单 <strong>创建新的案件</strong> 上传材料。</p>
               </div>
             </section>
@@ -308,7 +252,7 @@
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
                 <p>点击左侧菜单 <strong>进入我的案件</strong>，输入案件编号和访问验证码即可进入案件详情页。</p>
-                <p>在案件详情页，您可以查看案件信息、与 AI 智能体继续对话，或选择调解员进行人工调解。</p>
+                <p>在案件详情页，您可以查看案件材料列表、运行智能评估，或选择调解员进行人工调解。</p>
               </div>
             </section>
 
@@ -331,9 +275,9 @@
                 <h3 class="text-base font-semibold text-gray-900 dark:text-white">AI 智能体咨询与调解员介入</h3>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-400 space-y-2 leading-relaxed">
-                <p>进入案件后，AI助手会自动为您提供初步咨询，采用分阶段心理咨询模式（倾听 → 共情 → 重塑 → 协商）。</p>
-                <p>咨询 3 轮后，系统会为您匹配调解员。如需调解员帮助，点击 <strong>联系调解员</strong> 按钮，调解员将接管对话。</p>
-                <p>调解员介入后，您可与调解员直接沟通，AI助手将停止回复。</p>
+                <p>您可以先使用案件详情页的 <strong>智能评估</strong>，获取 AI 对材料的分析报告。</p>
+                <p>如需调解员帮助，点击 <strong>联系调解员</strong> 按钮，调解员将接管对话。</p>
+                <p>调解员接入后，您可与调解员直接沟通。</p>
               </div>
             </section>
 
@@ -446,52 +390,6 @@ async function enterCase() {
     caseError.value = '案件编号或验证码错误'
   } finally {
     caseLoading.value = false
-  }
-}
-
-// ---- AI Chat ----
-const chatInput = ref('')
-const chatMessages = ref<Array<{ role: string; content: string; time: string }>>([])
-const chatLoading = ref(false)
-const chatStreamContent = ref('')
-const chatContainer = ref<HTMLElement | null>(null)
-
-function fmtTime(d: Date) {
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-async function sendChat() {
-  const text = chatInput.value.trim()
-  if (!text) return
-  chatInput.value = ''
-
-  const now = new Date()
-  chatMessages.value.push({ role: 'user', content: text, time: fmtTime(now) })
-
-  chatLoading.value = true
-  chatStreamContent.value = ''
-
-  try {
-    const data = await $fetch<{ success: boolean; data: { content: string } }>('/api/chat/ai', {
-      method: 'POST',
-      body: { caseId: 'demo', message: text, senderIdentifier: 'party', senderName: '当事人' },
-    })
-    if (data?.data?.content) {
-      const full = data.data.content
-      for (let i = 0; i < full.length; i++) {
-        chatStreamContent.value = full.slice(0, i + 1)
-        await new Promise(r => setTimeout(r, 15))
-      }
-      chatMessages.value.push({ role: 'ai', content: full, time: fmtTime(new Date()) })
-    }
-  } catch (err: any) {
-    chatMessages.value.push({ role: 'ai', content: `抱歉，服务暂时不可用：${err?.message || '请稍后重试'}`, time: fmtTime(new Date()) })
-  } finally {
-    chatLoading.value = false
-    chatStreamContent.value = ''
-    nextTick(() => {
-      if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-    })
   }
 }
 

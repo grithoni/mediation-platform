@@ -1,9 +1,12 @@
-// v1780639939949 - Taobao-style unified chat
+// Party 案件详情页：案件信息 + 案件材料列表 + 智能评估（分栏）
 <template>
-  <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-900">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-6 lg:h-screen lg:flex lg:flex-col lg:overflow-hidden">
+    <NuxtLink to="/party" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 mb-4 transition-colors">
+      <UIcon name="i-lucide-arrow-left" class="w-4 h-4" />返回
+    </NuxtLink>
 
     <!-- Loading -->
-    <div v-if="pending" class="flex-1 flex items-center justify-center">
+    <div v-if="pending" class="flex items-center justify-center py-32">
       <div class="text-center">
         <UIcon name="i-lucide-loader-2" class="w-8 h-8 text-blue-400 dark:text-blue-500 animate-spin mx-auto mb-2" />
         <p class="text-sm text-gray-500 dark:text-gray-400 font-mono">loading case data...</p>
@@ -11,7 +14,7 @@
     </div>
 
     <!-- Error -->
-    <div v-else-if="fetchError || !caseData" class="flex-1 flex items-center justify-center">
+    <div v-else-if="fetchError || !caseData" class="flex items-center justify-center py-32">
       <div class="text-center max-w-md mx-auto px-4">
         <UIcon name="i-lucide-alert-circle" class="w-12 h-12 text-red-400 dark:text-red-500 mx-auto mb-3" />
         <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">无法访问案件</h2>
@@ -20,145 +23,111 @@
     </div>
 
     <!-- Main Content -->
-    <template v-else>
-      <!-- Case Info Header -->
-      <div class="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center gap-4">
-        <div class="flex-1 grid grid-cols-5 gap-3 text-base">
-          <div>
-            <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">案号</span>
-            <div class="font-mono font-medium text-gray-900 dark:text-white mt-0.5">{{ caseData.id }}</div>
+    <div v-else-if="caseData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:flex-1 lg:min-h-0 lg:grid-rows-1">
+      <!-- ══ 左栏：案件信息 + 材料（独立滚动） ══ -->
+      <div class="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+        <!-- 案件概览 -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 sm:p-6">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div class="font-mono text-lg font-bold text-blue-600 dark:text-blue-400">{{ caseData.id }}</div>
+              <h1 class="text-xl font-bold text-gray-900 dark:text-white mt-1">{{ caseData.title || '未命名案件' }}</h1>
+            </div>
+            <div class="text-right text-sm text-gray-400 dark:text-gray-500">
+              <div>标的额：<span class="font-medium text-gray-700 dark:text-gray-300">{{ amountDisplay }}</span></div>
+            </div>
           </div>
-          <div>
-            <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">案由</span>
-            <div class="font-medium text-gray-900 dark:text-white mt-0.5">{{ caseData.title }}</div>
+
+          <!-- 当事人 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+            <div class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+              <div class="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3 h-3" />申请人</div>
+              <div class="font-semibold text-gray-900 dark:text-white">{{ caseData.partyAName || '当事人' }}</div>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+              <div class="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3 h-3" />被申请人</div>
+              <div class="font-semibold text-gray-900 dark:text-white">{{ caseData.partyBName || '待确认' }}</div>
+            </div>
           </div>
-          <div>
-            <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">申请人</span>
-            <div class="font-medium text-gray-900 dark:text-white mt-0.5">{{ caseData.partyAName }}</div>
-          </div>
-          <div>
-            <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">被申请人</span>
-            <div class="font-medium text-gray-900 dark:text-white mt-0.5">{{ caseData.partyBName }}</div>
-          </div>
-          <div>
-            <span class="text-gray-400 dark:text-gray-500 font-mono text-sm">标的额</span>
-            <div class="font-medium text-gray-900 dark:text-white mt-0.5">{{ amountDisplay }}</div>
-          </div>
+
+          <p v-if="caseData.description" class="text-sm text-gray-500 dark:text-gray-400 mt-4 leading-relaxed">{{ caseData.description }}</p>
         </div>
-        <button
-          class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
-          :disabled="exiting"
-          @click="exitCase"
-        >
-          <UIcon :name="exiting ? 'i-lucide-loader-2' : 'i-lucide-log-out'" class="w-4 h-4" :class="{ 'animate-spin': exiting }" />
-          {{ exiting ? '保存中...' : '退出案件' }}
-        </button>
-      </div>
 
-      <!-- Agent processing status bar -->
-      <div
-        v-if="agentStatus === 'processing'"
-        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-amber-50 dark:bg-amber-950 flex items-center gap-2"
-      >
-        <UIcon name="i-lucide-loader-2" class="w-4 h-4 text-amber-600 dark:text-amber-400 animate-spin" />
-        <span class="text-sm text-amber-800 dark:text-amber-200">专家正在分析您的案件，请稍候...</span>
-      </div>
-      <div
-        v-else-if="agentStatus === 'done'"
-        class="shrink-0 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-green-50 dark:bg-green-950 flex items-center gap-2"
-      >
-        <UIcon name="i-lucide-clipboard-check" class="w-4 h-4 text-green-600 dark:text-green-400" />
-        <span class="text-sm text-green-800 dark:text-green-200">专家分析已完成，详见下方《案件分析》与《材料补正清单》</span>
-      </div>
+        <!-- 案件材料 -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-blue-500" />案件材料（{{ documents.length }}）
+          </h2>
 
-      <!-- Expert Analysis Panel -->
-      <div v-if="agentStatus === 'done' && (agentAnalysis || materialChecklist)" class="shrink-0 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
-        <div class="px-4 py-3 space-y-3">
-          <div v-if="agentAnalysis" class="rounded-lg border border-blue-200 dark:border-blue-900 bg-white dark:bg-gray-900 p-3">
-            <div class="flex items-center gap-2 mb-1.5">
-              <UIcon name="i-lucide-file-text" class="w-4 h-4 text-blue-500 dark:text-blue-400" />
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">案件分析</h3>
-            </div>
-            <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ agentAnalysis }}</div>
+          <div v-if="documents.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+            暂无材料
           </div>
-          <div v-if="materialChecklist" class="rounded-lg border border-amber-200 dark:border-amber-900 bg-white dark:bg-gray-900 p-3">
-            <div class="flex items-center gap-2 mb-1.5">
-              <UIcon name="i-lucide-list-checks" class="w-4 h-4 text-amber-500 dark:text-amber-400" />
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">材料补正清单</h3>
-            </div>
-            <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ materialChecklist }}</div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Chat Messages -->
-      <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3">
-        <template v-if="allMessages.length">
-          <template v-for="msg in allMessages" :key="msg.id">
-            <!-- System message -->
-            <div v-if="msg.senderType === 'system'" class="flex justify-center">
-              <div class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
-                {{ msg.content }}
-              </div>
-            </div>
-            <!-- Regular message -->
+          <div v-else class="space-y-2">
             <div
-              v-else
-              class="flex"
-              :class="msg.senderType === 'party' ? 'justify-end' : 'justify-start'"
+              v-for="doc in documents"
+              :key="doc.id"
+              class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
             >
-              <div
-                class="max-w-[80%] rounded-lg px-3 py-2"
-                :class="bubbleClass(msg.senderType)"
-              >
-                <div v-if="msg.senderType !== 'party'" class="text-xs font-medium mb-1 opacity-60">
-                  {{ msg.senderName || (msg.senderType === 'ai' ? 'AI助手' : '调解员') }}
-                </div>
-                <div class="text-base whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
-                <div class="text-xs mt-1 opacity-40 text-right font-mono">
-                  {{ formatTime(msg.createdAt) }}
-                </div>
+              <UIcon name="i-lucide-file-text" class="w-4 h-4 text-gray-400 shrink-0" />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm text-gray-800 dark:text-gray-200 truncate">{{ doc.originalName }}</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ formatFileSize(doc.size) }}</div>
               </div>
-            </div>
-          </template>
-        </template>
-
-        <!-- AI Streaming bubble -->
-        <div v-if="chat.aiStreaming.value" class="flex justify-start">
-          <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2 max-w-[80%]">
-            <div class="text-xs font-medium mb-1 opacity-60 text-blue-600 dark:text-blue-400">AI助手</div>
-            <div class="text-base whitespace-pre-wrap leading-relaxed text-gray-800 dark:text-gray-200">
-              {{ chat.aiStreamContent.value || '思考中...' }}
-              <span class="animate-pulse text-blue-500 dark:text-blue-400">▌</span>
+              <a
+                :href="`/api/cases/${caseNumber}/file?name=${encodeURIComponent(doc.originalName)}&code=${encodeURIComponent(accessCode)}`"
+                target="_blank"
+                class="shrink-0 px-2.5 py-1.5 rounded-md text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
+              >
+                查看
+              </a>
             </div>
           </div>
         </div>
       </div>
+      <!-- ══ 左栏结束 ══ -->
 
-      <!-- Input Bar -->
-      <div class="border-t border-gray-200 dark:border-gray-800 p-3 shrink-0 bg-white dark:bg-gray-900">
-        <form @submit.prevent="handleSend" class="flex gap-2">
-          <UTextarea
-            v-model="inputMessage"
-            :placeholder="'输入您的问题...'"
-            :rows="1"
-            autoresize
-            :maxrows="4"
-            class="flex-1"
-            @keydown.enter.exact.prevent="handleSend"
-          />
-          <UButton
-            type="submit"
-            icon="i-lucide-send"
-            size="lg"
-            :disabled="!inputMessage.trim() || chat.aiStreaming.value"
-            class="self-end bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100"
-          >
-            发送
-          </UButton>
-        </form>
+      <!-- ══ 右栏：智能评估（独立滚动） ══ -->
+      <div class="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl lg:min-h-0 lg:overflow-y-auto">
+        <div class="p-5 sm:p-6 pb-4">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <UIcon name="i-lucide-clipboard-list" class="w-4 h-4 text-blue-500" />智能评估
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                AI 基于案件材料生成 6 部分《案情分析评估报告》
+              </p>
+            </div>
+            <UButton
+              color="primary"
+              icon="i-lucide-sparkles"
+              :loading="evaluationLoading"
+              :disabled="evaluationLoading"
+              @click="runEvaluation"
+            >
+              {{ report ? '重新评估' : '生成评估报告' }}
+            </UButton>
+          </div>
+        </div>
+
+        <div class="border-t border-gray-100 dark:border-gray-800 p-5 sm:p-6">
+          <div v-if="evaluationLoading" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            AI 正在分析案件材料，请稍候...
+          </div>
+          <div
+            v-else-if="report"
+            class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words"
+          >{{ report }}</div>
+          <div v-else class="flex flex-col items-center justify-center text-center py-12">
+            <UIcon name="i-lucide-inbox" class="w-10 h-10 text-gray-300 dark:text-gray-700 mb-2" />
+            <p class="text-sm text-gray-400 dark:text-gray-500">点击右上角「生成评估报告」，AI 将基于案件材料生成 6 部分《案情分析评估报告》。</p>
+          </div>
+        </div>
       </div>
-    </template>
+      <!-- ══ 右栏结束 ══ -->
+    </div>
   </div>
 </template>
 
@@ -179,162 +148,74 @@ interface CaseResponse {
     evidenceSummary: string | null
     phase: string
     status: string
-    messages: Array<{
+    documents: Array<{
       id: string
-      caseId: string
-      senderType: string
-      senderId?: string | null
-      senderName?: string | null
-      content: string
-      createdAt: string
+      originalName: string
+      size: number
+      createdAt: string | number
     }>
-    documents: any[]
   }
-  sessionToken?: string
 }
 
 const route = useRoute()
 const caseNumber = route.params.caseNumber as string
 const accessCode = route.query.code as string
 
-const inputMessage = ref('')
-const messagesContainer = ref<HTMLElement | null>(null)
 const pending = ref(true)
 const fetchError = ref(false)
-const sessionToken = ref<string | undefined>()
-
 const caseData = ref<CaseResponse['data'] | null>(null)
-const chat = useChat(computed(() => caseNumber))
-const exiting = ref(false)
+const documents = ref<CaseResponse['data']['documents']>([])
 
-// ── Expert analysis panel state ──────────────────────────
-const agentStatus = ref<'pending' | 'processing' | 'done'>('pending')
-const agentAnalysis = ref('')
-const materialChecklist = ref('')
-let agentPollTimer: ReturnType<typeof setInterval> | null = null
+// ── 智能评估 state ────────────────────────────────────
+const report = ref('')
+const evaluationLoading = ref(false)
 
-async function loadAgentAnalysis() {
-  try {
-    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/analysis`, {
-      query: { code: accessCode },
-    })
-    if (resp?.success && resp.data) {
-      agentStatus.value = resp.data.agentStatus || 'pending'
-      agentAnalysis.value = resp.data.agentAnalysis || ''
-      materialChecklist.value = resp.data.materialChecklist || ''
-      if (agentStatus.value === 'done') stopAgentPolling()
-    }
-  } catch {}
-}
-
-function startAgentPolling() {
-  if (agentPollTimer) return
-  agentPollTimer = setInterval(loadAgentAnalysis, 5000)
-}
-
-function stopAgentPolling() {
-  if (agentPollTimer) { clearInterval(agentPollTimer); agentPollTimer = null }
-}
-
-// ── Exit case: save conversation then navigate back ──────
-async function exitCase() {
-  if (exiting.value) return
-  exiting.value = true
-
-  if (chat.messages.value.length > 0) {
-    try {
-      await $fetch(`/api/cases/${caseNumber}/conversations`, {
-        method: 'POST',
-        body: {
-          messages: chat.messages.value.map(m => ({
-            senderType: m.senderType,
-            senderName: m.senderName,
-            content: m.content,
-            createdAt: m.createdAt,
-          })),
-          savedBy: 'party',
-          partyIdentifier: sessionToken.value || accessCode || 'party',
-        },
-      })
-    } catch (err) {
-      console.error('Failed to save conversation on exit:', err)
-    }
-  }
-
-  stopAgentPolling()
-  chat.disconnect()
-  navigateTo('/party')
-}
-
-// All messages (party + ai) — system messages hidden
-const allMessages = computed(() => chat.messages.value.filter(m => m.senderType !== 'system'))
-
-// ── Fetch case data ───────────────────────────────────────
 onMounted(async () => {
   try {
     const resp = await $fetch<CaseResponse>(`/api/cases/${caseNumber}`, {
       query: { code: accessCode },
     })
     caseData.value = resp.data
-    sessionToken.value = resp.sessionToken
-
-    if (resp.data.messages) {
-      chat.messages.value = resp.data.messages.map(m => ({
-        ...m,
-          senderType: m.senderType as 'party' | 'ai' | 'system',
-      }))
-    }
-
-    // 如果没有消息，自动触发AI欢迎消息
-    if (chat.messages.value.length === 0) {
-      try {
-        await $fetch('/api/chat/ai', {
-          method: 'POST',
-          body: {
-            caseId: caseNumber,
-            message: '__init_welcome__',
-            senderIdentifier: caseData.value?.partyAName || '当事人',
-            senderName: caseData.value?.partyAName,
-            skipSave: true,
-          },
-        })
-        const reload = await $fetch<{ data: any[] }>(`/api/chat/messages/${caseNumber}`)
-        chat.messages.value = reload.data.map(m => ({
-          ...m,
-        senderType: m.senderType as 'party' | 'ai' | 'system',
-        }))
-      } catch (err) {
-        console.warn('[case-page] AI欢迎消息触发失败', err)
-      }
-    }
-
-    // 加载专家分析状态
-    await loadAgentAnalysis()
-    if (agentStatus.value !== 'done') startAgentPolling()
+    documents.value = resp.data.documents || []
   } catch {
     fetchError.value = true
   } finally {
     pending.value = false
   }
 
-  chat.connectWebSocket(sessionToken.value || accessCode)
+  await loadEvaluation()
 })
 
-onUnmounted(() => {
-  stopAgentPolling()
-  chat.disconnect()
-})
+async function loadEvaluation() {
+  try {
+    const resp = await $fetch<{ success: boolean; data: { report: string; status: string } }>(
+      `/api/cases/${caseNumber}/evaluation`,
+      { query: { code: accessCode } },
+    )
+    report.value = resp.data?.report || ''
+  } catch {
+    // 静默失败，保留空状态
+  }
+}
 
-// ── Auto-scroll ───────────────────────────────────────────
-watch([() => chat.messages.value.length, () => chat.aiStreamContent.value], () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-})
+async function runEvaluation() {
+  if (evaluationLoading.value) return
+  evaluationLoading.value = true
+  report.value = ''
+  try {
+    const resp = await $fetch<{ success: boolean; data: { report: string } }>(
+      `/api/cases/${caseNumber}/evaluation`,
+      { method: 'POST', query: { code: accessCode } },
+    )
+    report.value = resp.data?.report || ''
+  } catch (err: any) {
+    report.value = `评估失败：${err?.data?.message || err?.message || '请稍后重试'}`
+  } finally {
+    evaluationLoading.value = false
+  }
+}
 
-// ── Helpers ───────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────
 const amountDisplay = computed(() => {
   if (!caseData.value) return '—'
   const text = caseData.value.claimsSummary || caseData.value.description || ''
@@ -343,38 +224,10 @@ const amountDisplay = computed(() => {
   return '—'
 })
 
-function bubbleClass(senderType: string) {
-  if (senderType === 'party') return 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-  if (senderType === 'ai') return 'bg-blue-50 dark:bg-blue-950/30 text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-900'
-  return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
-}
-
-function formatTime(date: string | Date) {
-  const d = new Date(date)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-// ── Send message (party → AI, persisted to DB) ───────────
-async function handleSend() {
-  const text = inputMessage.value.trim()
-  if (!text) return
-  inputMessage.value = ''
-
-  chat.messages.value.push({
-    id: `party-${Date.now()}`,
-    caseId: caseNumber,
-    senderType: 'party',
-    senderName: '当事人',
-    content: text,
-    createdAt: new Date().toISOString(),
-  })
-
-  await chat.sendAiMessage(text, 'party', '当事人')
-
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
+function formatFileSize(bytes: number) {
+  if (!bytes) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 </script>
