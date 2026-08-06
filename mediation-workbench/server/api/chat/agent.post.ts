@@ -1,7 +1,7 @@
 // ============================================================
 // Agent API Endpoint — SSE streaming agent execution
 // POST /api/chat/agent
-// 引擎：nanobot（OpenAI 兼容 API，单条 user message 拼接）
+// 引擎：直连 DeepSeek（OpenAI 兼容 API，单条 user message 拼接）
 // ============================================================
 import { resolve } from 'node:path'
 import { getDb } from '../../database'
@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { isEndDialogIntent } from '../../utils/dialog-intent'
 import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
-import { nanobotChatStream } from '../../utils/nanobot'
+import { llmChatStream } from '../../utils/llm'
 
 // ============================================================
 // POST /api/chat/agent
@@ -127,10 +127,10 @@ export default defineEventHandler(async (event) => {
     }
   } catch {}
 
-  // nanobot 引擎没有工作台的自定义工具，直接基于上下文回答
+  // LLM 没有工作台的自定义工具，直接基于上下文回答
   systemPrompt += `
 ## 重要提示
-当前由 nanobot 引擎驱动。你**不需要调用任何工具**（也没有可用工具），直接基于以上案件信息和法律依据给出完整、结构化、专业的中文回答。不要提及工具或"调用功能"。
+当前由 LLM 驱动。你**不需要调用任何工具**（也没有可用工具），直接基于以上案件信息和法律依据给出完整、结构化、专业的中文回答。不要提及工具或"调用功能"。
 
 `
 
@@ -165,7 +165,7 @@ ${message}
     async start(controller) {
       try {
         let fullContent = ''
-        for await (const delta of nanobotChatStream({
+        for await (const delta of llmChatStream({
           system: systemPrompt,
           prompt: userInput,
           temperature: 0.7,
@@ -206,7 +206,7 @@ ${message}
         controller.enqueue(encoder.encode(sendSSE({ type: 'finished' })))
         controller.close()
       } catch (err: any) {
-        console.error('[Agent] nanobot stream error:', err)
+        console.error('[Agent] LLM stream error:', err)
         controller.enqueue(
           encoder.encode(sendSSE({ type: 'error', content: `Agent error: ${err.message}` }))
         )

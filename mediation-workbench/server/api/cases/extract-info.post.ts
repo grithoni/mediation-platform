@@ -5,7 +5,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { searchKb } from '../../utils/kb-search'
-import { nanobotChat } from '../../utils/nanobot'
+import { llmChat } from '../../utils/llm'
 
 function parseDocument(filename: string, buffer: Buffer): string {
   const lower = filename.toLowerCase()
@@ -83,7 +83,7 @@ ${kbCaseTypes}
 只输出: {"partyName":"...","respondentName":"...","caseType":"...","description":"..."}`
 
   try {
-    const text = (await nanobotChat({
+    const text = (await llmChat({
       system: '只返回JSON，不要其他文字。',
       prompt,
       temperature: 0.1,

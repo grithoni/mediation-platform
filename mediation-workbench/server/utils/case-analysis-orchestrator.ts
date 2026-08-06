@@ -12,7 +12,7 @@ import {
   documents,
 } from '../database/schema'
 import { formatKbResultsForPrompt, searchKb } from './kb-search'
-import { nanobotChat } from './nanobot'
+import { llmChat } from './llm'
 
 export type WorkflowAnalysisType =
   | 'dynamic_file'
@@ -522,7 +522,7 @@ async function defaultCloudSkillAnalysis(input: {
     input.prompt,
   ].join('\n')
 
-  const text = await nanobotChat({
+  const text = await llmChat({
     system: input.system,
     prompt: userPrompt,
     temperature: 0.3,

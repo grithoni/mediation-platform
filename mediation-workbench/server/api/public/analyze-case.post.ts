@@ -11,7 +11,7 @@
 //     data: {"content": "每 8 字符分块"}\n\n ...
 //     data: [DONE]\n\n
 //
-// 流程：读工作台数据库 → 组装案件材料 → 本地脱敏 → nanobot 6部分分析
+// 流程：读工作台数据库 → 组装案件材料 → 本地脱敏 → LLM 6部分分析
 //       → 反脱敏还原 → 按 8 字符分块 SSE 流式返回
 //
 // case_id 映射：
@@ -25,7 +25,7 @@ import { eq } from 'drizzle-orm'
 import { getDb } from '../../database'
 import { cases, caseApplications } from '../../database/schema'
 import { desensitizeCaseMaterials } from '../../utils/case-analysis-orchestrator'
-import { nanobotChat } from '../../utils/nanobot'
+import { llmChat } from '../../utils/llm'
 
 // 案件分析系统提示词
 const CASE_ANALYSIS_PROMPT = `你是「珠江国际商事调解院」的案情分析助手。请基于以下案件材料，进行结构化案情分析。
@@ -167,7 +167,7 @@ export default defineEventHandler(async (event) => {
 
         // ── 2. 分析 ──────────────────────────────────────
         controller.enqueue(send({ status: 'analyzing' }))
-        const analysis = await nanobotChat({
+        const analysis = await llmChat({
           system: CASE_ANALYSIS_PROMPT,
           prompt: `案件编号：${caseId}\n\n案件材料：\n${desensitized.maskedText}`,
           temperature: 0.3,

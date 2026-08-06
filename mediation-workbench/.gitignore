@@ -1,7 +1,6 @@
 # Dependencies
 node_modules
 .venv-kb
-.venv-ai
 .venv
 
 # Nuxt build output
@@ -18,10 +17,6 @@ dist
 server/chroma_data
 server/fastembed_cache
 server/kb/__pycache__
-
-# Vendored AI engine (python/ai-engine) — Python runtime caches
-python/ai-engine/**/__pycache__/
-python/ai-engine/**/*.pyc
 
 # Uploads
 # 运行时上传（案件文件）忽略；技能库 uploads/skills 入库追踪

@@ -9,7 +9,7 @@ export interface ChatMessage {
 }
 
 // 客户端 SSE 整体超时：服务端 /api/chat/agent 内部引擎请求超时为 125s
-// （server/utils/nanobot.ts），浏览器端略高于服务端，让服务端自身的
+// （server/utils/llm.ts），浏览器端略高于服务端，让服务端自身的
 // 超时/错误事件先返回；引擎挂死时浏览器也能兜底中断。
 const AI_STREAM_TIMEOUT_MS = 130_000
 

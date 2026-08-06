@@ -12,11 +12,11 @@
 // 实现：
 //   - RAG：以最后一条 user 消息 searchKb(topK=4)，格式化为【参考资料】注入 system
 //   - history 取最近 12 条 messages
-//   - nanobotChatStream({ system, prompt, history, temperature: 0.3 }) 流式输出
+//   - llmChatStream({ system, prompt, history, temperature: 0.3 }) 流式输出
 //   - 异常时输出固定的错误文案
 // ============================================================
 import { searchKb } from '../../utils/kb-search'
-import { nanobotChatStream } from '../../utils/nanobot'
+import { llmChatStream } from '../../utils/llm'
 
 const SYSTEM_PROMPT = `你是「珠江国际商事调解院」官方网站的智能咨询助手，负责解答来访者的业务咨询。
 
@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const delta of nanobotChatStream({
+        for await (const delta of llmChatStream({
           system,
           prompt,
           history,
@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
           controller.enqueue(encoder.encode(`data: ${payload}\n\n`))
         }
       } catch (e) {
-        console.error('[public/chat] nanobot 调用失败:', e)
+        console.error('[public/chat] LLM 调用失败:', e)
         const payload = JSON.stringify({ content: FALLBACK_ERROR })
         controller.enqueue(encoder.encode(`data: ${payload}\n\n`))
       }

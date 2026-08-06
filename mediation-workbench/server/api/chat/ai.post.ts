@@ -5,7 +5,7 @@ import { cases, messages, caseDynamicFiles } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { isEndDialogIntent } from '../../utils/dialog-intent'
 import { incrementDialogTurn, endDialog, MAX_DIALOG_TURNS } from '../../utils/dialog-manager'
-import { nanobotChat } from '../../utils/nanobot'
+import { llmChat } from '../../utils/llm'
 
 // ============================================================
 // System prompt templates
@@ -193,7 +193,7 @@ ${rulesContext ? '\n仲裁规则参考：\n' + rulesContext : ''}
 
 每条问题应尽量具体，指出缺失什么材料或信息不明确的点。只输出JSON。`
 
-      const qText = (await nanobotChat({
+      const qText = (await llmChat({
         system: '你是仲裁材料审查助手。只输出JSON。',
         prompt: reviewPrompt,
         temperature: 0.3,
@@ -229,7 +229,7 @@ ${issuesText}
         role: (m.senderType === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
         content: `${m.senderName ? `[${m.senderName}] ` : ''}${m.content}`,
       }))
-      aiContent = await nanobotChat({
+      aiContent = await llmChat({
         system: systemPrompt,
         prompt: body.message,
         history: chatHistory,

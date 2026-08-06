@@ -17,8 +17,8 @@ export default defineNuxtConfig({
     port: 6080,
   },
 
-  // 排除 vendored Python 引擎 / venv / 运行时数据，避免文件监听器耗尽 fd（EMFILE）
-  ignore: ['python/**', '.venv-ai/**', '.venv-kb/**', '.data/**'],
+  // 排除 venv / 运行时数据，避免文件监听器耗尽 fd（EMFILE）
+  ignore: ['.venv-kb/**', '.data/**'],
 
   vite: {
     cacheDir: 'node_modules/.cache/vite',
@@ -26,8 +26,6 @@ export default defineNuxtConfig({
       watch: {
         // 覆盖 chokidar ignored 时需保留 node_modules 等默认项
         ignored: [
-          '**/python/**',
-          '**/.venv-ai/**',
           '**/.venv-kb/**',
           '**/.data/**',
           '**/.git/**',
@@ -42,12 +40,8 @@ export default defineNuxtConfig({
     databasePath: './.data/mediation.db',
     openaiApiKey: '',
     openaiBaseUrl: '',
-    openaiModel: 'deepseek-v4-pro',
-    // 内置 nanobot AI 引擎（OpenAI 兼容 API）——vendored engine，端口固定 8900
-    // 客户端 server/utils/nanobot.ts 按 环境变量 > 此处 runtimeConfig > 默认值 解析，
-    // 引擎进程由 server/plugins/ai-engine.ts 在项目内 .venv-ai + .data/ai/config.json 启动。
-    nanobotBaseUrl: 'http://127.0.0.1:8900/v1',
-    nanobotModel: 'deepseek-v4-flash',
+    openaiModel: 'deepseek-v4-flash',
+    // 直连 DeepSeek（OpenAI 兼容 API）：地址/模型/密钥按 环境变量(NUXT_OPENAI_*) > 此处 runtimeConfig > 默认值 解析。
     localNerBaseUrl: 'http://127.0.0.1:11434',
     localNerModel: '',
     // OCR / KB 微服务地址：环境变量（NUXT_OCR_URL / NUXT_KB_URL）可覆盖，默认指向本地开发服务

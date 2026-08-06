@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { messages, cases } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
-import { nanobotChat } from '../../utils/nanobot'
+import { llmChat } from '../../utils/llm'
 
 /**
  * POST /api/mp/chat — AI chat
@@ -57,7 +57,7 @@ ${kbContext ? `参考法律知识：\n${kbContext}\n` : ''}
 
     let aiContent: string
     try {
-      aiContent = await nanobotChat({
+      aiContent = await llmChat({
         system: systemPrompt,
         prompt: message,
         history: historyMessages,
