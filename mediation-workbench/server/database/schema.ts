@@ -218,12 +218,6 @@ export const caseDynamicFiles = sqliteTable('case_dynamic_files', {
   agentLog: text('agent_log'),
   dialogTurnCount: integer('dialog_turn_count').default(0),
   dialogEnded: integer('dialog_ended', { mode: 'boolean' }).default(false),
-  // 外部 Agent（Hermes/WorkBuddy）处理状态与回写结果
-  // agentStatus: pending(待处理) | processing(处理中) | done(已完成)
-  agentStatus: text('agent_status').notNull().default('pending'),
-  agentAnalysis: text('agent_analysis'), // 《案件分析》
-  materialChecklist: text('material_checklist'), // 《材料补正清单》
-  agentUpdatedAt: integer('agent_updated_at', { mode: 'number' }),
   createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
   updatedAt: integer('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
 })

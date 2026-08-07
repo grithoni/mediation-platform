@@ -3,7 +3,7 @@ export type ActiveMenu = 'case-entry' | 'create-case'
 /**
  * 当事人侧「进入我的案件 / 创建新的案件」模式状态。
  * 支持通过 URL 查询参数 ?mode=create 直接进入创建模式（官网「开始调解/我要调解」
- * 链接即使用 /apply?mode=create）；未指定时默认进入案件查询模式。
+ * 链接即使用 /party?mode=create）；未指定时默认进入案件查询模式。
  */
 export const useActiveMenu = () => {
   const route = useRoute()
@@ -25,7 +25,7 @@ export const useActiveMenu = () => {
     }
   }
 
-  // URL 变化时跟随（例如直接访问 /apply?mode=create）
+  // URL 变化时跟随（例如直接访问 /party?mode=create）
   watch(
     () => route.query.mode,
     (mode) => {

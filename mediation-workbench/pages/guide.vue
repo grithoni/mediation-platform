@@ -10,7 +10,7 @@
       <div class="absolute -bottom-32 -left-16 w-80 h-80 rounded-full bg-sky-400/10 blur-3xl pointer-events-none" />
       <div class="relative z-10 max-w-3xl mx-auto text-center">
         <nav class="inline-flex items-center gap-1 p-1 mb-6 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm">
-          <ULink to="/apply" class="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/75 hover:text-white hover:bg-white/10 transition">调解申请</ULink>
+          <ULink to="/party" class="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/75 hover:text-white hover:bg-white/10 transition">调解申请</ULink>
           <ULink to="/guide" class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-white/25 text-white">流程指引</ULink>
           <ULink to="/party" class="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/75 hover:text-white hover:bg-white/10 transition">进入我的案件</ULink>
         </nav>

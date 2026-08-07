@@ -3,10 +3,10 @@
 // 异步生成 AI 首次欢迎消息（材料审查），存到 messages 表
 // 供 create.post.ts 和 init-dynamic-files.ts 共享使用
 // ============================================================
-import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { eq } from 'drizzle-orm'
 import { getDb } from '../database'
+import { extractDocumentText } from './file-extraction'
 import { cases, messages, documents } from '../database/schema'
 import { searchKb } from './kb-search'
 

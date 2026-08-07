@@ -1,6 +1,8 @@
 import { getKbUrl } from '~/server/utils/service-urls'
+import { requireMediator } from '~/server/middleware/auth'
 
 export default defineEventHandler(async (event) => {
+  requireMediator(event)
   const kbUrl = getKbUrl()
 
   try {

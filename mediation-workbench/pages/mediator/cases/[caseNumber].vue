@@ -1,87 +1,21 @@
 <script setup lang="ts">
 // 调解员工作台 — 案件详情
 const route = useRoute()
-const { getAuthHeaders } = useAuth()
+const { getAuthHeaders, fetchUser } = useAuth()
 
 const caseNumber = route.params.caseNumber as string
 const caseData = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
-const runningAgent = ref(false)
-const agentError = ref('')
-const agentStatus = ref<'pending' | 'processing' | 'done'>('pending')
-const agentAnalysis = ref('')
-const materialChecklist = ref('')
-const agentUpdatedAt = ref<number | null>(null)
-const analysisStatus = ref<Record<string, { done: boolean; generatedAt?: number }>>({})
-let agentPollTimer: ReturnType<typeof setInterval> | null = null
 
-// 单个智能体分析（右栏）：选中条目 + 各自独立的加载/结果/错误状态
-const selectedAgent = ref<string>('overview')
-const agentResults = ref<Record<string, { content: string; generatedAt: number | null; cached?: boolean }>>({})
-const agentLoading = ref<Record<string, boolean>>({})
-const agentErrors = ref<Record<string, string>>({})
-
-const agentEndpoints: Record<string, string> = {
-  claim_basis: `/api/cases/${caseNumber}/claim-basis`,
-  evidence_checklist: `/api/cases/${caseNumber}/evidence-checklist`,
-  anticipate_defense: `/api/cases/${caseNumber}/anticipate-defense`,
-  recommend_solution: `/api/cases/${caseNumber}/recommend-solution`,
-}
-
-const agentItems = computed(() => [
-  { key: 'overview', label: '总体分析', icon: 'i-lucide-layout-dashboard' },
-  { key: 'claim_basis', label: '请求权基础分析', icon: 'i-lucide-scale' },
-  { key: 'evidence_checklist', label: '证据清单分析', icon: 'i-lucide-list-checks' },
-  { key: 'anticipate_defense', label: '预判抗辩', icon: 'i-lucide-shield-check' },
-  { key: 'recommend_solution', label: '调解方案建议', icon: 'i-lucide-lightbulb' },
-])
-
-const currentAgent = computed(() => agentItems.value.find((i) => i.key === selectedAgent.value))
-
-// 点击智能体条目：调用对应端点获取分析内容（缓存命中秒回；未生成过会触发实时分析，可能耗时较久）
-async function runSingleAgent(key: string, force = false) {
-  if (key === 'overview') {
-    selectedAgent.value = key
-    return
-  }
-  selectedAgent.value = key
-  if (!force && agentResults.value[key]) return
-  if (agentLoading.value[key]) return
-  agentLoading.value[key] = true
-  agentErrors.value[key] = ''
-  try {
-    const resp = await $fetch<{ success: boolean; data: any }>(agentEndpoints[key] as string, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    })
-    if (resp?.success && resp.data) {
-      agentResults.value[key] = {
-        content: resp.data.content || '',
-        generatedAt: resp.data.generatedAt || null,
-        cached: !!resp.data.cached,
-      }
-      if (resp.data.generatedAt) {
-        analysisStatus.value[key] = { done: true, generatedAt: resp.data.generatedAt }
-      }
-    } else {
-      agentErrors.value[key] = resp?.data?.message || '未返回分析结果'
-    }
-  } catch (err: any) {
-    agentErrors.value[key] = err?.data?.message || err?.message || '分析失败，请稍后重试'
-  } finally {
-    agentLoading.value[key] = false
-  }
-}
-
-// ── SOLVE 调解技能库（5 阶段 × 5 技能）──────────────────
+// ── VALUE 调解技能库（5 阶段 × 5 技能）──────────────────
 interface SolvePhase { key: string; en: string; name: string; desc: string }
 interface SolveSkill { id: string; phaseKey: string; name: string; prompt: string }
 
 const solvePhases = ref<SolvePhase[]>([])
 const solveSkills = ref<SolveSkill[]>([])
 const solveStatus = ref<Record<string, { done: boolean; generatedAt?: number }>>({})
-const selectedPhase = ref('S')
+const selectedPhase = ref('V')
 const selectedSolveSkill = ref<string | null>(null)
 const solveResults = ref<Record<string, string>>({})
 const solveCached = ref<Record<string, boolean>>({})
@@ -93,16 +27,15 @@ const currentSolveSkill = computed(() => solveSkills.value.find((s) => s.id === 
 
 async function loadSolve() {
   try {
-    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/solve`, {
-      headers: getAuthHeaders(),
-    })
-    if (resp?.success) {
-      solvePhases.value = resp.data.phases || []
-      solveSkills.value = resp.data.skills || []
-      solveStatus.value = resp.data.status || {}
-      if (!selectedSolveSkill.value && currentPhaseSkills.value.length) {
-        selectedSolveSkill.value = currentPhaseSkills.value[0].id
-      }
+    const [catResp, statusResp] = await Promise.all([
+      $fetch<{ success: boolean; data: any }>(`/api/solve`, { headers: getAuthHeaders() }),
+      $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/solve`, { headers: getAuthHeaders() }),
+    ])
+    solvePhases.value = catResp?.data?.phases || []
+    solveSkills.value = catResp?.data?.skills || []
+    solveStatus.value = statusResp?.data?.status || {}
+    if (!selectedSolveSkill.value && currentPhaseSkills.value.length) {
+      selectedSolveSkill.value = currentPhaseSkills.value[0].id
     }
   } catch {}
 }
@@ -177,88 +110,27 @@ function fileUrl(name: string): string {
   return `/api/cases/${caseNumber}/file?name=${encodeURIComponent(name)}`
 }
 
-async function loadAgentPanel() {
-  try {
-    const [analysisResp, statusResp] = await Promise.all([
-      $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/analysis`, {
-        headers: getAuthHeaders(),
-      }),
-      $fetch<{ success: boolean; data: Record<string, { done: boolean; generatedAt?: number }> }>(`/api/cases/${caseNumber}/analysis-status`, {
-        headers: getAuthHeaders(),
-      }),
-    ])
-
-    if (analysisResp?.success && analysisResp.data) {
-      agentStatus.value = analysisResp.data.agentStatus || 'pending'
-      agentAnalysis.value = analysisResp.data.agentAnalysis || ''
-      materialChecklist.value = analysisResp.data.materialChecklist || ''
-      agentUpdatedAt.value = analysisResp.data.agentUpdatedAt || null
-    }
-
-    if (statusResp?.success) {
-      analysisStatus.value = statusResp.data || {}
-    }
-
-    if (agentStatus.value === 'done') {
-      stopAgentPolling()
-      runningAgent.value = false
-    }
-  } catch (err: any) {
-    agentError.value = err?.data?.message || err?.message || '加载智能体分析状态失败'
-    stopAgentPolling()
-    runningAgent.value = false
-  }
-}
-
-function startAgentPolling() {
-  if (agentPollTimer) return
-  agentPollTimer = setInterval(() => {
-    loadAgentPanel().catch(() => {})
-  }, 5000)
-}
-
-function stopAgentPolling() {
-  if (agentPollTimer) {
-    clearInterval(agentPollTimer)
-    agentPollTimer = null
-  }
-}
-
-async function runAgentAnalysis() {
-  runningAgent.value = true
-  agentError.value = ''
-  try {
-    await $fetch(`/api/cases/${caseNumber}/agent-run`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    })
-    agentStatus.value = 'processing'
-    await loadAgentPanel()
-    startAgentPolling()
-  } catch (err: any) {
-    runningAgent.value = false
-    agentError.value = err?.data?.message || err?.message || '启动调解智能体失败'
-  }
-}
-
 onMounted(async () => {
   try {
+    // 硬刷新/直链访问时先恢复登录态，确保 getAuthHeaders 带上 token
+    await fetchUser()
     const data = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}`, {
       headers: getAuthHeaders(),
     })
     caseData.value = data.data
-    await loadAgentPanel()
     await loadSolve()
-    if (agentStatus.value === 'processing') startAgentPolling()
+    // 支持从 agents 页跳转：?solve=skillId 预选并自动运行该技能
+    const jumpSkill = route.query.solve as string | undefined
+    if (jumpSkill && solveSkills.value.some((s) => s.id === jumpSkill)) {
+      const skill = solveSkills.value.find((s) => s.id === jumpSkill)!
+      selectedPhase.value = skill.phaseKey
+      await runSolve(jumpSkill)
+    }
   } catch (err: any) {
     error.value = err?.data?.message || err?.message || '加载案件失败'
   } finally {
     loading.value = false
   }
-})
-
-onUnmounted(() => {
-  stopAgentPolling()
 })
 </script>
 
@@ -456,162 +328,13 @@ onUnmounted(() => {
       </div>
       <!-- ══ 左栏结束 ══ -->
 
-      <!-- ══ 右栏：调解智能体区 + SOLVE 技能库（整体独立滚动） ══ -->
+      <!-- ══ 右栏：VALUE 技能库（独立滚动） ══ -->
       <div class="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
-        <!-- 调解智能体主卡 -->
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-        <!-- 头部：标题 + 整体状态 + 操作 -->
-        <div class="p-5 sm:p-6 pb-4">
-          <div class="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <UIcon name="i-lucide-bot" class="w-4 h-4 text-blue-500" />调解智能体
-              </h2>
-              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                按“读取材料 → 本地脱敏 → 云端 skills 分析 → 反脱敏 → 回写结果”执行
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <span
-                class="px-2.5 py-1 rounded-full text-xs font-medium"
-                :class="{
-                  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300': agentStatus === 'pending',
-                  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': agentStatus === 'processing',
-                  'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': agentStatus === 'done',
-                }"
-              >
-                {{ agentStatus === 'pending' ? '待分析' : agentStatus === 'processing' ? '分析中' : '已完成' }}
-              </span>
-              <UButton
-                color="primary"
-                icon="i-lucide-play"
-                :loading="runningAgent"
-                @click="runAgentAnalysis"
-              >
-                {{ agentStatus === 'done' ? '重新分析' : '开始分析' }}
-              </UButton>
-            </div>
-          </div>
-
-          <UAlert
-            v-if="agentError"
-            color="error"
-            variant="soft"
-            :title="agentError"
-            class="mt-4"
-          />
-
-          <div v-if="agentStatus === 'processing'" class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 p-3 mt-4">
-            <div class="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
-              智能体正在分析案件材料，页面会自动刷新分析状态。
-            </div>
-          </div>
-
-          <div v-if="agentUpdatedAt" class="text-xs text-gray-400 dark:text-gray-500 mt-3">
-            最近更新：{{ fmtTime(agentUpdatedAt) }}
-          </div>
-        </div>
-
-        <!-- 智能体条目列表（可点击，各自独立请求） -->
-        <div class="px-3 pb-3 border-b border-gray-100 dark:border-gray-800 space-y-1">
-          <button
-            v-for="item in agentItems"
-            :key="item.key"
-            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-            :class="selectedAgent === item.key
-              ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
-              : 'border border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
-            @click="runSingleAgent(item.key)"
-          >
-            <UIcon
-              :name="item.icon"
-              class="w-4 h-4 shrink-0"
-              :class="selectedAgent === item.key ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
-            />
-            <span
-              class="flex-1 text-sm font-medium min-w-0 truncate"
-              :class="selectedAgent === item.key ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'"
-            >{{ item.label }}</span>
-            <template v-if="item.key !== 'overview'">
-              <span v-if="agentLoading[item.key]" class="shrink-0 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                <UIcon name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />分析中
-              </span>
-              <span
-                v-else-if="analysisStatus[item.key]?.done"
-                class="shrink-0 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
-                :title="`完成于 ${fmtTime(analysisStatus[item.key]?.generatedAt)}`"
-              >
-                <UIcon name="i-lucide-check-circle-2" class="w-4 h-4" />
-                <span class="hidden xl:inline">{{ fmtTime(analysisStatus[item.key]?.generatedAt) }}</span>
-              </span>
-              <UIcon v-else name="i-lucide-clock-3" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
-            </template>
-          </button>
-        </div>
-
-        <!-- 内容展示区（随右栏整体滚动） -->
-        <div class="p-5 sm:p-6">
-          <!-- 总览视图：案件分析 + 材料补正清单 -->
-          <div v-if="selectedAgent === 'overview'" class="space-y-4">
-            <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
-              <div class="flex items-center gap-2 mb-3">
-                <UIcon name="i-lucide-file-search" class="w-4 h-4 text-blue-500" />
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">案件分析</h3>
-              </div>
-              <p v-if="agentAnalysis" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ agentAnalysis }}</p>
-              <p v-else class="text-sm text-gray-400 dark:text-gray-500">尚未生成案件分析结果。</p>
-            </div>
-
-            <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
-              <div class="flex items-center gap-2 mb-3">
-                <UIcon name="i-lucide-list-checks" class="w-4 h-4 text-blue-500" />
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">材料补正清单</h3>
-              </div>
-              <p v-if="materialChecklist" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ materialChecklist }}</p>
-              <p v-else class="text-sm text-gray-400 dark:text-gray-500">尚未生成材料补正清单。</p>
-            </div>
-          </div>
-
-          <!-- 单个智能体结果 -->
-          <div v-else>
-            <div class="flex items-center gap-2 mb-2 flex-wrap">
-              <UIcon :name="currentAgent?.icon || 'i-lucide-bot'" class="w-4 h-4 text-blue-500 shrink-0" />
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentAgent?.label }}</h3>
-              <div class="flex-1" />
-              <span v-if="agentResults[selectedAgent]?.cached" class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">缓存结果</span>
-              <button
-                v-if="agentResults[selectedAgent]"
-                class="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                title="重新生成"
-                @click="runSingleAgent(selectedAgent, true)"
-              >
-                <UIcon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" />重新生成
-              </button>
-            </div>
-
-            <div v-if="agentResults[selectedAgent]?.generatedAt" class="text-xs text-gray-400 dark:text-gray-500 mb-3">
-              生成于 {{ fmtTime(agentResults[selectedAgent]?.generatedAt) }}
-            </div>
-
-            <div v-if="agentLoading[selectedAgent]" class="flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-8">
-              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在分析，请稍候…
-            </div>
-            <UAlert v-else-if="agentErrors[selectedAgent]" color="error" variant="soft" :title="agentErrors[selectedAgent]" />
-            <p v-else-if="agentResults[selectedAgent]?.content" class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ agentResults[selectedAgent]?.content }}</p>
-            <div v-else class="text-sm text-gray-400 dark:text-gray-500">
-              <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />该智能体尚未生成分析结果，点击上方条目开始分析。
-            </div>
-          </div>
-        </div>
-        </div>
-        <!-- 调解智能体主卡结束 -->
-
-        <!-- SOLVE 调解技能库卡 -->
+        <!-- VALUE 调解技能库卡 -->
         <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
           <div class="p-5 sm:p-6 pb-4">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <UIcon name="i-lucide-wand-2" class="w-4 h-4 text-blue-500" />SOLVE 调解技能库
+              <UIcon name="i-lucide-wand-2" class="w-4 h-4 text-blue-500" />VALUE 调解技能库
             </h2>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">5 阶段 × 5 技能，脱敏后逐项运行，结果缓存至本地</p>
           </div>
@@ -678,7 +401,7 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <!-- SOLVE 卡结束 -->
+        <!-- VALUE 卡结束 -->
       </div>
       <!-- ══ 右栏结束 ══ -->
     </div>

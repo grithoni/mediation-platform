@@ -1,9 +1,9 @@
 // ============================================================
 // GET /api/cases/:caseNumber/solve
-// SOLVE 调解智能体 — 返回 5 阶段 × 25 技能目录 + 该案件已完成状态
+// 返回该案件已完成的 VALUE 技能运行状态（目录见全局 /api/solve）
 // ============================================================
 import { requireAuth } from '../../../../middleware/auth'
-import { SOLVE_PHASES, SOLVE_SKILLS, getSolveStatus } from '../../../../utils/solve-skills'
+import { getSolveStatus } from '../../../../utils/solve-skills'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -16,8 +16,6 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: {
       caseId: caseNumber,
-      phases: SOLVE_PHASES,
-      skills: SOLVE_SKILLS,
       status,
     },
   }

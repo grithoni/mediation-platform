@@ -3,10 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { eq } from 'drizzle-orm'
 
 import { getDb, initTestDb, resetDb } from '../server/database'
-import { cases, caseDynamicFiles, sessions } from '../server/database/schema'
+import { cases, sessions } from '../server/database/schema'
 import {
   classifyMessageActor,
   resolvePartySessionToken,
@@ -176,138 +175,6 @@ test('skill catalog includes uploaded enabled skills ahead of builtin defaults',
     assert.equal(catalog[0]?.name, '证据核验')
     assert.equal(catalog.some(skill => skill.source === 'builtin'), true)
     assert.equal(catalog[0]?.prompt?.includes('证据原件'), true)
-  })
-})
-
-test('mediation agent tool catalog exposes MCP-oriented case analysis tools', async () => {
-  const { buildMediationToolCatalog } = await import('../server/utils/mediation-agent')
-  const tools = buildMediationToolCatalog()
-
-  assert.equal(tools.some(tool => tool.function.name === 'query_case_materials'), true)
-  assert.equal(tools.some(tool => tool.function.name === 'desensitize_case_materials'), true)
-  assert.equal(tools.some(tool => tool.function.name === 'restore_analysis_result'), true)
-})
-
-test('mediation agent runner executes GA loop with desensitize and restore tool chain', async () => {
-  const { runMediationAgentTask } = await import('../server/utils/mediation-agent')
-  const seenMessages: string[] = []
-
-  const result = await runMediationAgentTask({
-    caseId: '2026-1',
-    task: '请完成案件分析',
-    llmCall: async function* (messages) {
-      seenMessages.push(messages[messages.length - 1]?.content || '')
-      if (messages.length === 2) {
-        return {
-          content: '',
-          toolCalls: [
-            { toolName: 'query_case_materials', args: {} },
-            { toolName: 'desensitize_case_materials', args: {} },
-          ],
-        }
-      }
-
-      if (messages.length === 3) {
-        return {
-          content: '',
-          toolCalls: [
-            { toolName: 'restore_analysis_result', args: { maskedResult: '[申请人_1]要求返还货款。' } },
-          ],
-        }
-      }
-
-      return {
-        content: '已完成分析。',
-        toolCalls: [],
-      }
-    },
-    handlers: {
-      query_case_materials: async () => ({
-        data: { materials: '张三与李四货款争议' },
-        nextPrompt: '已读取案件材料。',
-      }),
-      desensitize_case_materials: async () => ({
-        data: { maskedMaterials: '[申请人_1]与[被申请人_1]货款争议', traceId: 'trace-123' },
-        nextPrompt: '已完成本地脱敏。',
-      }),
-      restore_analysis_result: async ({ maskedResult }) => ({
-        data: { restored: String(maskedResult).replace('[申请人_1]', '张三') },
-        nextPrompt: '已完成反脱敏，请输出最终结论。',
-      }),
-    },
-  })
-
-  assert.equal(result.executedTools.includes('query_case_materials'), true)
-  assert.equal(result.executedTools.includes('desensitize_case_materials'), true)
-  assert.equal(result.executedTools.includes('restore_analysis_result'), true)
-  assert.equal(result.finalText.includes('已完成分析'), true)
-  assert.equal(seenMessages.length >= 2, true)
-})
-
-test('mediation background analysis writes back agent analysis and checklist', async () => {
-  await withTempProjectDir(async () => {
-    const db = getDb()
-    const now = Date.now()
-
-    db.insert(cases).values({
-      id: '2026-9',
-      title: '货款争议',
-      description: '申请人称被申请人拖欠货款。',
-      partyAName: '张三',
-      partyBName: '李四',
-      accessCode: 'CODE9',
-      phase: 'analysis',
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    db.insert(caseDynamicFiles).values({
-      id: 'cdf-9',
-      caseId: '2026-9',
-      agentStatus: 'processing',
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    const { runMediationBackgroundAnalysis } = await import('../server/utils/mediation-agent')
-    const result = await runMediationBackgroundAnalysis('2026-9', {
-      handlers: {
-        query_case_materials: async () => ({
-          data: { materials: '张三要求李四支付货款。' },
-          nextPrompt: '已读取案件材料。',
-        }),
-        desensitize_case_materials: async () => ({
-          data: { maskedMaterials: '[申请人_1]要求[被申请人_1]支付货款。', traceId: 'trace-bg' },
-          nextPrompt: '已完成本地脱敏。',
-        }),
-        analyze_with_mediation_skills: async ({ analysisType }) => ({
-          data: {
-            analysisType,
-            content: analysisType === 'claim_basis'
-              ? '[申请人_1]对[被申请人_1]享有货款请求权。'
-              : '请补充付款凭证与对账单。',
-          },
-          nextPrompt: '已生成脱敏分析。',
-        }),
-        restore_analysis_result: async ({ maskedResult }) => ({
-          data: {
-            restored: String(maskedResult)
-              .replaceAll('[申请人_1]', '张三')
-              .replaceAll('[被申请人_1]', '李四'),
-          },
-          nextPrompt: '已完成反脱敏。',
-        }),
-      },
-    })
-
-    assert.equal(result.agentAnalysis.includes('张三'), true)
-    assert.equal(result.materialChecklist.includes('付款凭证'), true)
-
-    const updated = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, '2026-9')).get()
-    assert.equal(updated?.agentStatus, 'done')
-    assert.equal(updated?.agentAnalysis?.includes('请求权'), true)
-    assert.equal(updated?.materialChecklist?.includes('对账单'), true)
   })
 })
 

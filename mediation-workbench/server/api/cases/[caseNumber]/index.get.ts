@@ -21,6 +21,18 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, message: '案件不存在' })
     }
 
+    // 访问控制：调解/平台角色可查看任意案件；当事人仅可查看自己参与的案件
+    const mediatorRoles = ['mediator', 'case_manager', 'admin']
+    const isMediatorRole = mediatorRoles.includes(user.role)
+    const isParty = user.role === 'claimant' || user.role === 'respondent'
+    if (!isMediatorRole && isParty) {
+      const isParticipant =
+        caseData.partyAUserId === user.userId || caseData.partyBUserId === user.userId
+      if (!isParticipant) {
+        throw createError({ statusCode: 403, message: '无权访问该案件' })
+      }
+    }
+
     // Mediator view: only see shared messages (party↔mediator), hide party↔AI private chat
     const caseMessages = db
       .select()
@@ -49,10 +61,21 @@ export default defineEventHandler(async (event) => {
       .where(eq(caseApplications.caseId, caseNumber))
       .get()
 
+    // 当事人访问时隐藏敏感字段：accessCode（验证码）与对方当事人联系方式
+    const isPartyView = !isMediatorRole && isParty
+    const sanitized = isPartyView
+      ? {
+          ...caseData,
+          accessCode: undefined,
+          partyAContact: user.userId === caseData.partyAUserId ? caseData.partyAContact : undefined,
+          partyBContact: user.userId === caseData.partyBUserId ? caseData.partyBContact : undefined,
+        }
+      : caseData
+
     return {
       success: true,
       data: {
-        ...caseData,
+        ...sanitized,
         messages: caseMessages,
         documents: caseDocuments,
         application: application || null,

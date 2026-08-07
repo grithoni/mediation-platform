@@ -21,6 +21,14 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const content = await runSolveSkill(caseNumber, skillId)
-  return { success: true, data: { skillId, content, cached: false } }
+  try {
+    const content = await runSolveSkill(caseNumber, skillId)
+    return { success: true, data: { skillId, content, cached: false } }
+  } catch (err: any) {
+    console.error(`[solve] run failed for ${caseNumber}/${skillId}:`, err)
+    throw createError({
+      statusCode: 500,
+      message: err?.message || '技能运行失败，请稍后重试',
+    })
+  }
 })
