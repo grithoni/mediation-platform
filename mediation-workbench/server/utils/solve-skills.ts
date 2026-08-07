@@ -10,6 +10,7 @@ import { getDb } from '../database'
 import { caseAnalyses } from '../database/schema'
 import { llmChat } from './llm'
 import { buildWorkflowBundle, runDesensitizedSkillWorkflow } from './case-analysis-orchestrator'
+import { getCaseRules } from './desensitize-rules'
 
 export interface SolvePhase {
   key: string // V | A | L | U | E
@@ -170,6 +171,9 @@ export async function runSolveSkill(caseNumber: string, skillId: string): Promis
 
   const bundle = await buildWorkflowBundle(caseNumber)
 
+  // 案件脱敏规则复核：调解员可手动修改/确认；缺省按默认规则
+  const rules = getCaseRules(caseNumber)
+
   const system = [
     `你是商事调解平台的 SOLVE 调解智能体，当前处于「${phase.key}｜${phase.name}」阶段。`,
     '你接收的材料已经过本地脱敏，绝不能猜测或扩写真实身份信息。',
@@ -183,6 +187,7 @@ export async function runSolveSkill(caseNumber: string, skillId: string): Promis
     partyNames: bundle.partyNames,
     addresses: bundle.addresses,
     knownEntities: bundle.knownEntities,
+    rules,
     system,
     analyzeWithCloudSkills: async (input) => {
       const userPrompt = [

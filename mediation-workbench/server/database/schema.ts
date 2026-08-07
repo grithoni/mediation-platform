@@ -416,6 +416,15 @@ export const desensitizationMappings = sqliteTable('desensitization_mappings', {
   expiresAt: integer('expires_at', { mode: 'number' }).notNull(), // TTL 7200s
 })
 
+// ============================================================
+// 案件脱敏规则复核表（调解员可手动修改/确认）
+// ============================================================
+export const caseDesensitizeRules = sqliteTable('case_desensitize_rules', {
+  caseId: text('case_id').primaryKey(),
+  rulesJson: text('rules_json').notNull(), // JSON: Array<{category, enabled, action}>
+  updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+})
+
 export const webhookLogs = sqliteTable('webhook_logs', {
   id: text('id').primaryKey(),
   webhookId: text('webhook_id').notNull().references(() => webhooks.id),

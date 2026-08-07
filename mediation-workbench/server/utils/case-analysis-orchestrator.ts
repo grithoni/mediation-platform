@@ -13,6 +13,7 @@ import {
 } from '../database/schema'
 import { formatKbResultsForPrompt, searchKb } from './kb-search'
 import { llmChat } from './llm'
+import { rulesIndex, type DesensitizeRule } from './desensitize-rules'
 
 export type WorkflowAnalysisType =
   | 'dynamic_file'
@@ -68,6 +69,8 @@ interface WorkflowRunOptions extends RuntimeDeps {
   skillCatalog?: SkillCatalogEntry[]
   prompt?: string
   system?: string
+  /** 脱敏规则复核（按案件由调解员配置）；缺省按默认规则。 */
+  rules?: DesensitizeRule[]
 }
 
 interface WorkflowBundle {
@@ -187,6 +190,7 @@ export async function runDesensitizedSkillWorkflow(options: WorkflowRunOptions) 
       knownEntities: options.knownEntities || [],
       partyNames: options.partyNames,
       addresses: options.addresses,
+      rules: options.rules,
     }))
   const restore = options.restore || defaultRestore
   const analyzeWithCloudSkills = options.analyzeWithCloudSkills || defaultCloudSkillAnalysis
@@ -572,8 +576,25 @@ export async function desensitizeCaseMaterials(
     knownEntities: KnownEntity[]
     partyNames: string[]
     addresses: string[]
+    /** 脱敏规则复核；缺省按默认规则（全部启用）。 */
+    rules?: DesensitizeRule[]
   },
 ): Promise<DesensitizedPayload> {
+  const ruleIndex = rulesIndex(options.rules || [])
+
+  /** 根据规则判断某类别是否参与脱敏（enabled 且 action !== 'keep'）。 */
+  const shouldMask = (category: string) => {
+    const rule = ruleIndex[category]
+    if (!rule) return true
+    if (!rule.enabled) return false
+    return rule.action !== 'keep'
+  }
+  /** 根据规则判断某类别是 'delete'（直接删除）还是 'mask'（令牌替换）。 */
+  const isDelete = (category: string) => {
+    const rule = ruleIndex[category]
+    return !!rule && rule.enabled && rule.action === 'delete'
+  }
+
   const spans: Array<{ start: number; end: number; value: string; category: string }> = []
 
   for (const { category, pattern } of PII_PATTERNS) {
@@ -638,10 +659,20 @@ export async function desensitizeCaseMaterials(
   const localNerEntities = await detectLocalNerEntities(text)
   for (const entity of localNerEntities) spans.push(entity)
 
-  spans.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start))
-  const selected: typeof spans = []
+  // ── 规则复核过滤：禁用或 keep 的类别不参与脱敏 ──────────────
+  const roleWords = ['原告', '被告', '申请人', '被申请人', '上诉人', '被上诉人', '甲方', '乙方', '委托代理人', '法定代表人', '第三人', '当事人']
+  const ruleCategoryFor = (category: string) => (roleWords.includes(category) ? '角色姓名' : category)
+  const filterable = spans.filter((span) => {
+    const rule = ruleIndex[ruleCategoryFor(span.category)]
+    if (!rule) return true
+    if (!rule.enabled) return false
+    return rule.action !== 'keep'
+  })
+
+  filterable.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start))
+  const selected: typeof filterable = []
   let lastEnd = -1
-  for (const span of spans) {
+  for (const span of filterable) {
     if (!span.value || span.start < lastEnd) continue
     selected.push(span)
     lastEnd = span.end
@@ -653,6 +684,11 @@ export async function desensitizeCaseMaterials(
   let maskedText = text
 
   for (const span of [...selected].sort((a, b) => b.start - a.start)) {
+    // 规则 action='delete'：直接删除该片段，不生成令牌、不进入映射
+    if (isDelete(ruleCategoryFor(span.category))) {
+      maskedText = `${maskedText.slice(0, span.start)}${maskedText.slice(span.end)}`
+      continue
+    }
     let token = valueToToken.get(span.value)
     if (!token) {
       const leaf = categoryLeaf(span.category)
@@ -672,6 +708,7 @@ export async function desensitizeCaseMaterials(
     partyNames: options.partyNames,
     addresses: options.addresses,
     knownEntities: options.knownEntities,
+    rules: options.rules,
   })
   if (residual.length > 0) {
     throw new Error(`[脱敏漏检] 发现疑似未脱敏数据: ${residual.join(', ')}`)
@@ -686,8 +723,15 @@ export async function desensitizeCaseMaterials(
 
 export function scanForResidualPii(
   text: string,
-  options: { partyNames: string[]; addresses: string[]; knownEntities: KnownEntity[] },
+  options: { partyNames: string[]; addresses: string[]; knownEntities: KnownEntity[]; rules?: DesensitizeRule[] },
 ): string[] {
+  const ruleIndex = rulesIndex(options.rules || [])
+  const skipCategory = (category: string) => {
+    const rule = ruleIndex[category]
+    if (!rule) return false
+    return !rule.enabled || rule.action === 'keep'
+  }
+
   const found: string[] = []
   const seen = new Set<string>()
   const add = (value: string) => {
@@ -697,19 +741,26 @@ export function scanForResidualPii(
     }
   }
 
-  for (const { pattern } of PII_PATTERNS) {
+  for (const { category, pattern } of PII_PATTERNS) {
+    if (skipCategory(category)) continue
     for (const match of text.matchAll(pattern)) {
       if (match[0]) add(match[0])
     }
   }
-  for (const name of options.partyNames) {
-    if (name && text.includes(name)) add(name)
+  if (!skipCategory('姓名')) {
+    for (const name of options.partyNames) {
+      if (name && text.includes(name)) add(name)
+    }
   }
-  for (const address of options.addresses) {
-    if (address && text.includes(address)) add(address)
+  if (!skipCategory('地址')) {
+    for (const address of options.addresses) {
+      if (address && text.includes(address)) add(address)
+    }
   }
   for (const entity of options.knownEntities) {
-    if (entity?.value && text.includes(entity.value)) add(entity.value)
+    if (!entity?.value) continue
+    if (skipCategory(entity.category)) continue
+    if (text.includes(entity.value)) add(entity.value)
   }
   return found
 }
