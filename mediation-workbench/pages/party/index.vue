@@ -265,6 +265,29 @@ async function autoExtractInfo() {
   if (uploadedFiles.value.length === 0) return
   extractingInfo.value = true
   try {
+    // 优先走 OCR 服务（本地模型结构化字段抽取，单文件）
+    const ocrFile = uploadedFiles.value[0]
+    const ocrForm = new FormData()
+    ocrForm.append('file', ocrFile)
+    const ocrResp = await $fetch<{ success: boolean; fields?: Record<string, string>; error?: string }>('/api/ocr', {
+      method: 'POST',
+      body: ocrForm,
+    })
+    if (ocrResp.success && ocrResp.fields) {
+      const f = ocrResp.fields
+      let filled = false
+      if (f.applicant_name) { partyName.value = f.applicant_name; filled = true }
+      if (f.respondent_name) { respondentName.value = f.respondent_name; filled = true }
+      const descParts = [f.case_facts, f.dispute_matters, f.mediation_demands].filter(Boolean)
+      if (descParts.length) { caseDescription.value = descParts.join('\n'); filled = true }
+      if (filled) { extractingInfo.value = false; return }
+    }
+    console.warn('[party] OCR extraction failed or empty, falling back to extract-info:', ocrResp.error || 'no fields')
+  } catch (err) {
+    console.warn('[party] OCR extraction error, falling back to extract-info:', err)
+  }
+  // 回退：原有 AI 信息抽取
+  try {
     const formData = new FormData()
     for (const file of uploadedFiles.value) {
       formData.append('files', file)

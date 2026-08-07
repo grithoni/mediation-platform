@@ -6,7 +6,8 @@ Pipeline:
      - Word (.docx): python-docx
      - Images: PaddleOCR
      - .txt/.md: direct read
-  2. DeepSeek LLM structured extraction → JSON fields for form autofill.
+   2. Local LLM structured extraction (OpenAI-compatible, default local server)
+      → JSON fields for form autofill.
 
 Graceful degradation: if PaddleOCR/pdfplumber not installed, returns error hint.
 """
@@ -165,7 +166,10 @@ def extract_text(filename: str, file_bytes: bytes) -> tuple[str, str, bool]:
         return "", "failed", False
 
 
-# ── DeepSeek structured field extraction ────────────────────
+# ── Local LLM structured field extraction ────────────────────
+# Default: local OpenAI-compatible server (LM Studio / vLLM / llama.cpp at 127.0.0.1:8000).
+# Override via env: OCR_LLM_BASE_URL / OCR_LLM_MODEL / OCR_LLM_API_KEY
+# (fall back to legacy DEEPSEEK_* envs when the OCR_LLM_* ones are unset).
 # Fields to extract (must match frontend form field names)
 TARGET_FIELDS = [
     "applicant_name", "applicant_address", "applicant_postal_code",
@@ -215,17 +219,17 @@ JSON 字段结构：
 
 
 def extract_fields_with_llm(text: str) -> dict[str, Any]:
-    """Use DeepSeek to extract structured fields from text. Returns dict of field -> value."""
+    """Use a local LLM (OpenAI-compatible) to extract structured fields from text. Returns dict of field -> value."""
     if not text.strip():
         return {"error": "提取文本为空"}
 
-    # Load DeepSeek config from env
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    # Load LLM config from env (defaults to local OpenAI-compatible server)
+    api_key = os.getenv("OCR_LLM_API_KEY", os.getenv("DEEPSEEK_API_KEY", "local"))
+    base_url = os.getenv("OCR_LLM_BASE_URL", os.getenv("DEEPSEEK_BASE_URL", "http://127.0.0.1:8000/v1"))
+    model = os.getenv("OCR_LLM_MODEL", os.getenv("DEEPSEEK_MODEL", "Qwen3.6-35B-A3B-4bit"))
 
     if not api_key:
-        return {"error": "DEEPSEEK_API_KEY 未配置，无法进行字段提取"}
+        return {"error": "未配置 LLM API Key（设置 OCR_LLM_API_KEY 或 DEEPSEEK_API_KEY），无法进行字段提取"}
 
     try:
         from openai import OpenAI
@@ -235,15 +239,25 @@ def extract_fields_with_llm(text: str) -> dict[str, Any]:
         max_chars = 8000
         truncated = text[:max_chars] if len(text) > max_chars else text
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "你是一个严格的信息提取助手，只返回 JSON。"},
-                {"role": "user", "content": EXTRACTION_PROMPT + truncated},
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
+        messages = [
+            {"role": "system", "content": "你是一个严格的信息提取助手，只返回 JSON。"},
+            {"role": "user", "content": EXTRACTION_PROMPT + truncated},
+        ]
+
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+        except Exception:
+            # Some local servers (e.g. llama.cpp) don't support response_format; retry without it
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.1,
+            )
         content = response.choices[0].message.content or "{}"
 
         import json
@@ -258,4 +272,4 @@ def extract_fields_with_llm(text: str) -> dict[str, Any]:
                 result[f] = str(val).strip()
         return result
     except Exception as e:
-        return {"error": f"DeepSeek 调用失败: {e}"}
+        return {"error": f"LLM 调用失败: {e}"}
