@@ -465,6 +465,17 @@ export function runMigrations(db: Database.Database): MigrationResult {
   `, result)
 
   // ============================================================
+  // 案件脱敏规则复核表（调解员可手动修改/确认）
+  // ============================================================
+  createTableIfMissing(db, 'case_desensitize_rules', `
+    CREATE TABLE IF NOT EXISTS case_desensitize_rules (
+      case_id TEXT PRIMARY KEY,
+      rules_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `, result)
+
+  // ============================================================
   // 建案幂等台账表（requestId → case_id）
   // 无外键：先占位后建案，创建失败时清理占位，避免与 cases 的引用冲突。
   // ============================================================

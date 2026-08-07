@@ -145,6 +145,54 @@ async function sendChat() {
   }
 }
 
+// ── 脱敏规则复核（调解员可手动修改/确认，其余自动化流程不变）────
+interface DesensitizeRule { category: string; label: string; enabled: boolean; action: 'mask' | 'delete' | 'keep' }
+const desensitizeOpen = ref(false)
+const desensitizeRules = ref<DesensitizeRule[]>([])
+const desensitizeLoading = ref(false)
+const desensitizeSaving = ref(false)
+const desensitizeSaved = ref(false)
+const desensitizeError = ref('')
+
+async function loadDesensitizeRules() {
+  desensitizeLoading.value = true
+  desensitizeError.value = ''
+  try {
+    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/desensitize-rules`, {
+      headers: getAuthHeaders(),
+    })
+    desensitizeRules.value = resp?.data?.rules || []
+  } catch (err: any) {
+    desensitizeError.value = err?.data?.message || err?.message || '加载脱敏规则失败'
+  } finally {
+    desensitizeLoading.value = false
+  }
+}
+
+async function saveDesensitizeRules() {
+  desensitizeSaving.value = true
+  desensitizeError.value = ''
+  desensitizeSaved.value = false
+  try {
+    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/desensitize-rules`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: { rules: desensitizeRules.value },
+    })
+    if (resp?.success) {
+      desensitizeRules.value = resp.data?.rules || desensitizeRules.value
+      desensitizeSaved.value = true
+      setTimeout(() => { desensitizeSaved.value = false }, 2000)
+    } else {
+      desensitizeError.value = resp?.message || '保存失败'
+    }
+  } catch (err: any) {
+    desensitizeError.value = err?.data?.message || err?.message || '保存失败，请稍后重试'
+  } finally {
+    desensitizeSaving.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     // 硬刷新/直链访问时先恢复登录态，确保 getAuthHeaders 带上 token
@@ -154,6 +202,7 @@ onMounted(async () => {
     })
     caseData.value = data.data
     await loadSolve()
+    await loadDesensitizeRules()
     // 支持从 agents 页跳转：?solve=skillId 预选并自动运行该技能
     const jumpSkill = route.query.solve as string | undefined
     if (jumpSkill && solveSkills.value.some((s) => s.id === jumpSkill)) {
@@ -437,6 +486,69 @@ onMounted(async () => {
           </div>
         </div>
         <!-- VALUE 卡结束 -->
+
+        <!-- ══ 脱敏规则复核：调解员手动修改/确认（默认折叠） ══ -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+          <button
+            class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
+            @click="desensitizeOpen = !desensitizeOpen"
+          >
+            <UIcon name="i-lucide-shield-check" class="w-4 h-4 text-blue-500 shrink-0" />
+            <span class="flex-1 min-w-0">
+              <span class="block text-base font-semibold text-gray-900 dark:text-white">脱敏规则复核</span>
+              <span class="block text-sm text-gray-500 dark:text-gray-400 mt-1">按类别调整脱敏行为（掩码/删除/保留），保存后对后续技能运行生效</span>
+            </span>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
+              :class="desensitizeOpen ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div v-if="desensitizeOpen" class="px-5 pb-5 space-y-2">
+            <div v-if="desensitizeLoading" class="text-sm text-gray-400 dark:text-gray-500 flex items-center gap-2">
+              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在加载规则…
+            </div>
+            <template v-else>
+              <UAlert v-if="desensitizeError" color="error" variant="soft" :title="desensitizeError" class="mb-2" />
+              <div
+                v-for="rule in desensitizeRules"
+                :key="rule.category"
+                class="flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-800/60 last:border-0"
+              >
+                <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                  <input
+                    v-model="rule.enabled"
+                    type="checkbox"
+                    class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ rule.label }}</span>
+                </label>
+                <select
+                  v-model="rule.action"
+                  :disabled="!rule.enabled"
+                  class="shrink-0 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1.5 disabled:opacity-50"
+                >
+                  <option value="mask">掩码回填</option>
+                  <option value="delete">直接删除</option>
+                  <option value="keep">保留原样</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-3 pt-3">
+                <button
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  :disabled="desensitizeSaving"
+                  @click="saveDesensitizeRules"
+                >
+                  <UIcon v-if="desensitizeSaving" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+                  <UIcon v-else name="i-lucide-check" class="w-4 h-4" />确认保存
+                </button>
+                <span v-if="desensitizeSaved" class="text-xs text-green-600 dark:text-green-400">已保存</span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- 脱敏规则复核结束 -->
 
         <!-- ══ 智能对话：调解技能库下方（常驻） ══ -->
         <div
