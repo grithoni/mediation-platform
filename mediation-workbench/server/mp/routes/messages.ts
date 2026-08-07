@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../database'
 import { messages, cases } from '../../database/schema'
+import { canAccessMpCase } from '../authz'
 
 /**
  * GET  /api/mp/messages/:caseId — List messages
@@ -14,6 +15,10 @@ export function messageRoutes(router: Router) {
   router.get('/api/mp/messages/:caseId', defineEventHandler(async (event) => {
     const caseId = (event as any).context.params?.caseId
     if (!caseId) throw createError({ statusCode: 400, message: '缺少案件编号' })
+    const user = (event as any).context.mpUser
+    if (!canAccessMpCase(user, caseId)) {
+      throw createError({ statusCode: 403, message: '无权访问该案件' })
+    }
     const caseRow = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
     const msgs = db.select().from(messages).where(eq(messages.caseId, caseId)).orderBy(desc(messages.createdAt)).limit(100).all()
@@ -33,6 +38,9 @@ export function messageRoutes(router: Router) {
     const { content, senderName } = body || {}
     if (!content) throw createError({ statusCode: 400, message: '消息内容不能为空' })
     const user = (event as any).context.mpUser
+    if (!canAccessMpCase(user, caseId)) {
+      throw createError({ statusCode: 403, message: '无权访问该案件' })
+    }
     const caseRow = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
     const msgId = uuidv4()

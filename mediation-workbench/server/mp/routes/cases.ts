@@ -3,6 +3,7 @@ import { defineEventHandler, createError } from 'h3'
 import { eq, desc } from 'drizzle-orm'
 import { getDb } from '../../database'
 import { cases, caseDynamicFiles, documents } from '../../database/schema'
+import { canAccessMpCase, resolveAuthorizedMpCases } from '../authz'
 
 /**
  * GET /api/mp/cases           — List cases
@@ -13,11 +14,9 @@ export function caseRoutes(router: Router) {
   const db = getDb()
   router.get('/api/mp/cases', defineEventHandler(async (event) => {
     const user = (event as any).context.mpUser
-    const allCases = db.select().from(cases).orderBy(desc(cases.createdAt)).all()
-    const userCases = allCases.filter(c => {
-      if (user.openid.startsWith('demo_')) return user.openid === `demo_${c.id}`
-      return true
-    })
+    const allowedCaseIds = new Set(resolveAuthorizedMpCases(user))
+    const userCases = db.select().from(cases).orderBy(desc(cases.createdAt)).all()
+      .filter(c => allowedCaseIds.has(c.id))
     return {
       success: true,
       data: userCases.map(c => ({
@@ -31,6 +30,10 @@ export function caseRoutes(router: Router) {
   router.get('/api/mp/cases/:id', defineEventHandler(async (event) => {
     const id = (event as any).context.params?.id
     if (!id) throw createError({ statusCode: 400, message: '缺少案件编号' })
+    const user = (event as any).context.mpUser
+    if (!canAccessMpCase(user, id)) {
+      throw createError({ statusCode: 403, message: '无权访问该案件' })
+    }
     const caseRow = db.select().from(cases).where(eq(cases.id, id)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
     const df = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, id)).get()
@@ -40,6 +43,10 @@ export function caseRoutes(router: Router) {
   router.get('/api/mp/cases/:id/files', defineEventHandler(async (event) => {
     const id = (event as any).context.params?.id
     if (!id) throw createError({ statusCode: 400, message: '缺少案件编号' })
+    const user = (event as any).context.mpUser
+    if (!canAccessMpCase(user, id)) {
+      throw createError({ statusCode: 403, message: '无权访问该案件' })
+    }
     const files = db.select().from(documents).where(eq(documents.caseId, id)).all()
     return {
       success: true,

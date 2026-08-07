@@ -6,6 +6,7 @@ import { getDb } from '../../database'
 import { messages, cases } from '../../database/schema'
 import { searchKb, formatKbResultsForPrompt } from '../../utils/kb-search'
 import { llmChat } from '../../utils/llm'
+import { canAccessMpCase } from '../authz'
 
 /**
  * POST /api/mp/chat — AI chat
@@ -18,6 +19,9 @@ export function chatRoutes(router: Router) {
 
     const db = getDb()
     const user = (event as any).context.mpUser
+    if (!canAccessMpCase(user, caseId)) {
+      throw createError({ statusCode: 403, message: '无权访问该案件' })
+    }
     const caseRow = db.select().from(cases).where(eq(cases.id, caseId)).get()
     if (!caseRow) throw createError({ statusCode: 404, message: '案件不存在' })
 

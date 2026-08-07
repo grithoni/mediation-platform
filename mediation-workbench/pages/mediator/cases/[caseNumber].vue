@@ -110,6 +110,41 @@ function fileUrl(name: string): string {
   return `/api/cases/${caseNumber}/file?name=${encodeURIComponent(name)}`
 }
 
+// ── 智能对话（右下角 AI 对话框，调用 deepseek-v4-flash）────────
+interface ChatMsg { role: 'user' | 'assistant'; content: string }
+const chatInput = ref('')
+const chatSending = ref(false)
+const chatMessages = ref<ChatMsg[]>([])
+
+function chatScrollToBottom() {
+  nextTick(() => {
+    const el = document.getElementById('ai-chat-scroll')
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+async function sendChat() {
+  const text = chatInput.value.trim()
+  if (!text || chatSending.value) return
+  chatInput.value = ''
+  chatMessages.value.push({ role: 'user', content: text })
+  chatSending.value = true
+  chatScrollToBottom()
+  try {
+    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: { message: text, history: chatMessages.value.slice(0, -1) },
+    })
+    chatMessages.value.push({ role: 'assistant', content: resp?.data?.content || '（无回复）' })
+  } catch (err: any) {
+    chatMessages.value.push({ role: 'assistant', content: err?.data?.message || err?.message || 'AI 服务调用失败，请稍后重试' })
+  } finally {
+    chatSending.value = false
+    chatScrollToBottom()
+  }
+}
+
 onMounted(async () => {
   try {
     // 硬刷新/直链访问时先恢复登录态，确保 getAuthHeaders 带上 token
@@ -402,8 +437,67 @@ onMounted(async () => {
           </div>
         </div>
         <!-- VALUE 卡结束 -->
+
+        <!-- ══ 智能对话：调解技能库下方（常驻） ══ -->
+        <div
+          class="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-lg flex flex-col overflow-hidden"
+        >
+        <!-- 头部 -->
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <UIcon name="i-lucide-bot" class="w-5 h-5 text-blue-500 shrink-0" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-gray-900 dark:text-white">智能调解助手</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">DeepSeek · 基于本案件上下文，可以就本案争议焦点、法律依据、调解方案等向我提问。</div>
+          </div>
+        </div>
+
+        <!-- 消息区 -->
+        <div id="ai-chat-scroll" class="max-h-[300px] overflow-y-auto px-4 py-3 space-y-3">
+          <div
+            v-for="(msg, i) in chatMessages"
+            :key="i"
+            class="flex"
+            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+          >
+            <div
+              class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words"
+              :class="msg.role === 'user'
+                ? 'bg-blue-600 text-white rounded-br-md'
+                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-bl-md'"
+            >
+              {{ msg.content }}
+            </div>
+          </div>
+          <div v-if="chatSending" class="flex justify-start">
+            <div class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-bl-md">
+              <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 0ms" />
+              <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 150ms" />
+              <span class="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 300ms" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="p-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
+          <div class="flex items-end gap-2">
+            <UInput
+              v-model="chatInput"
+              class="flex-1"
+              placeholder="输入问题，回车发送…"
+              :disabled="chatSending"
+              @keydown.enter.prevent="sendChat"
+            />
+            <button
+              class="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              :disabled="chatSending || !chatInput.trim()"
+              @click="sendChat"
+            >
+              <UIcon name="i-lucide-send" class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
-      <!-- ══ 右栏结束 ══ -->
+      </div>
     </div>
   </div>
 </template>

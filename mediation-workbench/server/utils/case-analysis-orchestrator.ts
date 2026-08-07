@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { and, eq, like } from 'drizzle-orm'
 import { getDb } from '../database'
