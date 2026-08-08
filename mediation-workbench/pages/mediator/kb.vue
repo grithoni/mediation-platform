@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 知识库 — 上传/删除/检索文档，供 AI 检索引用
-const { user, isAuthenticated, fetchUser } = useAuth()
+const { user, isAuthenticated, fetchUser, getAuthHeaders } = useAuth()
 const checking = ref(true)
 const roleOk = ref(false)
 
@@ -43,7 +43,7 @@ async function viewDoc(path: string) {
     return
   }
   try {
-    const content = await $fetch<string>('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000 }) as string
+    const content = await $fetch<string>('/api/kb/file', { query: { path }, method: 'GET', responseType: 'text', timeout: 15000, headers: getAuthHeaders() }) as string
     expandedDocs.value = { ...expandedDocs.value, [path]: content }
   } catch {
     expandedDocs.value = { ...expandedDocs.value, [path]: '' }
@@ -105,7 +105,7 @@ async function loadDocs() {
   loadingDocs.value = true
   docError.value = ''
   try {
-    const res = await $fetch('/api/kb/list', { query: { limit: 1000 } })
+    const res = await $fetch('/api/kb/list', { query: { limit: 1000 }, headers: getAuthHeaders() })
     docs.value = (res as any)?.documents || []
   } catch (e: any) {
     docError.value = e?.data?.message || e?.message || '加载文档列表失败'
@@ -152,7 +152,7 @@ async function confirmUpload() {
       if (sep) formData.append('separator', sep)
       formData.append('clean_rules', cleanRules.value.join(','))
       try {
-        await $fetch('/api/kb/upload', { method: 'POST', body: formData })
+        await $fetch('/api/kb/upload', { method: 'POST', body: formData, headers: getAuthHeaders() })
         uploadedCount++
       } catch (e: any) {
         failed.push(file.name)
@@ -181,6 +181,7 @@ async function doSearch() {
     const res = await $fetch('/api/kb/search', {
       method: 'POST',
       body: { query: q, top_k: 5, mode: searchMode.value },
+      headers: getAuthHeaders(),
     })
     searchResults.value = (res as any)?.results || []
   } catch (e: any) {
@@ -394,6 +395,14 @@ onMounted(async () => {
             </div>
             <span class="text-xs text-gray-400 shrink-0">{{ docListOpen ? '点击折叠' : '点击展开' }}</span>
           </button>
+
+          <!-- 加载失败提示（面板外显眼展示，避免误以为"暂无文档"） -->
+          <div v-if="docError && !docListOpen" class="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 bg-red-50/50 dark:bg-red-900/10">
+            <p class="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+              <UIcon name="i-lucide-alert-triangle" class="w-3.5 h-3.5 shrink-0" />
+              {{ docError }}
+            </p>
+          </div>
 
           <div v-if="docListOpen" class="border-t border-gray-100 dark:border-gray-800">
             <div v-if="docError" class="px-4 py-3">
