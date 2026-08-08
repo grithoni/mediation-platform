@@ -15,13 +15,11 @@ export const useActiveMenu = () => {
 
   function setMenu(menu: ActiveMenu) {
     activeMenu.value = menu
-    // 同步 URL，保证刷新后仍停留在当前模式
+    // 导航到 /party 并同步 URL 模式，保证从任意页面（如案件详情）切换菜单都能跳转
     if (menu === 'create-case') {
-      router.replace({ query: { ...route.query, mode: 'create' } })
+      router.push({ path: '/party', query: { mode: 'create' } })
     } else {
-      const q = { ...route.query }
-      delete q.mode
-      router.replace({ query: q })
+      router.push({ path: '/party' })
     }
   }
 

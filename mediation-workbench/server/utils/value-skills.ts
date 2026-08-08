@@ -20,11 +20,11 @@ export interface ValueSkill {
 }
 
 export const VALUE_PHASES: ValuePhase[] = [
-  { key: 'V', en: 'Vet the Case', name: '接案准备', desc: '判断适配性、整理案件、识别争点并准备调解。' },
-  { key: 'A', en: 'Analyze', name: '开启过程', desc: '开场、定规则、设计议程、建立氛围并确认程序。' },
+  { key: 'V', en: 'Verify the Case', name: '接案准备', desc: '判断适配性、整理案件、识别争点并准备调解。' },
+  { key: 'A', en: 'Activate the Process', name: '开启过程', desc: '开场、定规则、设计议程、建立氛围并确认程序。' },
   { key: 'L', en: 'Listen', name: '倾听理解', desc: '中立提问、复述确认、澄清信息、降温并识别隐含利益。' },
-  { key: 'U', en: 'Understand', name: '方案验证', desc: '头脑风暴、重构方案、比较、风险分析并排序。' },
-  { key: 'E', en: 'Engage', name: '促成解决', desc: '推进决策、草拟条款、校对协议、制定履行计划并复盘。' },
+  { key: 'U', en: 'Unify the Options', name: '方案验证', desc: '头脑风暴、重构方案、比较、风险分析并排序。' },
+  { key: 'E', en: 'Execute the Resolution', name: '促成解决', desc: '推进决策、草拟条款、校对协议、制定履行计划并复盘。' },
 ]
 
 export const VALUE_SKILLS: ValueSkill[] = [

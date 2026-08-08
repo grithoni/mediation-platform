@@ -428,17 +428,23 @@ onMounted(async () => {
           </div>
 
           <!-- 阶段切换 -->
-          <div class="px-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex gap-2 flex-wrap">
+          <div class="px-5 pb-4 border-b border-gray-100 dark:border-gray-800 grid grid-cols-2 lg:grid-cols-5 gap-1.5">
             <button
               v-for="phase in valuePhases"
               :key="phase.key"
-              class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+              class="w-full rounded-xl border px-2 py-1.5 text-left transition-colors"
               :class="selectedPhase === phase.key
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-800 dark:hover:bg-gray-800'"
               @click="selectedPhase = phase.key"
             >
-              {{ phase.key }} · {{ phase.name }}
+              <div class="text-[11px] font-semibold leading-tight">{{ phase.key }} · {{ phase.name }}</div>
+              <div
+                class="mt-0.5 text-[9px] uppercase tracking-[0.08em] leading-tight"
+                :class="selectedPhase === phase.key ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'"
+              >
+                {{ phase.en }}
+              </div>
             </button>
           </div>
 

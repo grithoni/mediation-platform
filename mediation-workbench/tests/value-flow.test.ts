@@ -138,3 +138,18 @@ test('VALUE workflow no longer exposes legacy solve entrypoints', () => {
   assert.equal(agentsPage.includes('/api/solve'), false)
   assert.equal(agentsPage.includes('?solve='), false)
 })
+
+test('VALUE phases keep acronym alignment and match mediation workflow intent', async () => {
+  const { VALUE_PHASES } = await import('../server/utils/value-skills')
+
+  assert.deepEqual(
+    VALUE_PHASES.map((phase) => [phase.key, phase.en]),
+    [
+      ['V', 'Verify the Case'],
+      ['A', 'Activate the Process'],
+      ['L', 'Listen'],
+      ['U', 'Unify the Options'],
+      ['E', 'Execute the Resolution'],
+    ],
+  )
+})

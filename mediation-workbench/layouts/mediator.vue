@@ -39,11 +39,12 @@ async function handleLogout() {
     >
       <div class="w-60 h-full flex flex-col">
         <!-- Brand -->
-        <div class="h-14 px-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
+        <div class="px-4 py-3 flex items-start gap-2 border-b border-gray-100 dark:border-gray-800">
           <UIcon name="i-lucide-scale" class="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0" />
           <div class="flex-1 min-w-0">
-            <div class="text-base font-bold text-gray-900 dark:text-white leading-tight truncate">调解员工作台</div>
-            <div class="text-[11px] text-gray-400 dark:text-gray-500 font-mono leading-tight">Mediator Console</div>
+            <div class="text-base font-bold text-gray-900 dark:text-white leading-tight">调解员工作台</div>
+            <div class="mt-1 text-[11px] text-gray-600 dark:text-gray-300 leading-snug">调解创造价值 共识解决争议</div>
+            <div class="text-[10px] text-gray-400 dark:text-gray-500 font-mono leading-tight">Create value through mediation, resolve disputes through consensus.</div>
           </div>
           <button
             class="shrink-0 w-7 h-7 -mr-1 rounded-md flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
