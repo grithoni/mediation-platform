@@ -26,6 +26,7 @@ import { getDb } from '../../database'
 import { cases, caseApplications } from '../../database/schema'
 import { desensitizeCaseMaterials } from '../../utils/case-analysis-orchestrator'
 import { llmChat } from '../../utils/llm'
+import { buildPublicCaseAnalysisMaterials } from '../../utils/public-case-analysis'
 
 // 案件分析系统提示词
 const CASE_ANALYSIS_PROMPT = `你是「珠江国际商事调解院」的案情分析助手。请基于以下案件材料，进行结构化案情分析。
@@ -119,7 +120,7 @@ export default defineEventHandler(async (event) => {
           throw new Error(`案件不存在: ${caseId}`)
         }
 
-        // 组装案件材料（参考 buildWorkflowBundle 353-421 行的字段组装逻辑）
+        // 组装案件材料（含案件表单与附件正文）
         const partyNames = Array.from(
           new Set(
             [
@@ -146,17 +147,7 @@ export default defineEventHandler(async (event) => {
         if (application?.agentName) knownEntities.push({ value: application.agentName, category: '委托代理人' })
         for (const address of addresses) knownEntities.push({ value: address, category: '地址' })
 
-        const sections = [
-          caseData?.title && `【案件标题】${caseData.title}`,
-          `【当事人】申请人：${caseData?.partyAName || ''}；被申请人：${caseData?.partyBName || ''}`,
-          caseData?.description && `【案件描述】${caseData.description}`,
-          application?.caseFacts && `【案件事实】${application.caseFacts}`,
-          application?.disputeMatters && `【争议事项】${application.disputeMatters}`,
-          application?.mediationDemands && `【调解请求】${application.mediationDemands}`,
-          application?.demandsBasis && `【请求依据】${application.demandsBasis}`,
-        ].filter(Boolean)
-
-        const materials = sections.join('\n\n')
+        const materials = await buildPublicCaseAnalysisMaterials(caseId)
 
         // 本地脱敏（desensitizeCaseMaterials 已导出，返回结构含 mapping 供反脱敏使用）
         const desensitized = await desensitizeCaseMaterials(materials, {
