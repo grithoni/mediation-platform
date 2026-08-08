@@ -22,7 +22,7 @@ export type WorkflowAnalysisType =
   | 'evidence_checklist'
   | 'recommend_solution'
   | 'evaluation'
-  | 'solve'
+  | 'value'
 
 export interface SkillCatalogEntry {
   id: string
@@ -79,7 +79,7 @@ interface WorkflowBundle {
   dynamicFile: any
   docs: Array<{ originalName: string; text: string }>
   priorAnalyses: Partial<Record<Exclude<WorkflowAnalysisType, 'dynamic_file'>, string>>
-  solveResults: Array<{ skillId: string; content: string }> // 本案件已完成的 VALUE 技能结果（用于阶段间上下文串联）
+  valueResults: Array<{ skillId: string; content: string }> // 本案件已完成的 VALUE 技能结果（用于阶段间上下文串联）
   materials: string
   partyNames: string[]
   addresses: string[]
@@ -345,12 +345,12 @@ export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowB
     recommend_solution: getPriorAnalysis(caseNumber, 'recommend_solution'),
   }
 
-  // 收集本案件已完成的 VALUE(solve_*) 技能结果，供后续阶段/技能串联使用
-  const solveRows = db.select().from(caseAnalyses)
-    .where(and(eq(caseAnalyses.caseId, caseNumber), like(caseAnalyses.analysisType, 'solve_%')))
+  // 收集本案件已完成的 VALUE(value_*) 技能结果，供后续阶段/技能串联使用
+  const valueRows = db.select().from(caseAnalyses)
+    .where(and(eq(caseAnalyses.caseId, caseNumber), like(caseAnalyses.analysisType, 'value_%')))
     .all()
-  const solveResults = solveRows
-    .map((row) => ({ skillId: row.analysisType.replace(/^solve_/, ''), content: row.content || '' }))
+  const valueResults = valueRows
+    .map((row) => ({ skillId: row.analysisType.replace(/^value_/, ''), content: row.content || '' }))
     .filter((r) => r.content.trim())
 
   const partyNames = Array.from(new Set([
@@ -388,8 +388,8 @@ export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowB
     dynamicFile?.potentialInterests && `【已有利益点】${dynamicFile.potentialInterests}`,
     dynamicFile?.batna && `【已有 BATNA】${dynamicFile.batna}`,
     ...docTexts.map((doc) => `【附件材料：${doc.originalName}】\n${doc.text.slice(0, 4000)}`),
-    ...(solveResults.length
-      ? [`【本案件已完成的 VALUE 技能分析结果（供当前技能参考，勿重复）】\n${solveResults
+    ...(valueResults.length
+      ? [`【本案件已完成的 VALUE 技能分析结果（供当前技能参考，勿重复）】\n${valueResults
           .map((r) => `--- ${r.skillId} ---\n${r.content.slice(0, 3000)}`)
           .join('\n\n')}`]
       : []),
@@ -401,7 +401,7 @@ export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowB
     dynamicFile,
     docs: docTexts,
     priorAnalyses,
-    solveResults,
+    valueResults,
     materials: sections.join('\n\n'),
     partyNames,
     addresses,

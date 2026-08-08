@@ -5,39 +5,39 @@ const checking = ref(true)
 const roleOk = ref(false)
 
 // ── VALUE 调解技能库（5 阶段 × 5 技能，浏览 + 跳转案件运行）──
-interface SolvePhase { key: string; en: string; name: string; desc: string }
-interface SolveSkill { id: string; phaseKey: string; name: string; prompt: string }
+interface ValuePhase { key: string; en: string; name: string; desc: string }
+interface ValueSkill { id: string; phaseKey: string; name: string; prompt: string }
 
-const solvePhases = ref<SolvePhase[]>([])
-const solveSkills = ref<SolveSkill[]>([])
+const valuePhases = ref<ValuePhase[]>([])
+const valueSkills = ref<ValueSkill[]>([])
 const selectedPhase = ref('V')
-const solveLoaded = ref(false)
+const valueLoaded = ref(false)
 
-const currentPhaseSkills = computed(() => solveSkills.value.filter((s) => s.phaseKey === selectedPhase.value))
+const currentPhaseSkills = computed(() => valueSkills.value.filter((s) => s.phaseKey === selectedPhase.value))
 
 // 案件选择弹窗
 interface CaseItem { id: string; title: string; partyAName: string; partyBName: string; status: string; phase: string; mediatorId: string | null }
 const showCasePicker = ref(false)
-const pickingSkill = ref<SolveSkill | null>(null)
+const pickingSkill = ref<ValueSkill | null>(null)
 const caseList = ref<CaseItem[]>([])
 const caseLoading = ref(false)
 const caseError = ref('')
 
 /** 技能卡片描述：取 prompt 首句（截断到第一个句号，最多 60 字） */
-function skillDesc(skill: SolveSkill): string {
+function skillDesc(skill: ValueSkill): string {
   const first = skill.prompt.split(/[。！？]/)[0] || ''
   return first.length > 60 ? first.slice(0, 60) + '…' : first
 }
 
-async function loadSolveCatalog() {
+async function loadValueCatalog() {
   try {
-    const resp = await $fetch<{ success: boolean; data: { phases: SolvePhase[]; skills: SolveSkill[] } }>('/api/solve', {
+    const resp = await $fetch<{ success: boolean; data: { phases: ValuePhase[]; skills: ValueSkill[] } }>('/api/value', {
       headers: getAuthHeaders(),
     })
     if (resp?.success) {
-      solvePhases.value = resp.data.phases || []
-      solveSkills.value = resp.data.skills || []
-      solveLoaded.value = true
+      valuePhases.value = resp.data.phases || []
+      valueSkills.value = resp.data.skills || []
+      valueLoaded.value = true
     }
   } catch {
     // 静默失败，展示空态
@@ -45,7 +45,7 @@ async function loadSolveCatalog() {
 }
 
 /** 点击技能卡片 → 拉取案件列表并弹出选择器 */
-async function openCasePicker(skill: SolveSkill) {
+async function openCasePicker(skill: ValueSkill) {
   pickingSkill.value = skill
   showCasePicker.value = true
   caseLoading.value = true
@@ -67,7 +67,7 @@ async function openCasePicker(skill: SolveSkill) {
 function runOnCase(caseItem: CaseItem) {
   if (!pickingSkill.value) return
   showCasePicker.value = false
-  navigateTo(`/mediator/cases/${caseItem.id}?solve=${pickingSkill.value.id}`)
+  navigateTo(`/mediator/cases/${caseItem.id}?value=${pickingSkill.value.id}`)
 }
 
 onMounted(async () => {
@@ -75,7 +75,7 @@ onMounted(async () => {
   checking.value = false
   roleOk.value = ['mediator', 'case_manager', 'admin'].includes(user.value?.role || '')
   if (roleOk.value) {
-    await loadSolveCatalog()
+    await loadValueCatalog()
   }
 })
 </script>
@@ -110,7 +110,7 @@ onMounted(async () => {
           <!-- 阶段切换 -->
           <div class="flex gap-2 flex-wrap mb-4">
             <button
-              v-for="phase in solvePhases"
+              v-for="phase in valuePhases"
               :key="phase.key"
               class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
               :class="selectedPhase === phase.key
@@ -123,7 +123,7 @@ onMounted(async () => {
           </div>
 
           <!-- 技能卡片网格 -->
-          <div v-if="solveLoaded" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-if="valueLoaded" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
               v-for="skill in currentPhaseSkills"
               :key="skill.id"

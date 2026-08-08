@@ -218,6 +218,10 @@ export const caseDynamicFiles = sqliteTable('case_dynamic_files', {
   agentLog: text('agent_log'),
   dialogTurnCount: integer('dialog_turn_count').default(0),
   dialogEnded: integer('dialog_ended', { mode: 'boolean' }).default(false),
+  agentStatus: text('agent_status').notNull().default('pending'),
+  agentAnalysis: text('agent_analysis'),
+  materialChecklist: text('material_checklist'),
+  agentUpdatedAt: integer('agent_updated_at', { mode: 'number' }),
   createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
   updatedAt: integer('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
 })

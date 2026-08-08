@@ -9,59 +9,63 @@ const loading = ref(true)
 const error = ref('')
 
 // ── VALUE 调解技能库（5 阶段 × 5 技能）──────────────────
-interface SolvePhase { key: string; en: string; name: string; desc: string }
-interface SolveSkill { id: string; phaseKey: string; name: string; prompt: string }
+interface ValuePhase { key: string; en: string; name: string; desc: string }
+interface ValueSkill { id: string; phaseKey: string; name: string; prompt: string }
 
-const solvePhases = ref<SolvePhase[]>([])
-const solveSkills = ref<SolveSkill[]>([])
-const solveStatus = ref<Record<string, { done: boolean; generatedAt?: number }>>({})
+const valuePhases = ref<ValuePhase[]>([])
+const valueSkills = ref<ValueSkill[]>([])
+const valueStatus = ref<Record<string, { done: boolean; generatedAt?: number }>>({})
 const selectedPhase = ref('V')
-const selectedSolveSkill = ref<string | null>(null)
-const solveResults = ref<Record<string, string>>({})
-const solveCached = ref<Record<string, boolean>>({})
-const solveLoading = ref<Record<string, boolean>>({})
-const solveError = ref('')
+const selectedValueSkill = ref<string | null>(null)
+const valueResults = ref<Record<string, string>>({})
+const valueCached = ref<Record<string, boolean>>({})
+const valueLoading = ref<Record<string, boolean>>({})
+const valueError = ref('')
 
-const currentPhaseSkills = computed(() => solveSkills.value.filter((s) => s.phaseKey === selectedPhase.value))
-const currentSolveSkill = computed(() => solveSkills.value.find((s) => s.id === selectedSolveSkill.value))
+const currentPhaseSkills = computed(() => valueSkills.value.filter((s) => s.phaseKey === selectedPhase.value))
+const currentValueSkill = computed(() => valueSkills.value.find((s) => s.id === selectedValueSkill.value))
 
-async function loadSolve() {
+async function loadValue() {
   try {
     const [catResp, statusResp] = await Promise.all([
-      $fetch<{ success: boolean; data: any }>(`/api/solve`, { headers: getAuthHeaders() }),
-      $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/solve`, { headers: getAuthHeaders() }),
+      $fetch<{ success: boolean; data: any }>(`/api/value`, { headers: getAuthHeaders() }),
+      $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/value`, { headers: getAuthHeaders() }),
     ])
-    solvePhases.value = catResp?.data?.phases || []
-    solveSkills.value = catResp?.data?.skills || []
-    solveStatus.value = statusResp?.data?.status || {}
-    if (!selectedSolveSkill.value && currentPhaseSkills.value.length) {
-      selectedSolveSkill.value = currentPhaseSkills.value[0].id
+    valuePhases.value = catResp?.data?.phases || []
+    valueSkills.value = catResp?.data?.skills || []
+    valueStatus.value = statusResp?.data?.status || {}
+    if (!selectedValueSkill.value && currentPhaseSkills.value.length) {
+      const firstDone = currentPhaseSkills.value.find((skill) => valueStatus.value[skill.id]?.done)
+      selectedValueSkill.value = (firstDone || currentPhaseSkills.value[0])?.id || null
+      if (selectedValueSkill.value && valueStatus.value[selectedValueSkill.value]?.done) {
+        await runValue(selectedValueSkill.value)
+      }
     }
   } catch {}
 }
 
-async function runSolve(skillId: string, force = false) {
-  selectedSolveSkill.value = skillId
-  if (!force && solveResults.value[skillId]) return
-  if (solveLoading.value[skillId]) return
-  solveLoading.value[skillId] = true
-  solveError.value = ''
+async function runValue(skillId: string, force = false) {
+  selectedValueSkill.value = skillId
+  if (!force && valueResults.value[skillId]) return
+  if (valueLoading.value[skillId]) return
+  valueLoading.value[skillId] = true
+  valueError.value = ''
   try {
     const resp = await $fetch<{ success: boolean; data: any }>(
-      `/api/cases/${caseNumber}/solve/${skillId}${force ? '?force=1' : ''}`,
+      `/api/cases/${caseNumber}/value/${skillId}${force ? '?force=1' : ''}`,
       { method: 'POST', headers: getAuthHeaders() },
     )
     if (resp?.success && resp.data) {
-      solveResults.value[skillId] = resp.data.content || ''
-      solveCached.value[skillId] = !!resp.data.cached
-      solveStatus.value[skillId] = { done: true, generatedAt: Date.now() }
+      valueResults.value[skillId] = resp.data.content || ''
+      valueCached.value[skillId] = !!resp.data.cached
+      valueStatus.value[skillId] = { done: true, generatedAt: Date.now() }
     } else {
-      solveError.value = resp?.data?.message || '未返回结果'
+      valueError.value = resp?.data?.message || '未返回结果'
     }
   } catch (err: any) {
-    solveError.value = err?.data?.message || err?.message || '技能运行失败，请稍后重试'
+    valueError.value = err?.data?.message || err?.message || '技能运行失败，请稍后重试'
   } finally {
-    solveLoading.value[skillId] = false
+    valueLoading.value[skillId] = false
   }
 }
 
@@ -201,14 +205,14 @@ onMounted(async () => {
       headers: getAuthHeaders(),
     })
     caseData.value = data.data
-    await loadSolve()
+    await loadValue()
     await loadDesensitizeRules()
-    // 支持从 agents 页跳转：?solve=skillId 预选并自动运行该技能
-    const jumpSkill = route.query.solve as string | undefined
-    if (jumpSkill && solveSkills.value.some((s) => s.id === jumpSkill)) {
-      const skill = solveSkills.value.find((s) => s.id === jumpSkill)!
+    // 支持从 agents 页跳转：?value=skillId 预选并自动运行该技能
+    const jumpSkill = route.query.value as string | undefined
+    if (jumpSkill && valueSkills.value.some((s) => s.id === jumpSkill)) {
+      const skill = valueSkills.value.find((s) => s.id === jumpSkill)!
       selectedPhase.value = skill.phaseKey
-      await runSolve(jumpSkill)
+      await runValue(jumpSkill)
     }
   } catch (err: any) {
     error.value = err?.data?.message || err?.message || '加载案件失败'
@@ -426,7 +430,7 @@ onMounted(async () => {
           <!-- 阶段切换 -->
           <div class="px-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex gap-2 flex-wrap">
             <button
-              v-for="phase in solvePhases"
+              v-for="phase in valuePhases"
               :key="phase.key"
               class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
               :class="selectedPhase === phase.key
@@ -444,41 +448,54 @@ onMounted(async () => {
               v-for="skill in currentPhaseSkills"
               :key="skill.id"
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-              :class="selectedSolveSkill === skill.id
+              :class="selectedValueSkill === skill.id
                 ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
                 : 'border border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
-              @click="runSolve(skill.id)"
+              @click="runValue(skill.id)"
             >
               <UIcon name="i-lucide-magic-wand" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
               <span class="flex-1 text-sm font-medium min-w-0 truncate text-gray-700 dark:text-gray-300">{{ skill.name }}</span>
-              <span v-if="solveLoading[skill.id]" class="shrink-0 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+              <span v-if="valueLoading[skill.id]" class="shrink-0 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                 <UIcon name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />运行中
               </span>
-              <UIcon v-else-if="solveStatus[skill.id]?.done" name="i-lucide-check-circle-2" class="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+              <UIcon v-else-if="valueStatus[skill.id]?.done" name="i-lucide-check-circle-2" class="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
               <UIcon v-else name="i-lucide-clock-3" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
             </button>
           </div>
 
           <!-- 结果展示区 -->
           <div class="p-5 sm:p-6">
-            <div v-if="solveLoading[selectedSolveSkill]" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-6">
+            <div
+              v-if="caseData.dynamicFile?.agentAnalysis || caseData.dynamicFile?.materialChecklist"
+              class="mb-5 rounded-xl border border-blue-100 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/30 p-4 space-y-3"
+            >
+              <div v-if="caseData.dynamicFile?.agentAnalysis">
+                <div class="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">VALUE 预分析摘要</div>
+                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ caseData.dynamicFile.agentAnalysis }}</p>
+              </div>
+              <div v-if="caseData.dynamicFile?.materialChecklist">
+                <div class="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">调解准备清单</div>
+                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ caseData.dynamicFile.materialChecklist }}</p>
+              </div>
+            </div>
+            <div v-if="selectedValueSkill && valueLoading[selectedValueSkill]" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-6">
               <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在运行技能，请稍候…
             </div>
-            <UAlert v-else-if="solveError" color="error" variant="soft" :title="solveError" />
-            <div v-else-if="solveResults[selectedSolveSkill]">
+            <UAlert v-else-if="valueError" color="error" variant="soft" :title="valueError" />
+            <div v-else-if="selectedValueSkill && valueResults[selectedValueSkill]">
               <div class="flex items-center gap-2 mb-2 flex-wrap">
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentSolveSkill?.name }}</h3>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentValueSkill?.name }}</h3>
                 <div class="flex-1" />
-                <span v-if="solveCached[selectedSolveSkill]" class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">缓存结果</span>
+                <span v-if="valueCached[selectedValueSkill]" class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">缓存结果</span>
                 <button
                   class="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                   title="重新生成"
-                  @click="runSolve(selectedSolveSkill, true)"
+                  @click="runValue(selectedValueSkill, true)"
                 >
                   <UIcon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" />重新生成
                 </button>
               </div>
-              <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ solveResults[selectedSolveSkill] }}</p>
+              <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ valueResults[selectedValueSkill] }}</p>
             </div>
             <div v-else class="text-sm text-gray-400 dark:text-gray-500">
               <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />点击上方技能开始运行。

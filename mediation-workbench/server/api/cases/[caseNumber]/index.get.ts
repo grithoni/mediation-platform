@@ -1,7 +1,7 @@
 import { and, desc, eq, ne, or } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from '../../../database'
-import { cases, messages, documents, sessions, caseApplications } from '../../../database/schema'
+import { cases, messages, documents, sessions, caseApplications, caseDynamicFiles } from '../../../database/schema'
 import { verifyPartyAccess } from '../../../utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -60,6 +60,11 @@ export default defineEventHandler(async (event) => {
       .from(caseApplications)
       .where(eq(caseApplications.caseId, caseNumber))
       .get()
+    const dynamicFile = db
+      .select()
+      .from(caseDynamicFiles)
+      .where(eq(caseDynamicFiles.caseId, caseNumber))
+      .get()
 
     // 当事人访问时隐藏敏感字段：accessCode（验证码）与对方当事人联系方式
     const isPartyView = !isMediatorRole && isParty
@@ -79,6 +84,7 @@ export default defineEventHandler(async (event) => {
         messages: caseMessages,
         documents: caseDocuments,
         application: application || null,
+        dynamicFile: dynamicFile || null,
       },
     }
   }
@@ -163,6 +169,11 @@ export default defineEventHandler(async (event) => {
     .where(eq(documents.caseId, caseNumber))
     .orderBy(desc(documents.createdAt))
     .all()
+  const dynamicFile = db
+    .select()
+    .from(caseDynamicFiles)
+    .where(eq(caseDynamicFiles.caseId, caseNumber))
+    .get()
 
     return {
       success: true,
@@ -179,6 +190,7 @@ export default defineEventHandler(async (event) => {
         status: caseData.status,
         messages: allCaseMessages,
         documents: caseDocuments,
+        dynamicFile: dynamicFile || null,
       },
       sessionToken: sessionId,
     }

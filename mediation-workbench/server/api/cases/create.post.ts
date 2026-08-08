@@ -408,6 +408,8 @@ export default defineEventHandler(async (event) => {
   if (outcome.created) {
     // 异步生成动态文件（不阻塞响应）
     triggerDynamicFileGeneration(outcome.result.data.caseNumber)
+    // 异步执行 VALUE 接案预分析（不阻塞响应）
+    triggerInitialValuePipeline(outcome.result.data.caseNumber)
     // 异步生成AI首次欢迎消息（不阻塞响应）
     createAiWelcomeForCase(outcome.result.data.caseNumber).catch((err: any) =>
       console.warn(`[create-case] AI欢迎失败: ${err.message}`),
@@ -427,5 +429,15 @@ async function triggerDynamicFileGeneration(caseNumber: string) {
     }
   } catch (err: any) {
     console.warn(`[create-case] ${caseNumber}: 动态文件生成失败 — ${err.message}`)
+  }
+}
+
+async function triggerInitialValuePipeline(caseNumber: string) {
+  try {
+    const { runInitialValuePipeline } = await import('../../utils/value-skills')
+    const result = await runInitialValuePipeline(caseNumber)
+    console.log(`[create-case] ${caseNumber}: VALUE 预分析已完成 ${result.skillIds.join(', ')}`)
+  } catch (err: any) {
+    console.warn(`[create-case] ${caseNumber}: VALUE 预分析失败 — ${err.message}`)
   }
 }
