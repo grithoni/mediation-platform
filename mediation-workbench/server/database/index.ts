@@ -167,8 +167,8 @@ export function initTestDb() {
       expires_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS case_desensitize_rules (
-      case_id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS desensitize_rules (
+      id TEXT PRIMARY KEY,
       rules_json TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );

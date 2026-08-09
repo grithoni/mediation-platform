@@ -39,10 +39,7 @@ export default defineEventHandler(async (event) => {
       .from(messages)
       .where(and(
         eq(messages.caseId, caseNumber),
-        or(
-          ne(messages.visibility, 'private'),
-          eq(messages.channelType, 'caucus'),
-        ),
+        ne(messages.visibility, 'private'),
       ))
       .orderBy(messages.createdAt)
       .all()
@@ -185,7 +182,7 @@ export default defineEventHandler(async (event) => {
         partyBName: caseData.partyBName,
         claimsSummary: caseData.claimsSummary,
         evidenceSummary: caseData.evidenceSummary,
-        phase: caseData.phase || 'analysis',
+        phase: caseData.phase || 'intake',
         mediatorId: caseData.mediatorId || null,
         status: caseData.status,
         messages: allCaseMessages,

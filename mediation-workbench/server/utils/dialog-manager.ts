@@ -6,6 +6,7 @@ import { eq, and, sql } from 'drizzle-orm'
 import { getDb } from '../database'
 import { cases, caseDynamicFiles } from '../database/schema'
 import { CaseStatus } from './case-status'
+import { recordCaseEvent } from './case-audit'
 
 /**
  * Atomically increment dialog turn count and return the new value.
@@ -53,7 +54,8 @@ export function endDialog(caseId: string): void {
   try {
     const db = getDb()
     const now = Date.now()
-    const targetPhase = CaseStatus.MEDIATOR_SELECTION // 'mediator_selection'
+    // 对话结束后进入 VALUE V 阶段（接案准备）
+    const targetPhase = CaseStatus.REVIEWING
 
     // Drizzle 的 better-sqlite3 驱动支持同步事务：
     // 传入的回调在事务中执行，回调 return 后自动 commit，
@@ -83,10 +85,23 @@ export function endDialog(caseId: string): void {
           .run()
       }
 
+      const prevCase = tx.select().from(cases).where(eq(cases.id, caseId)).get()
       tx.update(cases)
         .set({ phase: targetPhase, updatedAt: now })
         .where(eq(cases.id, caseId))
         .run()
+
+      // 记录状态流转（系统自动触发：对话结束 -> 接案准备）
+      recordCaseEvent({
+        caseId,
+        eventType: 'phase_changed',
+        fromPhase: prevCase?.phase,
+        toPhase: targetPhase,
+        fromStatus: prevCase?.status,
+        toStatus: prevCase?.status,
+        source: 'system',
+        reason: '当事人对话结束，自动进入接案准备',
+      })
     })
   } catch (err) {
     console.error('[DialogManager] Failed to end dialog:', err)

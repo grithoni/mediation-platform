@@ -1,8 +1,8 @@
 // ============================================================
-// 案件脱敏规则复核
+// 脱敏规则（全局单例）
 //
-// 参照 /Users/honi/Desktop/skills/文档脱敏助手-1/SKILL.md 的规则表，
-// 允许调解员按案件手动修改/确认脱敏规则；其余自动化流程不变。
+// 参照 /Users/honi/Desktop/skills/文档脱敏助手-1/SKILL.md 的规则表。
+// 规则为全局单例：调解员保存后对该账号下所有案件生效（不再按案件单独设置）。
 //
 // 规则模型：
 //   { category, label, enabled, action }
@@ -13,12 +13,13 @@
 // 默认规则对齐 SKILL.md：强格式标识（证件/电话/邮箱/银行卡/信用代码）→ delete；
 // 姓名/地址/角色姓名/企业名称/金额 → mask（保留令牌可回填）；案号 → mask；
 // 日期 → keep（SKILL.md 注明日期按场景决定是否脱敏，默认保留以保证时间线分析质量）。
-// 说明：为保持「其余自动化流程不变」，默认全部 enabled=true，
-// 行为与现有引擎一致（mask 即当前令牌行为；delete 为 SKILL.md 的“直接删除”）。
 // ============================================================
 import { eq } from 'drizzle-orm'
 import { getDb } from '../database'
-import { caseDesensitizeRules } from '../database/schema'
+import { desensitizeRules as desensitizeRulesTable } from '../database/schema'
+
+/** 全局规则固定主键（单例）。 */
+const GLOBAL_RULE_ID = 'global'
 
 export type DesensitizeAction = 'mask' | 'delete' | 'keep'
 
@@ -79,11 +80,11 @@ function normalizeRules(rules: unknown): DesensitizeRule[] {
   return [...byCategory.values()]
 }
 
-/** 读取案件规则；未保存过返回默认规则。 */
-export function getCaseRules(caseId: string): DesensitizeRule[] {
+/** 读取全局脱敏规则；未保存过返回默认规则。 */
+export function getGlobalRules(): DesensitizeRule[] {
   try {
     const db = getDb()
-    const row = db.select().from(caseDesensitizeRules).where(eq(caseDesensitizeRules.caseId, caseId)).get()
+    const row = db.select().from(desensitizeRulesTable).where(eq(desensitizeRulesTable.id, GLOBAL_RULE_ID)).get()
     if (!row) return defaultRules()
     return normalizeRules(JSON.parse(row.rulesJson))
   } catch (err) {
@@ -92,18 +93,23 @@ export function getCaseRules(caseId: string): DesensitizeRule[] {
   }
 }
 
-/** 保存案件规则（覆盖式）。 */
-export function saveCaseRules(caseId: string, rules: DesensitizeRule[]): DesensitizeRule[] {
+/** 保存全局脱敏规则（覆盖式，对该账号下所有案件生效）。 */
+export function saveGlobalRules(rules: DesensitizeRule[]): DesensitizeRule[] {
   const normalized = normalizeRules(rules)
   const db = getDb()
-  db.insert(caseDesensitizeRules)
-    .values({ caseId, rulesJson: JSON.stringify(normalized), updatedAt: Date.now() })
+  db.insert(desensitizeRulesTable)
+    .values({ id: GLOBAL_RULE_ID, rulesJson: JSON.stringify(normalized), updatedAt: Date.now() })
     .onConflictDoUpdate({
-      target: caseDesensitizeRules.caseId,
+      target: desensitizeRulesTable.id,
       set: { rulesJson: JSON.stringify(normalized), updatedAt: Date.now() },
     })
     .run()
   return normalized
+}
+
+/** 兼容别名：读取全局规则（原按案件读取，现统一为全局）。 */
+export function getCaseRules(_caseId: string): DesensitizeRule[] {
+  return getGlobalRules()
 }
 
 /** 构建供引擎消费的规则索引：category → rule。 */

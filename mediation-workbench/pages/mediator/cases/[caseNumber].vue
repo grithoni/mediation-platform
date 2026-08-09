@@ -1,10 +1,14 @@
 <script setup lang="ts">
 // 调解员工作台 — 案件详情
+import { renderRichText } from '~/server/utils/md-table'
 const route = useRoute()
 const { getAuthHeaders, fetchUser } = useAuth()
 
-/** 前端兜底：去除技能结果中的 Markdown 标记，直接显示纯文字（兼容历史已存 md 数据） */
-function stripValueMarkdown(text: string): string {
+/**
+ * 去除技能结果中的 Markdown 标记，转成纯文字（保留表格结构可选）。
+ * preserveTables=true 时，Markdown 表格行（| 开头）原样保留，由 renderRichText 转 HTML。
+ */
+function stripValueMarkdown(text: string, preserveTables = false): string {
   if (!text) return ''
   return text
     .replace(/<[^>]*>/g, '')
@@ -12,6 +16,7 @@ function stripValueMarkdown(text: string): string {
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/^\s*\|.*\|\s*$/gm, (line) => {
+      if (preserveTables) return line
       const cells = line.replace(/^\s*\||\|\s*$/g, '').split('|').map((c) => c.trim())
       if (cells.every((c) => /^:?-{2,}:?$/.test(c))) return ''
       return cells.join('　')
@@ -85,7 +90,7 @@ async function runValue(skillId: string, force = false, expand = true) {
       { method: 'POST', headers: getAuthHeaders() },
     )
     if (resp?.success && resp.data) {
-      valueResults.value[skillId] = stripValueMarkdown(resp.data.content || '')
+      valueResults.value[skillId] = stripValueMarkdown(resp.data.content || '', true)
       valueCached.value[skillId] = !!resp.data.cached
       valueStatus.value[skillId] = { done: true, generatedAt: Date.now() }
       // 结果生成后自动展开结果区（初始化拉取缓存时不展开，保持默认折叠）
@@ -98,13 +103,6 @@ async function runValue(skillId: string, force = false, expand = true) {
   } finally {
     valueLoading.value[skillId] = false
   }
-}
-
-const phaseLabels: Record<string, string> = {
-  intake: '收件', reviewing: '审查中', screening: '甄别中', accepted: '已受理',
-  mediating: '调解中', caucus: '协商中', negotiating: '谈判中', agreement_drafting: '拟定协议',
-  agreement_pending: '待签协议', signing: '签署中', closed_success: '调解成功',
-  closed_failed: '调解未果', withdrawn: '已撤回',
 }
 
 const statusLabels: Record<string, string> = {
@@ -180,57 +178,121 @@ async function sendChat() {
   }
 }
 
-// ── 脱敏规则复核（调解员可手动修改/确认，其余自动化流程不变）────
-interface DesensitizeRule { category: string; label: string; enabled: boolean; action: 'mask' | 'delete' | 'keep' }
-const desensitizeOpen = ref(false)
-const desensitizeRules = ref<DesensitizeRule[]>([])
-const desensitizeLoading = ref(false)
-const desensitizeSaving = ref(false)
-
 // ── 分析结果展示区（默认折叠，点击标题展开）────
 const resultsOpen = ref(false)
 // ── 案件材料 / 沟通记录（默认折叠，点击标题展开）────
 const materialsOpen = ref(false)
 const messagesOpen = ref(false)
-const desensitizeSaved = ref(false)
-const desensitizeError = ref('')
 
-async function loadDesensitizeRules() {
-  desensitizeLoading.value = true
-  desensitizeError.value = ''
+// ── 代理执行记录（默认折叠，点击展开）────
+const runsOpen = ref(false)
+const agentRuns = ref<any[]>([])
+const reviewOpen = ref('')
+const runsLoading = ref(false)
+
+interface AgentRunItem {
+  id: string
+  agentType: string
+  status: string
+  planJson: any
+  inputContext: string | null
+  retrievalRefs: Array<{ path: string; score: number }>
+  toolCalls: any[]
+  outputContent: string | null
+  reviewState: string
+  errorMessage: string | null
+  startedAt: number
+  finishedAt: number | null
+}
+
+const runTypeLabels: Record<string, string> = {
+  value_skill: 'VALUE 技能',
+  case_analysis: '案件分析',
+  chat: '对话',
+  workflow: '工作流',
+}
+
+const runStateLabels: Record<string, string> = {
+  running: '执行中',
+  done: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
+}
+
+const reviewStateLabels: Record<string, string> = {
+  none: '未复核',
+  pending: '待复核',
+  approved: '已通过',
+  rejected: '待人工复核',
+}
+
+function runScore(run: AgentRunItem): { normalized: number; totalScore: number; maxTotal: number; hallucinationCount: number; hallucinations: string[]; missingPoints: string[] } | null {
+  const evalCall = (run.toolCalls || []).find((t) => t.name === 'eval_llm_judge')
+  return evalCall?.result || null
+}
+
+async function loadRuns() {
+  if (runsLoading.value) return
+  runsLoading.value = true
   try {
-    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/desensitize-rules`, {
+    const resp = await $fetch<{ success: boolean; data: AgentRunItem[] }>(`/api/cases/${caseNumber}/runs`, {
       headers: getAuthHeaders(),
     })
-    desensitizeRules.value = resp?.data?.rules || []
-  } catch (err: any) {
-    desensitizeError.value = err?.data?.message || err?.message || '加载脱敏规则失败'
+    agentRuns.value = resp?.data || []
+  } catch {
+    agentRuns.value = []
   } finally {
-    desensitizeLoading.value = false
+    runsLoading.value = false
   }
 }
 
-async function saveDesensitizeRules() {
-  desensitizeSaving.value = true
-  desensitizeError.value = ''
-  desensitizeSaved.value = false
+/** 人工复核通过：将执行记录的 review_state 标记为 approved */
+async function approveRun(runId: string) {
   try {
-    const resp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/desensitize-rules`, {
-      method: 'POST',
+    await $fetch(`/api/cases/${caseNumber}/runs/${runId}`, {
+      method: 'PUT',
       headers: getAuthHeaders(),
-      body: { rules: desensitizeRules.value },
     })
+    const run = agentRuns.value.find((r) => r.id === runId)
+    if (run) run.reviewState = 'approved'
+    reviewOpen.value = ''
+  } catch (err: any) {
+    alert(err?.data?.message || err?.message || '复核失败')
+  }
+}
+
+// ── 调解员手动设置案件状态（不强制流转，可前进/回退/跳过）──
+const phaseOptions: { value: string; label: string }[] = [
+  { value: 'intake', label: '收案' },
+  { value: 'reviewing', label: '接案准备' },
+  { value: 'accepted', label: '开启过程' },
+  { value: 'mediating', label: '倾听理解' },
+  { value: 'negotiating', label: '方案验证' },
+  { value: 'agreement_drafting', label: '促成解决' },
+  { value: 'withdrawn', label: '撤回' },
+]
+const phaseUpdating = ref(false)
+const phaseError = ref('')
+
+async function updatePhase() {
+  if (!caseData.value || phaseUpdating.value) return
+  phaseUpdating.value = true
+  phaseError.value = ''
+  try {
+    const resp = await $fetch<{ success: boolean; data: any }>(
+      `/api/cases/${caseNumber}/phase`,
+      { method: 'PUT', headers: getAuthHeaders(), body: { phase: caseData.value.phase } },
+    )
     if (resp?.success) {
-      desensitizeRules.value = resp.data?.rules || desensitizeRules.value
-      desensitizeSaved.value = true
-      setTimeout(() => { desensitizeSaved.value = false }, 2000)
+      caseData.value.phase = resp.data.phase
+      caseData.value.status = resp.data.status
     } else {
-      desensitizeError.value = resp?.message || '保存失败'
+      phaseError.value = resp?.data?.message || '状态更新失败'
     }
   } catch (err: any) {
-    desensitizeError.value = err?.data?.message || err?.message || '保存失败，请稍后重试'
+    phaseError.value = err?.data?.message || err?.message || '状态更新失败'
   } finally {
-    desensitizeSaving.value = false
+    phaseUpdating.value = false
   }
 }
 
@@ -243,7 +305,6 @@ onMounted(async () => {
     })
     caseData.value = data.data
     await loadValue()
-    await loadDesensitizeRules()
     // 支持从 agents 页跳转：?value=skillId 预选并自动运行该技能
     const jumpSkill = route.query.value as string | undefined
     if (jumpSkill && valueSkills.value.some((s) => s.id === jumpSkill)) {
@@ -291,9 +352,16 @@ onMounted(async () => {
                 >
                   {{ statusLabels[caseData.status] || caseData.status }}
                 </span>
-                <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                  {{ phaseLabels[caseData.phase] || caseData.phase || '收件' }}
-                </span>
+                <!-- 调解员手动设置案件阶段（不强制流转，可前进/回退/跳过） -->
+                <select
+                  v-model="caseData.phase"
+                  @change="updatePhase"
+                  :disabled="phaseUpdating"
+                  class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-transparent hover:border-blue-400 dark:hover:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer disabled:opacity-60"
+                  :title="phaseError || '点击切换案件阶段'"
+                >
+                  <option v-for="opt in phaseOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
               </div>
               <h1 class="text-xl font-bold text-gray-900 dark:text-white">{{ caseData.title || '未命名案件' }}</h1>
             </div>
@@ -570,7 +638,7 @@ onMounted(async () => {
                     <UIcon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" />重新生成
                   </button>
                 </div>
-                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ valueResults[selectedValueSkill] }}</p>
+                <div class="eval-md-body text-sm text-gray-700 dark:text-gray-300 leading-relaxed break-words" v-html="renderRichText(valueResults[selectedValueSkill], stripValueMarkdown)" />
               </div>
               <div v-else class="text-sm text-gray-400 dark:text-gray-500">
                 <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />点击上方技能开始运行。
@@ -579,69 +647,6 @@ onMounted(async () => {
           </div>
         </div>
         <!-- VALUE 卡结束 -->
-
-        <!-- ══ 脱敏规则复核：调解员手动修改/确认（默认折叠） ══ -->
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-          <button
-            class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
-            @click="desensitizeOpen = !desensitizeOpen"
-          >
-            <UIcon name="i-lucide-shield-check" class="w-4 h-4 text-blue-500 shrink-0" />
-            <span class="flex-1 min-w-0">
-              <span class="block text-base font-semibold text-gray-900 dark:text-white">脱敏规则复核</span>
-              <span class="block text-sm text-gray-500 dark:text-gray-400 mt-1">按类别调整脱敏行为（掩码/删除/保留），保存后对后续技能运行生效</span>
-            </span>
-            <UIcon
-              name="i-lucide-chevron-down"
-              class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
-              :class="desensitizeOpen ? 'rotate-180' : ''"
-            />
-          </button>
-
-          <div v-if="desensitizeOpen" class="px-5 pb-5 space-y-2">
-            <div v-if="desensitizeLoading" class="text-sm text-gray-400 dark:text-gray-500 flex items-center gap-2">
-              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在加载规则…
-            </div>
-            <template v-else>
-              <UAlert v-if="desensitizeError" color="error" variant="soft" :title="desensitizeError" class="mb-2" />
-              <div
-                v-for="rule in desensitizeRules"
-                :key="rule.category"
-                class="flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-800/60 last:border-0"
-              >
-                <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
-                  <input
-                    v-model="rule.enabled"
-                    type="checkbox"
-                    class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ rule.label }}</span>
-                </label>
-                <select
-                  v-model="rule.action"
-                  :disabled="!rule.enabled"
-                  class="shrink-0 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1.5 disabled:opacity-50"
-                >
-                  <option value="mask">掩码回填</option>
-                  <option value="delete">直接删除</option>
-                  <option value="keep">保留原样</option>
-                </select>
-              </div>
-              <div class="flex items-center gap-3 pt-3">
-                <button
-                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                  :disabled="desensitizeSaving"
-                  @click="saveDesensitizeRules"
-                >
-                  <UIcon v-if="desensitizeSaving" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
-                  <UIcon v-else name="i-lucide-check" class="w-4 h-4" />确认保存
-                </button>
-                <span v-if="desensitizeSaved" class="text-xs text-green-600 dark:text-green-400">已保存</span>
-              </div>
-            </template>
-          </div>
-        </div>
-        <!-- 脱敏规则复核结束 -->
 
         <!-- ══ 智能对话：调解技能库下方（常驻） ══ -->
         <div
@@ -697,12 +702,179 @@ onMounted(async () => {
               :disabled="chatSending || !chatInput.trim()"
               @click="sendChat"
             >
-              <UIcon name="i-lucide-send" class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>
-    </div>
-  </div>
-</template>
+               <UIcon name="i-lucide-send" class="w-4 h-4" />
+             </button>
+           </div>
+         </div>
+       </div>
+
+       <!-- 代理执行记录（默认折叠，点击展开） -->
+       <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+         <button
+           class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
+           @click="runsOpen = !runsOpen; if (runsOpen && agentRuns.length === 0) loadRuns()"
+         >
+           <UIcon name="i-lucide-activity" class="w-4 h-4 text-violet-500 shrink-0" />
+           <span class="flex-1 min-w-0">
+             <span class="block text-base font-semibold text-gray-900 dark:text-white">
+               代理执行记录（{{ agentRuns.length }}）
+             </span>
+             <span class="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+               AI 执行留痕：评分、引用来源、可回放
+             </span>
+           </span>
+           <UIcon
+             name="i-lucide-chevron-down"
+             class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
+             :class="runsOpen ? 'rotate-180' : ''"
+           />
+         </button>
+
+         <div v-if="runsOpen" class="px-5 sm:px-6 pb-6">
+           <div v-if="runsLoading" class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 py-4">
+             <UIcon name="i-lucide-loader-2" class="w-4 h-4 text-blue-500 animate-spin" /> 加载中…
+           </div>
+           <div v-else-if="agentRuns.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-2">
+             暂无执行记录（运行 VALUE 技能后自动产生）
+           </div>
+           <div v-else class="space-y-3">
+             <div
+               v-for="run in agentRuns"
+               :key="run.id"
+               class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4"
+             >
+               <!-- 头部：类型 + 状态 + 评分 -->
+               <div class="flex items-center gap-2 flex-wrap">
+                 <span class="text-sm font-semibold text-gray-900 dark:text-white">
+                   {{ runTypeLabels[run.agentType] || run.agentType }}
+                 </span>
+                 <span
+                   class="px-2 py-0.5 rounded-full text-xs font-medium"
+                   :class="{
+                     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': run.status === 'running',
+                     'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': run.status === 'done',
+                     'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300': run.status === 'failed',
+                   }"
+                 >
+                   {{ runStateLabels[run.status] || run.status }}
+                 </span>
+                 <span
+                   v-if="run.reviewState === 'rejected'"
+                   class="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                 >
+                   {{ reviewStateLabels[run.reviewState] }}
+                 </span>
+                 <span v-else-if="run.reviewState === 'approved'" class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                   {{ reviewStateLabels[run.reviewState] }}
+                 </span>
+                 <span class="ml-auto text-xs text-gray-400 dark:text-gray-500">{{ fmtTime(run.startedAt) }}</span>
+               </div>
+
+               <!-- 评分（来自 eval_llm_judge） -->
+               <template v-if="runScore(run)">
+                 <div class="mt-3">
+                   <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                     <span>质量评分</span>
+                     <span :class="runScore(run)!.normalized >= 0.5 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'">
+                       {{ runScore(run)!.totalScore }}/{{ runScore(run)!.maxTotal }}（{{ Math.round(runScore(run)!.normalized * 100) }}%）
+                     </span>
+                   </div>
+                   <div class="w-full h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                     <div
+                       class="h-full rounded-full transition-all"
+                       :class="runScore(run)!.normalized >= 0.5 ? 'bg-green-500' : 'bg-amber-500'"
+                       :style="{ width: Math.min(100, runScore(run)!.normalized * 100) + '%' }"
+                     />
+                   </div>
+                    <div v-if="runScore(run)!.hallucinationCount > 0" class="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                      ⚠ 检测到 {{ runScore(run)!.hallucinationCount }} 处潜在幻觉，建议人工复核
+                      <button
+                        class="ml-2 inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 hover:underline"
+                        @click.stop="reviewOpen = reviewOpen === run.id ? '' : run.id"
+                      >
+                        <UIcon :name="reviewOpen === run.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="w-3 h-3" />
+                        {{ reviewOpen === run.id ? '收起' : '查看详情' }}
+                      </button>
+                    </div>
+                    <div v-if="reviewOpen === run.id" class="mt-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/30 p-3 space-y-2">
+                      <div class="text-xs font-semibold text-amber-700 dark:text-amber-300">潜在幻觉明细（AI 判断，请对照案件材料核实）</div>
+                      <ul class="text-xs text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-4">
+                        <li v-for="(h, hi) in (runScore(run)!.hallucinations || [])" :key="hi">{{ h }}</li>
+                        <li v-if="!(runScore(run)!.hallucinations || []).length" class="list-none">（无具体明细）</li>
+                      </ul>
+                      <div class="flex items-center gap-2 pt-1">
+                        <button
+                          class="text-xs px-2 py-1 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                          @click.stop="approveRun(run.id)"
+                        >
+                          已人工核实，无问题
+                        </button>
+                        <span class="text-xs text-gray-400 dark:text-gray-500">核实后此条将标记为已通过</span>
+                      </div>
+                    </div>
+                 </div>
+               </template>
+               <div v-else class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                 输入：{{ run.inputContext || '-' }}
+               </div>
+
+               <!-- 引用来源 -->
+               <div v-if="run.retrievalRefs && run.retrievalRefs.length" class="mt-3">
+                 <div class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">引用来源（知识库）</div>
+                 <div class="flex flex-wrap gap-1.5">
+                   <span
+                     v-for="(ref, ri) in run.retrievalRefs"
+                     :key="ri"
+                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                   >
+                     {{ (ref.path || '').split('/').pop() }}
+                     <span class="text-blue-400 dark:text-blue-500 text-[10px]">{{ (ref.score || 0).toFixed(2) }}</span>
+                   </span>
+                 </div>
+               </div>
+
+               <!-- 输出预览 -->
+               <div v-if="run.outputContent" class="mt-3">
+                 <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">输出</div>
+                 <div class="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">{{ run.outputContent }}</div>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
+       </div>
+     </div>
+   </div>
+ </template>
+
+<style scoped>
+.eval-md-body :deep(.eval-md-table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.eval-md-body :deep(.eval-md-table th),
+.eval-md-body :deep(.eval-md-table td) {
+  border: 1px solid #e5e7eb;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+.dark .eval-md-body :deep(.eval-md-table th),
+.dark .eval-md-body :deep(.eval-md-table td) {
+  border-color: #374151;
+}
+.eval-md-body :deep(.eval-md-table th) {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+.dark .eval-md-body :deep(.eval-md-table th) {
+  background-color: #111827;
+}
+.eval-md-body :deep(p) {
+  margin: 0.35rem 0;
+  white-space: pre-wrap;
+}
+</style>

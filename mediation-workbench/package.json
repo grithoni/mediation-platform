@@ -16,7 +16,11 @@
     "db:seed": "npx tsx server/database/seed.ts",
     "db:seed-cases": "npx tsx server/database/seed-cases.ts",
     "kb": ".venv-kb/bin/python3 server/kb/server.py 8700",
-    "dev:all": "bash scripts/dev-all.sh"
+    "dev:all": "bash scripts/dev-all.sh",
+    "eval": "tsx server/eval/run.ts",
+    "eval:baseline": "tsx server/eval/run.ts --baseline",
+    "eval:compare": "tsx server/eval/run.ts --compare",
+    "value:regenerate": "tsx server/eval/regenerate.ts"
   },
   "dependencies": {
     "@nuxt/ui": "^3.0.0",

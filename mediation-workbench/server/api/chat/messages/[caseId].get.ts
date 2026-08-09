@@ -43,10 +43,7 @@ export default defineEventHandler(async (event) => {
   const whereCondition = actor.kind === 'mediator'
     ? and(
         eq(messages.caseId, caseId),
-        or(
-          ne(messages.visibility, 'private'),
-          eq(messages.channelType, 'caucus'),
-        ),
+        ne(messages.visibility, 'private'),
       )
     : eq(messages.caseId, caseId)
 

@@ -72,10 +72,9 @@ export const cases = sqliteTable('cases', {
   // 案件摘要
   claimsSummary: text('claims_summary'), // 请求和答辩（摘要）
   evidenceSummary: text('evidence_summary'), // 证据和质证（摘要）
-  // 状态机: 13 种状态
-  // INTAKE -> REVIEWING -> SCREENING -> ACCEPTED -> MEDIATING
-  //   -> CAUCUS -> NEGOTIATING -> AGREEMENT_DRAFTING -> AGREEMENT_PENDING
-  //   -> SIGNING -> CLOSED_SUCCESS / CLOSED_FAILED / WITHDRAWN
+  // 状态机: 以 VALUE 技能五阶段为主轴（详见 server/utils/case-status.ts）
+  // intake -> reviewing(V) -> accepted(A) -> mediating(L)
+  //   -> negotiating(U) -> agreement_drafting(E) -> withdrawn
   phase: text('phase').notNull().default('intake'),
   status: text('status').notNull().default('pending'), // pending | active | resolved | closed
   // 调解员
@@ -417,10 +416,11 @@ export const desensitizationMappings = sqliteTable('desensitization_mappings', {
 })
 
 // ============================================================
-// 案件脱敏规则复核表（调解员可手动修改/确认）
 // ============================================================
-export const caseDesensitizeRules = sqliteTable('case_desensitize_rules', {
-  caseId: text('case_id').primaryKey(),
+// 脱敏规则表（全局单例：保存后对该账号下所有案件生效）
+// ============================================================
+export const desensitizeRules = sqliteTable('desensitize_rules', {
+  id: text('id').primaryKey(), // 固定 'global'
   rulesJson: text('rules_json').notNull(), // JSON: Array<{category, enabled, action}>
   updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
 })
@@ -440,4 +440,94 @@ export const webhookLogs = sqliteTable('webhook_logs', {
   // 重试
   retryCount: integer('retry_count').default(0),
   createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+})
+
+// ============================================================
+// 案件状态流转日志表（case_events）
+// 记录每一次案件 phase/status 变化，用于审计与复盘
+// ============================================================
+export const caseEvents = sqliteTable('case_events', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull().references(() => cases.id),
+  tenantId: text('tenant_id').references(() => tenants.id),
+  // 事件类型: phase_changed | status_changed | case_created | case_closed
+  eventType: text('event_type').notNull(),
+  // 流转前后
+  fromPhase: text('from_phase'),
+  toPhase: text('to_phase'),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  // 触发者
+  actorId: text('actor_id').references(() => users.id),
+  actorName: text('actor_name'),
+  // 触发方式: manual(调解员手动) | system(系统自动) | agent(代理执行)
+  source: text('source').notNull().default('system'),
+  // 备注
+  reason: text('reason'),
+  metadata: text('metadata'), // JSON
+  createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+})
+
+// ============================================================
+// 代理执行记录表（agent_run）
+// 记录一次代理执行的全过程：计划、步骤、工具调用、结果，可回放
+// ============================================================
+export const caseTaskRuns = sqliteTable('case_task_runs', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull().references(() => cases.id),
+  tenantId: text('tenant_id').references(() => tenants.id),
+  taskId: text('task_id'),
+  // 代理类型: value_skill | case_analysis | chat | workflow
+  agentType: text('agent_type').notNull(),
+  // 运行状态: pending | running | done | failed | cancelled
+  status: text('status').notNull().default('running'),
+  // 计划 JSON（Plan 阶段产物）
+  planJson: text('plan_json'),
+  // 输入上下文摘要
+  inputContext: text('input_context'),
+  // 检索引用（Research 阶段产物，JSON 数组）
+  retrievalRefs: text('retrieval_refs'),
+  // 工具调用记录（Work 阶段产物，JSON 数组）
+  toolCalls: text('tool_calls'),
+  // 输出产物
+  outputContent: text('output_content'),
+  // 人工接管/复核标记
+  reviewState: text('review_state').notNull().default('none'), // none | pending | approved | rejected
+  // 重试与超时
+  retryCount: integer('retry_count').default(0),
+  timeoutMs: integer('timeout_ms'),
+  // 错误信息
+  errorMessage: text('error_message'),
+  startedAt: integer('started_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  finishedAt: integer('finished_at', { mode: 'number' }),
+  createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+})
+
+// ============================================================
+// 案件任务表（case_tasks）
+// 承载人工任务与代理任务，挂在案件上，供待办聚合与 SLA 追踪
+// ============================================================
+export const caseTasks = sqliteTable('case_tasks', {
+  id: text('id').primaryKey(),
+  caseId: text('case_id').notNull().references(() => cases.id),
+  tenantId: text('tenant_id').references(() => tenants.id),
+  // 任务类型: triage | analysis | strategy | agreement | review | followup
+  taskType: text('task_type').notNull(),
+  // 任务状态: pending | running | done | failed | cancelled
+  status: text('status').notNull().default('pending'),
+  // 标题与描述
+  title: text('title').notNull(),
+  description: text('description'),
+  // 指派
+  assigneeId: text('assignee_id').references(() => users.id),
+  assigneeName: text('assignee_name'),
+  // 关联的代理运行
+  agentRunId: text('agent_run_id').references(() => caseTaskRuns.id),
+  // 截止时间（SLA）
+  dueAt: integer('due_at', { mode: 'number' }),
+  doneAt: integer('done_at', { mode: 'number' }),
+  // 结果
+  outputSummary: text('output_summary'),
+  createdAt: integer('created_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
+  updatedAt: integer('updated_at', { mode: 'number' }).notNull().$defaultFn(() => Date.now()),
 })

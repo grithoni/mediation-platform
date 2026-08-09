@@ -106,8 +106,8 @@ export default defineEventHandler(async (event) => {
   if (isEndDialog && body.caseId !== 'demo') {
     endDialog(body.caseId)
     const endContent = keywordMatch
-      ? '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。'
-      : `对话已进行了${dialogTurn}轮。案件信息已收集充分，请点击页面上方的"选择调解员"按钮选择调解员。`
+      ? '好的，案件分析已完成。调解员将进入接案准备阶段。'
+      : `对话已进行了${dialogTurn}轮。案件信息已收集充分，调解员将进入接案准备阶段。`
     return {
       success: true,
       data: {

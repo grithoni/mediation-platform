@@ -23,7 +23,7 @@ async function withTempProjectDir<T>(fn: () => T | Promise<T>) {
   })
 }
 
-test('initial VALUE pipeline writes summary, checklist and advances case flow', async () => {
+test('initial VALUE pipeline writes summary and checklist without auto-advancing case flow', async () => {
   const { runInitialValuePipeline, getValueStatus } = await import('../server/utils/value-skills')
 
   await withTempProjectDir(async () => {
@@ -58,9 +58,9 @@ test('initial VALUE pipeline writes summary, checklist and advances case flow', 
       runSkill: async (_caseId, skillId) => `VALUE-${skillId}-RESULT`,
     })
 
+    // 状态由调解员手动触发：VALUE 管道不再自动推进 phase
     const flowCase = db.select().from(cases).all().find((row) => row.id === '2026-1')
-    assert.equal(flowCase?.phase, 'reviewing')
-    assert.equal(flowCase?.status, 'active')
+    assert.equal(flowCase?.phase, 'intake')
 
     const analyses = db.select().from(caseAnalyses).all()
     assert.equal(analyses.some((row) => row.analysisType === 'value_v2'), true)

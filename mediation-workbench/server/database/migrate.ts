@@ -45,6 +45,17 @@ function addColumnIfMissing(db: Database.Database, table: string, column: string
   result.addedColumns.push(`${table}.${column}`)
 }
 
+/** 迁移旧版按案件存储的脱敏规则到全局表（取最新一条作为全局规则）。 */
+function migrateCaseRulesToGlobal(db: Database.Database, _result: MigrationResult): void {
+  if (!tableExists(db, 'case_desensitize_rules')) return
+  const rows = db.prepare('SELECT rules_json FROM case_desensitize_rules ORDER BY updated_at DESC LIMIT 1').all() as Array<{ rules_json: string }>
+  if (rows.length === 0) return
+  db.prepare(
+    `INSERT OR IGNORE INTO desensitize_rules (id, rules_json, updated_at)
+     VALUES ('global', ?, ?)`,
+  ).run(rows[0].rules_json, Date.now())
+}
+
 /**
  * 幂等迁移：安全地在任意状态的数据库上执行，可重复运行，不会删除任何数据。
  */
@@ -441,6 +452,80 @@ export function runMigrations(db: Database.Database): MigrationResult {
   `, result)
 
   // ============================================================
+  // 案件状态流转日志表（case_events）
+  // 记录每一次 phase/status 变化，用于审计与复盘
+  // ============================================================
+  createTableIfMissing(db, 'case_events', `
+    CREATE TABLE IF NOT EXISTS case_events (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL REFERENCES cases(id),
+      tenant_id TEXT REFERENCES tenants(id),
+      event_type TEXT NOT NULL,
+      from_phase TEXT,
+      to_phase TEXT,
+      from_status TEXT,
+      to_status TEXT,
+      actor_id TEXT REFERENCES users(id),
+      actor_name TEXT,
+      source TEXT NOT NULL DEFAULT 'system',
+      reason TEXT,
+      metadata TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `, result)
+
+  // ============================================================
+  // 代理执行记录表（case_task_runs）
+  // 记录一次代理执行全过程，可回放
+  // ============================================================
+  createTableIfMissing(db, 'case_task_runs', `
+    CREATE TABLE IF NOT EXISTS case_task_runs (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL REFERENCES cases(id),
+      tenant_id TEXT REFERENCES tenants(id),
+      task_id TEXT,
+      agent_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      plan_json TEXT,
+      input_context TEXT,
+      retrieval_refs TEXT,
+      tool_calls TEXT,
+      output_content TEXT,
+      review_state TEXT NOT NULL DEFAULT 'none',
+      retry_count INTEGER DEFAULT 0,
+      timeout_ms INTEGER,
+      error_message TEXT,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `, result)
+
+  // ============================================================
+  // 案件任务表（case_tasks）
+  // 承载人工任务与代理任务，供待办聚合与 SLA 追踪
+  // ============================================================
+  createTableIfMissing(db, 'case_tasks', `
+    CREATE TABLE IF NOT EXISTS case_tasks (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL REFERENCES cases(id),
+      tenant_id TEXT REFERENCES tenants(id),
+      task_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      title TEXT NOT NULL,
+      description TEXT,
+      assignee_id TEXT REFERENCES users(id),
+      assignee_name TEXT,
+      agent_run_id TEXT REFERENCES case_task_runs(id),
+      due_at INTEGER,
+      done_at INTEGER,
+      output_summary TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `, result)
+
+  // ============================================================
   // 脱敏映射加密存储（对齐已退役 case-mcp-server/mapping_store.py）
   // 表由 desensitization-store.ts 读写：mapping_enc 为 AES-256-GCM 加密后的 JSON。
   // ============================================================
@@ -456,15 +541,17 @@ export function runMigrations(db: Database.Database): MigrationResult {
   `, result)
 
   // ============================================================
-  // 案件脱敏规则复核表（调解员可手动修改/确认）
+  // 脱敏规则表（全局单例，保存后对所有案件生效）
   // ============================================================
-  createTableIfMissing(db, 'case_desensitize_rules', `
-    CREATE TABLE IF NOT EXISTS case_desensitize_rules (
-      case_id TEXT PRIMARY KEY,
+  createTableIfMissing(db, 'desensitize_rules', `
+    CREATE TABLE IF NOT EXISTS desensitize_rules (
+      id TEXT PRIMARY KEY,
       rules_json TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     )
   `, result)
+  // 旧版按案件存储的表：迁移首条规则到全局表后废弃
+  migrateCaseRulesToGlobal(db, result)
 
   // ============================================================
   // 建案幂等台账表（requestId → case_id）
@@ -500,6 +587,11 @@ export function runMigrations(db: Database.Database): MigrationResult {
       CREATE INDEX IF NOT EXISTS idx_case_applications_case ON case_applications(case_id);
       CREATE INDEX IF NOT EXISTS idx_case_analyses_case ON case_analyses(case_id);
       CREATE INDEX IF NOT EXISTS idx_creation_requests_case ON case_creation_requests(case_id);
+      CREATE INDEX IF NOT EXISTS idx_case_events_case ON case_events(case_id);
+      CREATE INDEX IF NOT EXISTS idx_case_events_created ON case_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_case_tasks_case ON case_tasks(case_id);
+      CREATE INDEX IF NOT EXISTS idx_case_tasks_status ON case_tasks(status);
+      CREATE INDEX IF NOT EXISTS idx_case_task_runs_case ON case_task_runs(case_id);
     `)
   } catch (e: any) {
     console.warn('⚠ Some indexes may already exist:', e?.message)

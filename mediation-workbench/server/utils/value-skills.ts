@@ -1,16 +1,18 @@
 import { and, eq, like } from 'drizzle-orm'
 import { getDb } from '../database'
-import { caseAnalyses, caseDynamicFiles, cases } from '../database/schema'
+import { caseAnalyses, caseDynamicFiles } from '../database/schema'
 import { llmChat } from './llm'
 import { buildWorkflowBundle, runDesensitizedSkillWorkflow } from './case-analysis-orchestrator'
+import { searchKb } from './kb-search'
 import { getCaseRules } from './desensitize-rules'
+import { createAgentRun, finishAgentRun, appendAgentRunEval, EVAL_LOW_SCORE_THRESHOLD, EVAL_FLAG_HALLUCINATION } from './case-audit'
 
 /**
  * 去除技能输出中的 Markdown 标记，转成纯文本。
  * 覆盖：标题(#)、加粗/斜体(双星号/双下划线/单星号)、行内代码、链接、列表符、表格、引用、
  *      水平分隔线、HTML 标签、多余空行。
  */
-export function stripMarkdown(text: string): string {
+export function stripMarkdown(text: string, preserveTables = false): string {
   if (!text) return ''
   return text
     // HTML 标签
@@ -20,8 +22,9 @@ export function stripMarkdown(text: string): string {
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     // 标题符号
     .replace(/^#{1,6}\s*/gm, '')
-    // 表格行：把 | 分隔符换成空格并去掉表头分隔线
+    // 表格行：默认把 | 分隔符换成全角空格；preserveTables 时保留 Markdown 表格供前端渲染
     .replace(/^\s*\|.*\|\s*$/gm, (line) => {
+      if (preserveTables) return line
       const cells = line.replace(/^\s*\||\|\s*$/g, '').split('|').map((c) => c.trim())
       if (cells.every((c) => /^:?-{2,}:?$/.test(c))) return ''
       return cells.join('　')
@@ -70,31 +73,31 @@ export const VALUE_PHASES: ValuePhase[] = [
 ]
 
 export const VALUE_SKILLS: ValueSkill[] = [
-  { id: 'v1', phaseKey: 'V', name: '接案评估', prompt: '你是调解接案评估助手。你的任务是判断当前争议是否适合进入调解，并识别必须先解决的前置信息。输出：争议性质、调解适配度、关键风险、缺失信息、下一步建议。要求：只基于输入信息判断，不要推断未提供事实。若信息不足，写"待确认"。' },
-  { id: 'v2', phaseKey: 'V', name: '案件摘要', prompt: '你是调解案件摘要助手。请把输入材料整理成一页式摘要，包含事实背景、各方主体、核心争点、时间线、已知证据。要求：结构清晰、语言中立、避免法律结论。需标注哪些信息来自当事人陈述，哪些来自文书。' },
-  { id: 'v3', phaseKey: 'V', name: '争点识别', prompt: '你是争点识别助手。请从材料中提炼出显性争点和潜在争点，并按重要性排序。输出：争点名称、涉及各方、争点类型、优先级、是否可调解。要求：不要把立场直接当成争点，要区分"要求"和"利益"。' },
-  { id: 'v4', phaseKey: 'V', name: '调解准备清单', prompt: '你是调解准备清单生成助手。请根据案件背景生成调解前需要准备的事项清单。输出：材料准备、人员安排、技术安排、保密安排、程序安排、风险提醒。要求：可执行、简明、按优先级排序。' },
-  { id: 'v5', phaseKey: 'V', name: '进入调解建议', prompt: '你是调解进入条件建议助手。请判断当前案件是否可以进入调解，是否需要先做补充调查、信息交换或单独沟通。输出：可直接调解、建议先补充、暂不适合三类判断之一，并说明理由。要求：保持中立，不替当事人下决定。' },
+  { id: 'v1', phaseKey: 'V', name: '接案评估', prompt: '你是调解接案评估助手。你的任务是判断当前争议是否适合进入调解，并识别必须先解决的前置信息。输出：争议性质、调解适配度、关键风险、缺失信息、下一步建议。要求：只基于输入信息判断，不要推断未提供事实。若信息不足，写"待确认"。其中"关键风险"与"缺失信息"请用 Markdown 表格呈现，列为：项目|说明。' },
+  { id: 'v2', phaseKey: 'V', name: '案件摘要', prompt: '你是调解案件摘要助手。请把输入材料整理成一页式摘要，包含事实背景、各方主体、核心争点、时间线、已知证据。要求：结构清晰、语言中立、避免法律结论。需标注哪些信息来自当事人陈述，哪些来自文书。"各方主体"请用 Markdown 表格呈现，列为：角色|信息|信息来源；"时间线"请用 Markdown 表格呈现，列为：时间|事件|信息来源；"已知证据"请用 Markdown 表格呈现，列为：序号|证据名称|内容要点|来源/性质。' },
+  { id: 'v3', phaseKey: 'V', name: '争点识别', prompt: '你是争点识别助手。请从材料中提炼出显性争点和潜在争点，并按重要性排序。输出：争点名称、涉及各方、争点类型、优先级、是否可调解。要求：不要把立场直接当成争点，要区分"要求"和"利益"。全部争点请用 Markdown 表格呈现，列为：序号|争点名称|涉及各方|争点类型|优先级|是否可调解。' },
+  { id: 'v4', phaseKey: 'V', name: '调解准备清单', prompt: '你是调解准备清单生成助手。请根据案件背景生成调解前需要准备的事项清单。输出：材料准备、人员安排、技术安排、保密安排、程序安排、风险提醒。要求：可执行、简明、按优先级排序。请用 Markdown 表格呈现，列为：类别|事项|优先级|备注。' },
+  { id: 'v5', phaseKey: 'V', name: '进入调解建议', prompt: '你是调解进入条件建议助手。请判断当前案件是否可以进入调解，是否需要先做补充调查、信息交换或单独沟通。输出：可直接调解、建议先补充、暂不适合三类判断之一，并说明理由。要求：保持中立，不替当事人下决定。理由请用 Markdown 表格呈现，列为：判断维度|结论|说明。' },
   { id: 'a1', phaseKey: 'A', name: '开场词生成', prompt: '你是调解开场词助手。请为调解会议生成一段简洁、稳重、平衡的开场词。内容应包括角色说明、会议目的、基本原则、保密提醒、发言规则。要求：语气温和但有结构感，适合直接宣读。' },
-  { id: 'a2', phaseKey: 'A', name: '规则制定', prompt: '你是调解规则制定助手。请根据争议背景拟定本次调解的会议规则。输出：发言顺序、时间分配、打断规则、保密规则、记录规则、离席规则。要求：规则中立、清楚、可执行。' },
-  { id: 'a3', phaseKey: 'A', name: '议程设计', prompt: '你是调解议程设计助手。请为本次调解设计一份分阶段议程。输出：阶段名称、每阶段目标、建议时长、需要完成的任务、结束标准。要求：议程应支持灵活调整，但保持流程完整。' },
+  { id: 'a2', phaseKey: 'A', name: '规则制定', prompt: '你是调解规则制定助手。请根据争议背景拟定本次调解的会议规则。输出：发言顺序、时间分配、打断规则、保密规则、记录规则、离席规则。要求：规则中立、清楚、可执行。请用 Markdown 表格呈现，列为：规则类别|具体规则|说明/例外。' },
+  { id: 'a3', phaseKey: 'A', name: '议程设计', prompt: '你是调解议程设计助手。请为本次调解设计一份分阶段议程。输出：阶段名称、每阶段目标、建议时长、需要完成的任务、结束标准。要求：议程应支持灵活调整，但保持流程完整。请用 Markdown 表格呈现，列为：阶段|目标|建议时长|主要任务|结束标准。' },
   { id: 'a4', phaseKey: 'A', name: '氛围建立', prompt: '你是调解氛围建立助手。请生成帮助双方进入对话状态的引导语和暖场问题。输出：3段引导语、5个暖场问题、3个降低对抗性的提醒句。要求：避免过度煽情，重点在安全、尊重和可对话。' },
-  { id: 'a5', phaseKey: 'A', name: '程序确认', prompt: '你是调解程序确认助手。请列出调解开始前必须确认的程序事项。输出：参与人身份、授权范围、代理权限、语言安排、技术平台、是否录音、是否单独会谈。要求：如信息缺失，明确列出待确认项。' },
-  { id: 'l1', phaseKey: 'L', name: '中立提问', prompt: '你是调解中立提问助手。请围绕当前争议生成开放式、中性、低对抗性的提问。输出分为：事实、感受、利益、底线、可接受选项五类。要求：不带指责，不预设答案，不引导对错判断。' },
+  { id: 'a5', phaseKey: 'A', name: '程序确认', prompt: '你是调解程序确认助手。请列出调解开始前必须确认的程序事项。输出：参与人身份、授权范围、代理权限、语言安排、技术平台、是否录音、是否单独会谈。要求：如信息缺失，明确列出待确认项。请用 Markdown 表格呈现，列为：确认项|当前状态|需补充/确认内容。' },
+  { id: 'l1', phaseKey: 'L', name: '中立提问', prompt: '你是调解中立提问助手。请围绕当前争议生成开放式、中性、低对抗性的提问。输出分为：事实、感受、利益、底线、可接受选项五类。要求：不带指责，不预设答案，不引导对错判断。请用 Markdown 表格呈现，列为：类别|提问|提问目的/注意事项。' },
   { id: 'l2', phaseKey: 'L', name: '复述确认', prompt: '你是调解复述助手。请把当事人的陈述改写成中性、准确、便于双方确认的复述句。输出：事实复述版、情绪复述版、利益复述版。要求：保留原意，降低对抗，不加入新信息。' },
-  { id: 'l3', phaseKey: 'L', name: '信息澄清', prompt: '你是调解信息澄清助手。请识别材料中不清楚、矛盾或需要验证的内容，并为每一项设计澄清问题。输出：待澄清点、可能原因、建议提问、所需证据。要求：优先处理影响决策的关键信息。' },
+  { id: 'l3', phaseKey: 'L', name: '信息澄清', prompt: '你是调解信息澄清助手。请识别材料中不清楚、矛盾或需要验证的内容，并为每一项设计澄清问题。输出：待澄清点、可能原因、建议提问、所需证据。要求：优先处理影响决策的关键信息。请用 Markdown 表格呈现，列为：待澄清点|可能原因|建议提问|所需证据。' },
   { id: 'l4', phaseKey: 'L', name: '情绪降温', prompt: '你是调解情绪降温助手。请将高情绪、高冲突表达转化为可用于调解现场的降温回应。输出：接住情绪的话、转回事实的话、邀请表达需求的话。要求：先共情，再引导，不评价对错。' },
-  { id: 'l5', phaseKey: 'L', name: '隐含利益识别', prompt: '你是调解隐含利益识别助手。请从各方表述中识别明示立场背后的潜在利益、担忧和优先顺序。输出：表层要求、深层利益、担忧点、可协商空间。要求：区分事实、立场和利益，不做心理诊断。' },
+  { id: 'l5', phaseKey: 'L', name: '隐含利益识别', prompt: '你是调解隐含利益识别助手。请从各方表述中识别明示立场背后的潜在利益、担忧和优先顺序。输出：表层要求、深层利益、担忧点、可协商空间。要求：区分事实、立场和利益，不做心理诊断。请用 Markdown 表格呈现，列为：主体|表层要求|深层利益|担忧点|可协商空间。' },
   { id: 'u1', phaseKey: 'U', name: '方案头脑风暴', prompt: '你是调解方案头脑风暴助手。请基于争议背景生成尽可能多的解决思路。输出：至少 5 个方案方向，每个方案附一句解释。要求：先发散后收敛，不提前否定任何选项。' },
   { id: 'u2', phaseKey: 'U', name: '方案重构', prompt: '你是调解方案重构助手。请把双方对立的立场转化为可协商的选项集合。输出：立场转为选项、可交换条件、可组合条款。要求：强调可交换性和可组合性，不强化对抗。' },
-  { id: 'u3', phaseKey: 'U', name: '方案比较', prompt: '你是调解方案比较助手。请对多个方案进行并列比较。输出：成本、时间、风险、可执行性、关系影响、对双方公平性。要求：使用表格表达，标明每项依据来源。' },
-  { id: 'u4', phaseKey: 'U', name: '风险分析', prompt: '你是调解风险分析助手。请评估各方案在执行、履约、沟通和后续争议方面的风险。输出：风险点、触发条件、后果、缓释措施。要求：区分高概率风险与低概率高影响风险。' },
-  { id: 'u5', phaseKey: 'U', name: '方案优先级', prompt: '你是调解优先级排序助手。请根据双方利益、客观约束和执行可行性，给出方案优先级建议。输出：推荐顺序、理由、需要补充验证的信息。要求：不要替当事人作决定，只给排序逻辑。' },
+  { id: 'u3', phaseKey: 'U', name: '方案比较', prompt: '你是调解方案比较助手。请对多个方案进行并列比较。输出：成本、时间、风险、可执行性、关系影响、对双方公平性。要求：使用 Markdown 表格表达（列为：方案|成本|时间|风险|可执行性|关系影响|对双方公平性），标明每项依据来源。' },
+  { id: 'u4', phaseKey: 'U', name: '风险分析', prompt: '你是调解风险分析助手。请评估各方案在执行、履约、沟通和后续争议方面的风险。输出：风险点、触发条件、后果、缓释措施。要求：区分高概率风险与低概率高影响风险。请用 Markdown 表格呈现，列为：风险点|风险等级|触发条件|后果|缓释措施。' },
+  { id: 'u5', phaseKey: 'U', name: '方案优先级', prompt: '你是调解优先级排序助手。请根据双方利益、客观约束和执行可行性，给出方案优先级建议。输出：推荐顺序、理由、需要补充验证的信息。要求：不要替当事人作决定，只给排序逻辑。请用 Markdown 表格呈现，列为：优先级|方案|推荐理由|需补充验证信息。' },
   { id: 'e1', phaseKey: 'E', name: '决策推进', prompt: '你是调解决策推进助手。请生成帮助双方做出最终决定的提问与引导语。输出：确认问题、收敛问题、最后确认问题。要求：避免催促式语言，帮助双方明确选择后果。' },
-  { id: 'e2', phaseKey: 'E', name: '条款草拟', prompt: '你是和解条款草拟助手。请把已达成共识改写成正式、清晰、可执行的条款。输出：条款标题、正文、占位符、履行期限、责任分配。要求：不添加未经确认内容，语言中立。' },
-  { id: 'e3', phaseKey: 'E', name: '协议校对', prompt: '你是和解协议校对助手。请检查协议草案是否存在歧义、遗漏、冲突、不可执行或表述不一致的问题。输出：问题清单、修改建议、需人工确认事项。要求：重点检查日期、金额、条件、例外和执行方式。' },
-  { id: 'e4', phaseKey: 'E', name: '履行计划', prompt: '你是和解履行计划助手。请根据协议内容生成后续执行清单。输出：时间表、责任人、交付物、检查点、提醒机制。要求：尽量具体，方便后续跟进。' },
-  { id: 'e5', phaseKey: 'E', name: '复盘总结', prompt: '你是调解复盘总结助手。请对本次调解的过程、结果和不足进行结构化复盘。输出：达成了什么、卡点在哪里、下次可优化什么、可复用话术。要求：聚焦流程和方法，不作道德评价。' },
+  { id: 'e2', phaseKey: 'E', name: '条款草拟', prompt: '你是和解条款草拟助手。请把已达成共识改写成正式、清晰、可执行的条款。输出：条款标题、正文、占位符、履行期限、责任分配。要求：不添加未经确认内容，语言中立。条款清单请用 Markdown 表格呈现，列为：条款标题|正文要点|占位符/待确认|履行期限|责任分配。' },
+  { id: 'e3', phaseKey: 'E', name: '协议校对', prompt: '你是和解协议校对助手。请检查协议草案是否存在歧义、遗漏、冲突、不可执行或表述不一致的问题。输出：问题清单、修改建议、需人工确认事项。要求：重点检查日期、金额、条件、例外和执行方式。请用 Markdown 表格呈现，列为：问题类型|问题描述|修改建议|是否需人工确认。' },
+  { id: 'e4', phaseKey: 'E', name: '履行计划', prompt: '你是和解履行计划助手。请根据协议内容生成后续执行清单。输出：时间表、责任人、交付物、检查点、提醒机制。要求：尽量具体，方便后续跟进。请用 Markdown 表格呈现，列为：时间/期限|责任方|行动事项|交付物|检查点/提醒。' },
+  { id: 'e5', phaseKey: 'E', name: '复盘总结', prompt: '你是调解复盘总结助手。请对本次调解的过程、结果和不足进行结构化复盘。输出：达成了什么、卡点在哪里、下次可优化什么、可复用话术。要求：聚焦流程和方法，不作道德评价。"复盘要点"请用 Markdown 表格呈现，列为：维度|复盘结论|可复用经验/下一步建议。' },
 ]
 
 const INITIAL_VALUE_SKILL_IDS = ['v2', 'v3', 'l5', 'u4', 'v4'] as const
@@ -104,14 +107,6 @@ type ValueSkillRunner = (caseNumber: string, skillId: string) => Promise<string>
 interface InitialValuePipelineDeps {
   runSkill?: ValueSkillRunner
   now?: () => number
-}
-
-const PHASE_TO_CASE_PHASE: Record<string, string> = {
-  V: 'reviewing',
-  A: 'accepted',
-  L: 'mediating',
-  U: 'negotiating',
-  E: 'agreement_drafting',
 }
 
 export function getValueSkill(skillId: string): ValueSkill | undefined {
@@ -175,25 +170,7 @@ function saveValue(caseNumber: string, skillId: string, content: string, now = D
   }
 }
 
-function advanceCaseFlow(caseNumber: string, phaseKey: string, now: number) {
-  const nextPhase = PHASE_TO_CASE_PHASE[phaseKey]
-  if (!nextPhase) return
-
-  const db = getDb()
-  const row = db.select().from(cases).where(eq(cases.id, caseNumber)).get()
-  if (!row) return
-
-  db.update(cases)
-    .set({
-      phase: nextPhase,
-      status: row.status === 'pending' ? 'active' : row.status,
-      updatedAt: now,
-    })
-    .where(eq(cases.id, caseNumber))
-    .run()
-}
-
-export async function runValueSkill(caseNumber: string, skillId: string): Promise<string> {
+export async function runValueSkill(caseNumber: string, skillId: string, opts: { awaitEval?: boolean } = {}): Promise<string> {
   const skill = getValueSkill(skillId)
   if (!skill) throw new Error(`未知技能: ${skillId}`)
   const phase = getValuePhase(skill.phaseKey)
@@ -244,10 +221,89 @@ export async function runValueSkill(caseNumber: string, skillId: string): Promis
   })
 
   // 存储为纯文本（去除 Markdown 标记，界面直接显示文字）
-  const content = stripMarkdown(result.restoredOutput.trim())
+  const content = stripMarkdown(result.restoredOutput.trim(), true)
   const now = Date.now()
   saveValue(caseNumber, skillId, content, now)
-  advanceCaseFlow(caseNumber, phase.key, now)
+
+  // 代理执行留痕（可回放）
+  const runId = createAgentRun({
+    caseId: caseNumber,
+    agentType: 'value_skill',
+    planJson: { skillId, phaseKey: phase.key, phaseName: phase.name },
+    inputContext: `技能「${skill.name}」@${phase.key}阶段`,
+    timeoutMs: 300_000,
+  })
+
+  // 引用溯源：技能执行前检索知识库，记录来源（供前端展示与审计）
+  let retrievalRefs: unknown[] = []
+  try {
+    const kbResults = await searchKb(
+      `${skill.name} ${bundle.caseData?.title || ''} ${bundle.caseData?.description || ''}`.slice(0, 200),
+      3,
+    )
+    retrievalRefs = kbResults.map((r) => ({ path: r.path, score: r.score }))
+  } catch {
+    retrievalRefs = []
+  }
+
+  if (runId) {
+    // 先完成技能执行记录（不含 eval，技能结果立即可用）
+    finishAgentRun({
+      runId,
+      status: 'done',
+      outputContent: content,
+      retrievalRefs,
+      reviewState: 'none',
+      toolCalls: [{ name: 'run_desensitized_skill_workflow', at: now }],
+    })
+  }
+
+  // 评估闭环（异步 fire-and-forget，不阻塞技能返回；awaitEval=true 时同步等待）
+  const runEvalJudgement = async () => {
+    try {
+      const { getSamplesFor } = await import('../eval/dataset')
+      const { judgeOutput } = await import('../eval/judge')
+      const sample = getSamplesFor(skillId)[0]
+      const rubric = (await import('../eval/dataset')).getRubricFor(skillId)
+      if (!sample || !rubric || !runId) return
+      const jr = await judgeOutput({
+        sample,
+        rubric,
+        output: content.slice(0, 1200),
+        materials: bundle.materials.slice(0, 1500),
+        runtimeMode: true,
+      })
+      const evalResult = {
+        normalized: jr.normalized,
+        totalScore: jr.totalScore,
+        maxTotal: jr.maxTotal,
+        hallucinationCount: jr.hallucinations.length,
+        hallucinations: jr.hallucinations,
+        missingPoints: jr.missingPoints,
+        evaluated: jr.evaluated,
+      }
+      const needsReview = jr.evaluated
+        && (jr.normalized < EVAL_LOW_SCORE_THRESHOLD || (EVAL_FLAG_HALLUCINATION && jr.hallucinations.length > 0))
+      appendAgentRunEval({
+        runId,
+        evalRecord: { name: 'eval_llm_judge', at: Date.now(), result: evalResult },
+        reviewState: needsReview ? 'rejected' : 'approved',
+      })
+    } catch (err) {
+      console.warn(`[value] eval failed for ${caseNumber}/${skillId}:`, err)
+    }
+  }
+
+  if (opts.awaitEval) {
+    await runEvalJudgement()
+  } else {
+    // fire-and-forget：技能结果立即返回，评分后台更新
+    setTimeout(() => {
+      console.log(`[value] async eval started for ${caseNumber}/${skillId}`)
+      runEvalJudgement().catch((err) => console.warn(`[value] async eval failed ${caseNumber}/${skillId}:`, err))
+    }, 0)
+  }
+
   return content
 }
 
@@ -261,8 +317,6 @@ export async function runInitialValuePipeline(caseNumber: string, deps: InitialV
     outputs[skillId] = content
     saveValue(caseNumber, skillId, content, now())
   }
-
-  advanceCaseFlow(caseNumber, 'V', now())
 
   return {
     caseId: caseNumber,

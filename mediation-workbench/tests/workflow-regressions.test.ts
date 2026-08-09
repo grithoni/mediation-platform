@@ -11,10 +11,6 @@ import {
   resolvePartySessionToken,
 } from '../server/utils/chat-workflow'
 import {
-  phaseAfterAgreementApproval,
-  phaseAfterSigningStarted,
-} from '../server/utils/agreement-workflow'
-import {
   buildSkillCatalog,
   runDesensitizedSkillWorkflow,
 } from '../server/utils/case-analysis-orchestrator'
@@ -78,12 +74,6 @@ test('authenticated mediator users are classified as mediator actors in main aut
 
   assert.equal(actor.kind, 'mediator')
   assert.equal(actor.userId, 'med-1')
-})
-
-test('agreement approval and signing use distinct workflow phases', () => {
-  assert.equal(phaseAfterAgreementApproval(false), 'agreement_pending')
-  assert.equal(phaseAfterAgreementApproval(true), 'agreement_pending')
-  assert.equal(phaseAfterSigningStarted(), 'signing')
 })
 
 test('desensitized skill workflow masks outbound materials and restores final output', async () => {

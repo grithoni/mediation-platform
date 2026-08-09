@@ -47,16 +47,16 @@ export default defineEventHandler(async (event) => {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          controller.enqueue(encoder.encode(sendSSE({ type: 'thinking', turn: 1, content: '结束对话，切换至调解员选择...' })))
+          controller.enqueue(encoder.encode(sendSSE({ type: 'thinking', turn: 1, content: '结束对话，进入接案准备...' })))
           controller.enqueue(encoder.encode(sendSSE({ type: 'tool_call', turn: 1, toolName: 'update_dynamic_file', toolArgs: { dialogEnded: true } })))
 
           endDialog(caseId)
 
-          controller.enqueue(encoder.encode(sendSSE({ type: 'tool_result', toolName: 'update_dynamic_file', content: '案件已切换至调解员选择阶段', data: '对话已结束，phase = mediator_selection' })))
+          controller.enqueue(encoder.encode(sendSSE({ type: 'tool_result', toolName: 'update_dynamic_file', content: '案件已进入接案准备阶段', data: '对话已结束，phase = reviewing' })))
           const endReason = keywordMatch ? '您已确认结束对话' : '对话轮次已达上限'
           const endContent = keywordMatch
-            ? '好的，案件分析已完成。请点击页面上方的"选择调解员"按钮选择调解员。'
-            : `对话已进行了${dialogTurn}轮。案件信息已收集充分，请点击页面上方的"选择调解员"按钮选择调解员。`
+            ? '好的，案件分析已完成。调解员将进入接案准备阶段。'
+            : `对话已进行了${dialogTurn}轮。案件信息已收集充分，调解员将进入接案准备阶段。`
 
           controller.enqueue(encoder.encode(sendSSE({ type: 'done', content: endContent, data: { exitReason: 'DIALOG_ENDED', reason: endReason, turns: dialogTurn } })))
           controller.enqueue(encoder.encode(sendSSE({ type: 'finished' })))
@@ -77,7 +77,7 @@ export default defineEventHandler(async (event) => {
   let caseTitle = ''
   let partyAName = '当事人'
   let partyBName = '被申请人'
-  let casePhase = 'analysis'
+  let casePhase = 'intake'
   let dynamicFile: Record<string, any> | undefined
 
   try {
@@ -87,7 +87,7 @@ export default defineEventHandler(async (event) => {
       caseTitle = caseData.title
       partyAName = caseData.partyAName
       partyBName = caseData.partyBName
-      casePhase = caseData.phase || 'analysis'
+      casePhase = caseData.phase || 'intake'
     }
 
     // Read dynamic file if exists

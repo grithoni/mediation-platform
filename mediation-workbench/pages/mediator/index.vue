@@ -28,13 +28,24 @@ const loadError = ref('')
 // 搜索/筛选
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const phaseFilter = ref('all')
 
 const phaseLabels: Record<string, string> = {
-  intake: '收件', reviewing: '审查中', screening: '甄别中', accepted: '已受理',
-  mediating: '调解中', caucus: '协商中', negotiating: '谈判中', agreement_drafting: '拟定协议',
-  agreement_pending: '待签协议', signing: '签署中', closed_success: '调解成功',
-  closed_failed: '调解未果', withdrawn: '已撤回',
+  intake: '收件', reviewing: '接案准备', accepted: '开启过程',
+  mediating: '倾听理解', negotiating: '方案验证', agreement_drafting: '促成解决',
+  withdrawn: '已撤回',
 }
+
+// 阶段统计（含顺序，用于统计卡片展示）
+const phaseStats: { key: string; label: string; count: number }[] = [
+  { key: 'intake', label: '收案', count: 0 },
+  { key: 'reviewing', label: '接案准备', count: 0 },
+  { key: 'accepted', label: '开启过程', count: 0 },
+  { key: 'mediating', label: '倾听理解', count: 0 },
+  { key: 'negotiating', label: '方案验证', count: 0 },
+  { key: 'agreement_drafting', label: '促成解决', count: 0 },
+  { key: 'withdrawn', label: '已撤回', count: 0 },
+]
 
 const statusLabels: Record<string, string> = {
   pending: '待处理', active: '进行中', resolved: '已解决', closed: '已关闭',
@@ -92,6 +103,9 @@ const filteredCases = computed(() => {
   if (statusFilter.value !== 'all') {
     list = list.filter((c) => c.status === statusFilter.value)
   }
+  if (phaseFilter.value !== 'all') {
+    list = list.filter((c) => c.phase === phaseFilter.value)
+  }
   const q = searchQuery.value.trim().toLowerCase()
   if (q) {
     list = list.filter((c) =>
@@ -103,6 +117,28 @@ const filteredCases = computed(() => {
   }
   return list
 })
+
+// 各阶段案件数统计（基于当前搜索词，与 status/phase 筛选独立）
+const phaseCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  const q = searchQuery.value.trim().toLowerCase()
+  const base = q
+    ? cases.value.filter((c) =>
+        c.id.toLowerCase().includes(q) ||
+        (c.title || '').toLowerCase().includes(q) ||
+        (c.partyAName || '').toLowerCase().includes(q) ||
+        (c.partyBName || '').toLowerCase().includes(q)
+      )
+    : cases.value
+  for (const c of base) {
+    counts[c.phase || 'intake'] = (counts[c.phase || 'intake'] || 0) + 1
+  }
+  return phaseStats.map((s) => ({ ...s, count: counts[s.key] || 0 }))
+})
+
+function setPhaseFilter(key: string) {
+  phaseFilter.value = phaseFilter.value === key ? 'all' : key
+}
 
 function fmtTime(ts: number | null | undefined): string {
   if (!ts) return '-'
@@ -239,7 +275,7 @@ function resetChat() {
           </div>
 
           <!-- Filters -->
-          <div class="flex items-center gap-3 mb-5">
+          <div class="flex items-center gap-3 mb-4">
             <UInput v-model="searchQuery" placeholder="搜索案号 / 标题 / 当事人" icon="i-lucide-search" class="flex-1 max-w-sm" />
             <USelect
               v-model="statusFilter"
@@ -252,6 +288,40 @@ function resetChat() {
               ]"
               class="w-36"
             />
+            <USelect
+              v-model="phaseFilter"
+              :options="[
+                { label: '全部阶段', value: 'all' },
+                ...phaseCounts.map((p) => ({ label: `${p.label}（${p.count}）`, value: p.key })),
+              ]"
+              class="w-40"
+            />
+          </div>
+
+          <!-- 阶段统计条：点击切换筛选，再次点击取消 -->
+          <div class="flex flex-wrap items-center gap-2 mb-5">
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border"
+              :class="phaseFilter === 'all'
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700'"
+              @click="setPhaseFilter('all')"
+            >
+              全部 {{ cases.length }}
+            </button>
+            <button
+              v-for="p in phaseCounts"
+              :key="p.key"
+              type="button"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border"
+              :class="phaseFilter === p.key
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700'"
+              @click="setPhaseFilter(p.key)"
+            >
+              {{ p.label }} {{ p.count }}
+            </button>
           </div>
 
           <UAlert v-if="loadError" color="error" variant="soft" :title="loadError" class="mb-4" />
@@ -270,7 +340,8 @@ function resetChat() {
             <div
               v-for="c in filteredCases"
               :key="c.id"
-              class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+              class="group bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+              @click="navigateTo(`/mediator/cases/${c.id}`)"
             >
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
@@ -297,18 +368,12 @@ function resetChat() {
                     <span class="text-gray-300 dark:text-gray-600">vs</span>
                     <span class="flex items-center gap-1"><UIcon name="i-lucide-user" class="w-3.5 h-3.5" />{{ c.partyBName || '待确认' }}</span>
                   </div>
+                  <div class="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                    <UIcon name="i-lucide-arrow-right" class="w-3 h-3 inline" />点击进入
+                  </div>
                 </div>
                 <div class="shrink-0 text-right flex flex-col items-end gap-2">
                   <div class="text-xs text-gray-400 dark:text-gray-500">提交于 {{ fmtTime(c.createdAt) }}</div>
-                  <UButton
-                    size="sm"
-                    color="neutral"
-                    variant="soft"
-                    icon="i-lucide-arrow-right"
-                    :to="`/mediator/cases/${c.id}`"
-                  >
-                    查看
-                  </UButton>
                 </div>
               </div>
             </div>

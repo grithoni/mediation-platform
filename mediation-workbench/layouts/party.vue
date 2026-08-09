@@ -30,10 +30,7 @@ const menuItems: Array<{
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-scale" class="w-5 h-5 text-blue-500 dark:text-blue-400" />
-            <div>
-              <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">调解创造价值 共识解决争议</div>
-              <div class="text-[11px] text-gray-400 dark:text-gray-500 font-mono leading-tight">Create value through mediation, resolve disputes through consensus.</div>
-            </div>
+            <div class="text-lg font-bold text-gray-900 dark:text-white leading-tight">当事人工作台</div>
           </div>
           <button
             class="p-1 rounded-md text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
