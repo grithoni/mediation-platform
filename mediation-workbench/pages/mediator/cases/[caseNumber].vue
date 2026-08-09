@@ -62,15 +62,20 @@ async function loadValue() {
       const firstDone = currentPhaseSkills.value.find((skill) => valueStatus.value[skill.id]?.done)
       selectedValueSkill.value = (firstDone || currentPhaseSkills.value[0])?.id || null
       if (selectedValueSkill.value && valueStatus.value[selectedValueSkill.value]?.done) {
-        await runValue(selectedValueSkill.value)
+        // 初始化拉取缓存：仅填充结果，不展开结果区（保持默认折叠）
+        await runValue(selectedValueSkill.value, false, false)
       }
     }
   } catch {}
 }
 
-async function runValue(skillId: string, force = false) {
+async function runValue(skillId: string, force = false, expand = true) {
   selectedValueSkill.value = skillId
-  if (!force && valueResults.value[skillId]) return
+  if (!force && valueResults.value[skillId]) {
+    // 已有缓存结果：仅在用户主动操作时展开
+    if (expand) resultsOpen.value = true
+    return
+  }
   if (valueLoading.value[skillId]) return
   valueLoading.value[skillId] = true
   valueError.value = ''
@@ -83,6 +88,8 @@ async function runValue(skillId: string, force = false) {
       valueResults.value[skillId] = stripValueMarkdown(resp.data.content || '')
       valueCached.value[skillId] = !!resp.data.cached
       valueStatus.value[skillId] = { done: true, generatedAt: Date.now() }
+      // 结果生成后自动展开结果区（初始化拉取缓存时不展开，保持默认折叠）
+      if (expand) resultsOpen.value = true
     } else {
       valueError.value = resp?.data?.message || '未返回结果'
     }
@@ -179,6 +186,12 @@ const desensitizeOpen = ref(false)
 const desensitizeRules = ref<DesensitizeRule[]>([])
 const desensitizeLoading = ref(false)
 const desensitizeSaving = ref(false)
+
+// ── 分析结果展示区（默认折叠，点击标题展开）────
+const resultsOpen = ref(false)
+// ── 案件材料 / 沟通记录（默认折叠，点击标题展开）────
+const materialsOpen = ref(false)
+const messagesOpen = ref(false)
 const desensitizeSaved = ref(false)
 const desensitizeError = ref('')
 
@@ -371,68 +384,94 @@ onMounted(async () => {
           </div>
         </div>
   
-        <!-- 材料文件 -->
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-blue-500" />案件材料（{{ caseData.documents?.length || 0 }}）
-          </h2>
-  
-          <div v-if="!caseData.documents || caseData.documents.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
-            暂无上传材料
-          </div>
-  
-          <div v-else class="space-y-2">
-            <div
-              v-for="doc in caseData.documents"
-              :key="doc.id"
-              class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
-            >
-              <UIcon :name="fileIcon(doc.originalName || doc.filename)" class="w-4 h-4 text-gray-400 shrink-0" />
-              <div class="min-w-0 flex-1">
-                <div class="text-sm text-gray-800 dark:text-gray-200 truncate">{{ doc.originalName || doc.filename }}</div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {{ categoryLabels[doc.category] || doc.category }} · {{ fileSize(doc.size) }} · {{ fmtTime(doc.createdAt) }}
-                </div>
-              </div>
-              <a
-                :href="fileUrl(doc.filename)"
-                target="_blank"
-                class="shrink-0 px-2.5 py-1.5 rounded-md text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
+        <!-- 材料文件（默认折叠，点击展开） -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+          <button
+            class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
+            @click="materialsOpen = !materialsOpen"
+          >
+            <UIcon name="i-lucide-paperclip" class="w-4 h-4 text-blue-500 shrink-0" />
+            <span class="flex-1 min-w-0">
+              <span class="block text-base font-semibold text-gray-900 dark:text-white">案件材料（{{ caseData.documents?.length || 0 }}）</span>
+            </span>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
+              :class="materialsOpen ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div v-if="materialsOpen" class="px-5 sm:px-6 pb-6">
+            <div v-if="!caseData.documents || caseData.documents.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+              暂无上传材料
+            </div>
+
+            <div v-else class="space-y-2">
+              <div
+                v-for="doc in caseData.documents"
+                :key="doc.id"
+                class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800"
               >
-                查看
-              </a>
+                <UIcon :name="fileIcon(doc.originalName || doc.filename)" class="w-4 h-4 text-gray-400 shrink-0" />
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm text-gray-800 dark:text-gray-200 truncate">{{ doc.originalName || doc.filename }}</div>
+                  <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    {{ categoryLabels[doc.category] || doc.category }} · {{ fileSize(doc.size) }} · {{ fmtTime(doc.createdAt) }}
+                  </div>
+                </div>
+                <a
+                  :href="fileUrl(doc.filename)"
+                  target="_blank"
+                  class="shrink-0 px-2.5 py-1.5 rounded-md text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 transition-colors"
+                >
+                  查看
+                </a>
+              </div>
             </div>
           </div>
         </div>
-  
-        <!-- 沟通记录 -->
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <UIcon name="i-lucide-message-square" class="w-4 h-4 text-blue-500" />沟通记录（{{ caseData.messages?.length || 0 }}）
-          </h2>
-  
-          <div v-if="!caseData.messages || caseData.messages.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
-            暂无沟通记录
-          </div>
-  
-          <div v-else class="space-y-3 max-h-96 overflow-y-auto">
-            <div
-              v-for="msg in caseData.messages"
-              :key="msg.id"
-              class="p-3 rounded-lg"
-              :class="msg.senderType === 'ai'
-                ? 'bg-blue-50 dark:bg-blue-900/20'
-                : msg.senderType === 'mediator'
-                  ? 'bg-green-50 dark:bg-green-900/20'
-                  : 'bg-gray-50 dark:bg-gray-950'"
-            >
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  {{ msg.senderName || (msg.senderType === 'ai' ? 'AI 助手' : msg.senderType === 'mediator' ? '调解员' : '当事人') }}
-                </span>
-                <span class="text-xs text-gray-400 dark:text-gray-500">{{ fmtTime(msg.createdAt) }}</span>
+
+        <!-- 沟通记录（默认折叠，点击展开） -->
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+          <button
+            class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
+            @click="messagesOpen = !messagesOpen"
+          >
+            <UIcon name="i-lucide-message-square" class="w-4 h-4 text-blue-500 shrink-0" />
+            <span class="flex-1 min-w-0">
+              <span class="block text-base font-semibold text-gray-900 dark:text-white">沟通记录（{{ caseData.messages?.length || 0 }}）</span>
+            </span>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
+              :class="messagesOpen ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div v-if="messagesOpen" class="px-5 sm:px-6 pb-6">
+            <div v-if="!caseData.messages || caseData.messages.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+              暂无沟通记录
+            </div>
+
+            <div v-else class="space-y-3 max-h-96 overflow-y-auto">
+              <div
+                v-for="msg in caseData.messages"
+                :key="msg.id"
+                class="p-3 rounded-lg"
+                :class="msg.senderType === 'ai'
+                  ? 'bg-blue-50 dark:bg-blue-900/20'
+                  : msg.senderType === 'mediator'
+                    ? 'bg-green-50 dark:bg-green-900/20'
+                    : 'bg-gray-50 dark:bg-gray-950'"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    {{ msg.senderName || (msg.senderType === 'ai' ? 'AI 助手' : msg.senderType === 'mediator' ? '调解员' : '当事人') }}
+                  </span>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ fmtTime(msg.createdAt) }}</span>
+                </div>
+                <p class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{{ msg.content }}</p>
               </div>
-              <p class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{{ msg.content }}</p>
             </div>
           </div>
         </div>
@@ -493,29 +532,49 @@ onMounted(async () => {
             </button>
           </div>
 
-          <!-- 结果展示区 -->
-          <div class="p-5 sm:p-6">
-            <div v-if="selectedValueSkill && valueLoading[selectedValueSkill]" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-6">
-              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在运行技能，请稍候…
-            </div>
-            <UAlert v-else-if="valueError" color="error" variant="soft" :title="valueError" />
-            <div v-else-if="selectedValueSkill && valueResults[selectedValueSkill]">
-              <div class="flex items-center gap-2 mb-2 flex-wrap">
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentValueSkill?.name }}</h3>
-                <div class="flex-1" />
-                <span v-if="valueCached[selectedValueSkill]" class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">缓存结果</span>
-                <button
-                  class="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                  title="重新生成"
-                  @click="runValue(selectedValueSkill, true)"
-                >
-                  <UIcon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" />重新生成
-                </button>
+          <!-- 结果展示区（默认折叠，点击展开） -->
+          <div class="border-t border-gray-100 dark:border-gray-800">
+            <button
+              class="w-full flex items-center gap-2 p-5 text-left"
+              @click="resultsOpen = !resultsOpen"
+            >
+              <UIcon name="i-lucide-clipboard-list" class="w-4 h-4 text-blue-500 shrink-0" />
+              <span class="flex-1 min-w-0">
+                <span class="block text-base font-semibold text-gray-900 dark:text-white">分析结果</span>
+                <span class="block text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {{ selectedValueSkill ? currentValueSkill?.name + (valueResults[selectedValueSkill] ? '（已生成）' : '') : '选择技能后查看分析结果' }}
+                </span>
+              </span>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
+                :class="resultsOpen ? 'rotate-180' : ''"
+              />
+            </button>
+
+            <div v-if="resultsOpen" class="px-5 pb-5">
+              <div v-if="selectedValueSkill && valueLoading[selectedValueSkill]" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-6">
+                <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在运行技能，请稍候…
               </div>
-              <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ valueResults[selectedValueSkill] }}</p>
-            </div>
-            <div v-else class="text-sm text-gray-400 dark:text-gray-500">
-              <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />点击上方技能开始运行。
+              <UAlert v-else-if="valueError" color="error" variant="soft" :title="valueError" />
+              <div v-else-if="selectedValueSkill && valueResults[selectedValueSkill]">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentValueSkill?.name }}</h3>
+                  <div class="flex-1" />
+                  <span v-if="valueCached[selectedValueSkill]" class="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">缓存结果</span>
+                  <button
+                    class="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    title="重新生成"
+                    @click="runValue(selectedValueSkill, true)"
+                  >
+                    <UIcon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" />重新生成
+                  </button>
+                </div>
+                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">{{ valueResults[selectedValueSkill] }}</p>
+              </div>
+              <div v-else class="text-sm text-gray-400 dark:text-gray-500">
+                <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />点击上方技能开始运行。
+              </div>
             </div>
           </div>
         </div>
