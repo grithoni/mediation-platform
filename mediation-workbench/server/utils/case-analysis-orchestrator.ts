@@ -13,7 +13,7 @@ import {
 } from '../database/schema'
 import { formatKbResultsForPrompt, searchKb } from './kb-search'
 import { llmChat } from './llm'
-import { rulesIndex, type DesensitizeRule } from './desensitize-rules'
+import { getCaseRules, rulesIndex, type DesensitizeRule } from './desensitize-rules'
 
 export type WorkflowAnalysisType =
   | 'dynamic_file'
@@ -130,9 +130,74 @@ const PII_PATTERNS: Array<{ category: string; pattern: RegExp }> = [
   { category: '邮箱', pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   { category: '银行卡', pattern: /\b62\d{14,17}\b/g },
   { category: '信用代码', pattern: /\b[0-9A-HJ-NPQRTUWXY]{18}\b/g },
+  // 参照「文档脱敏助手」SKILL.md 规则表补充的类别：
+  { category: '金额', pattern: /(?:人民币|RMB|¥|￥)?\s*\d[\d,]*\.?\d*\s*(?:万元|亿元|元)/g },
+  { category: '日期', pattern: /\d{4}年\d{1,2}月\d{1,2}日|\d{4}-\d{1,2}-\d{1,2}|\d{4}\/\d{1,2}\/\d{1,2}/g },
+  { category: '案号', pattern: /[（(]\d{4}[）)][^（()）\s]{1,20}号/g },
 ]
 
 const ROLE_NAME_PATTERN = /(原告|被告|申请人|被申请人|上诉人|被上诉人|甲方|乙方|委托代理人|法定代表人|第三人|当事人)\s*([\u4e00-\u9fa5]{2,4})/g
+
+// 角色名贪婪匹配的“伪姓名”剔除表：角色词后紧跟的常见动词/法律术语，
+// 用于截断 ROLE_NAME_PATTERN 匹配出的非人名后缀（如「乙方签订合同」→ 只保留「乙方」）。
+// 2 字词表 + 单字动词表（单字表避免收录人名常用字）。
+const ROLE_NON_NAME_2 = new Set([
+  '签订', '合同', '协议', '提出', '不服', '应诉', '到庭', '上诉', '起诉', '请求',
+  '支付', '交付', '主张', '认为', '辩称', '陈述', '要求', '答辩', '缺席', '撤回',
+  '变更', '解除', '终止', '履行', '违约', '赔偿', '返还', '退还', '清偿', '承担',
+  '保证', '担保', '抵押', '质押', '转让', '租赁', '委托', '授权', '代理', '生效',
+  '成立', '补充', '修改', '更正', '声明', '确认', '同意', '反对', '认可', '否认',
+  '接受', '拒绝', '放弃', '保全', '执行', '申请', '立案', '审理', '判决', '裁定',
+  '调解', '和解', '撤诉', '反诉', '回避', '管辖', '送达', '举证', '质证', '作证',
+  '出庭', '诉讼', '仲裁', '证据', '材料', '文件', '函件', '通知', '答复', '承诺',
+  '交货', '付款', '收款', '退款', '结清', '对账', '结算', '费用', '金额', '款项',
+  '货款', '租金', '报酬', '工资', '利息', '损失', '违约金', '赔偿金', '定金', '保证金',
+  '发票', '收据', '凭证', '单据', '报告', '意见', '方案', '计划', '安排', '处理',
+])
+const ROLE_NON_NAME_1 = new Set(
+  '签订交付提主应到付赔履诉请退返还收拒认辩称答审判裁调执保撤反申证质举作出上起承延续终止变改补盖开取结清对验安装调试培训维修存储运输投保纳欠拖逾罚扣抵冲票据登记备案批准许',
+)
+
+/**
+ * 从 ROLE_NAME_PATTERN 贪婪匹配出的候选串中提取真实姓名：
+ * 1) 已知姓名（partyNames/knownEntities）前缀匹配 → 最可靠，直接用之；
+ * 2) 否则从尾部剥离常见动词/术语后缀（『签订合同』→ 剥光 → null；『王五不服』→『王五』）；
+ * 3) 剥离后剩余不足 2 字视为非人名。
+ */
+function extractRoleName(candidate: string, knownNames: Set<string>): string | null {
+  if (!candidate) return null
+  // 1) 已知姓名优先（真实案件当事人姓名一定在 partyNames / knownEntities 中）
+  if (knownNames.size > 0) {
+    for (let len = Math.min(candidate.length, 4); len >= 2; len--) {
+      const prefix = candidate.slice(0, len)
+      if (knownNames.has(prefix)) return prefix
+    }
+  }
+  // 2) 剥离尾部动词/术语后缀（按 2 字词整词剥离；再按单字动词剥离）
+  let name = candidate
+  while (name.length >= 2) {
+    if (name.length === 2) {
+      // 剩余整体本身是 2 字动词/术语 → 伪姓名（如「签订合同」→「签订」）→ 放弃
+      if (ROLE_NON_NAME_2.has(name)) return null
+      break
+    }
+    const tail2 = name.slice(-2)
+    if (ROLE_NON_NAME_2.has(tail2)) {
+      name = name.slice(0, -2)
+      continue
+    }
+    const tail1 = name.slice(-1)
+    if (ROLE_NON_NAME_1.has(tail1)) {
+      name = name.slice(0, -1)
+      continue
+    }
+    break
+  }
+  // 3) 剩余不足 2 字，或以连词/虚词开头（「与甲方」「同乙方」）→ 非人名 → 放弃
+  if (name.length < 2) return null
+  if (/^[与和及同由被向对给把将而并或但]/u.test(name)) return null
+  return name
+}
 const DEFAULT_DYNAMIC_FIELDS = ['timeline', 'disputeChecklist', 'positions', 'partyAnalysis', 'potentialInterests', 'batna'] as const
 
 export function buildSkillCatalog(): SkillCatalogEntry[] {
@@ -261,6 +326,7 @@ export async function generateDynamicFileWorkflow(
     partyNames: bundle.partyNames,
     addresses: bundle.addresses,
     knownEntities: bundle.knownEntities,
+    rules: getCaseRules(caseNumber),
     prompt,
     system,
   })
@@ -312,12 +378,16 @@ export async function runStructuredWorkflowAnalysis(
 ): Promise<string> {
   const bundle = await buildWorkflowBundle(caseNumber)
   const { prompt, system } = await buildStructuredPrompt(bundle, analysisType)
+  // 按案件加载脱敏规则（调解员在 desensitize-rules 配置的 mask/delete/keep 与启用状态）；
+  // 未保存过规则时 getCaseRules 返回 SKILL.md 默认规则。
+  const rules = getCaseRules(caseNumber)
   const result = await runDesensitizedSkillWorkflow({
     analysisType,
     materials: bundle.materials,
     partyNames: bundle.partyNames,
     addresses: bundle.addresses,
     knownEntities: bundle.knownEntities,
+    rules,
     prompt,
     system,
   })
@@ -553,7 +623,10 @@ async function defaultCloudSkillAnalysis(input: {
     system: input.system,
     prompt: userPrompt,
     temperature: 0.3,
-    maxTokens: input.analysisType === 'recommend_solution' || input.analysisType === 'evaluation' ? 4000 : 3200,
+    // DeepSeek 的 max_tokens 同时覆盖 reasoning + content，调大避免长报告截断
+    maxTokens: input.analysisType === 'recommend_solution' || input.analysisType === 'evaluation' ? 8000 : 6000,
+    // 长材料 + 长输出（评估/方案 8000 tokens），给足时间避免超时
+    timeoutMs: 300_000,
   }).catch((error: any) => {
     throw new Error(`AI调用失败: ${error.message}`)
   })
@@ -645,19 +718,25 @@ export async function desensitizeCaseMaterials(
     }
   }
 
+  // 已知姓名集合：优先用于角色名提取（真实当事人姓名必在 partyNames / knownEntities 中）
+  const knownNames = new Set<string>([...options.partyNames, ...options.knownEntities.map((e) => e.value)])
   let roleMatch: RegExpExecArray | null
   while ((roleMatch = ROLE_NAME_PATTERN.exec(text)) !== null) {
+    // 截断贪婪匹配出的伪姓名（如「乙方签订合同」→ 无姓名则跳过）
+    const roleName = extractRoleName(roleMatch[2] || '', knownNames)
+    if (!roleName) continue
+    // 从「角色词后的汉字串」起始位置计算真实姓名区间（不吞角色词后的空白；
+    // roleName 是候选串的前缀——剥离尾部动词后保留头部，故从 hanziStart 起算）
+    const hanziStart = roleMatch.index + roleMatch[0].length - (roleMatch[2] || '').length
+    const start = hanziStart
     spans.push({
-      start: roleMatch.index + roleMatch[1]!.length,
-      end: roleMatch.index + roleMatch[0].length,
-      value: roleMatch[2] || '',
+      start,
+      end: start + roleName.length,
+      value: roleName,
       category: roleMatch[1] || '姓名',
     })
   }
   ROLE_NAME_PATTERN.lastIndex = 0
-
-  const localNerEntities = await detectLocalNerEntities(text)
-  for (const entity of localNerEntities) spans.push(entity)
 
   // ── 规则复核过滤：禁用或 keep 的类别不参与脱敏 ──────────────
   const roleWords = ['原告', '被告', '申请人', '被申请人', '上诉人', '被上诉人', '甲方', '乙方', '委托代理人', '法定代表人', '第三人', '当事人']
@@ -763,63 +842,6 @@ export function scanForResidualPii(
     if (text.includes(entity.value)) add(entity.value)
   }
   return found
-}
-
-async function detectLocalNerEntities(text: string) {
-  // 安全读取 Nuxt runtimeConfig（独立进程 / 测试环境无 useRuntimeConfig 时降级到 env）
-  let localNerModel: string | undefined
-  let localNerBaseUrl: string | undefined
-  try {
-    const config = useRuntimeConfig() as any
-    localNerModel = config?.localNerModel
-    localNerBaseUrl = config?.localNerBaseUrl
-  } catch {
-    // noop — 无 Nuxt runtimeConfig
-  }
-  const model = String(localNerModel || process.env.LOCAL_NER_MODEL || '').trim()
-  const baseUrl = String(localNerBaseUrl || process.env.LOCAL_NER_BASE_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
-  if (!model) return []
-
-  try {
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [{
-          role: 'user',
-          content: `请从以下文本中提取人名、组织、地址，返回 JSON 数组，每个元素包含 category 和 value 字段。文本：\n${text}`,
-        }],
-      }),
-    })
-    if (!response.ok) return []
-    const payload = await response.json() as any
-    const content = payload?.choices?.[0]?.message?.content || ''
-    const start = String(content).indexOf('[')
-    const end = String(content).lastIndexOf(']')
-    if (start === -1 || end === -1) return []
-    const entities = JSON.parse(String(content).slice(start, end + 1))
-    if (!Array.isArray(entities)) return []
-
-    const spans: Array<{ start: number; end: number; value: string; category: string }> = []
-    for (const entity of entities) {
-      const value = String(entity?.value || '').trim()
-      const category = String(entity?.category || '').trim() || '姓名'
-      if (!value) continue
-      for (const match of text.matchAll(new RegExp(escapeRegExp(value), 'g'))) {
-        if (!match[0] || typeof match.index !== 'number') continue
-        spans.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          value,
-          category,
-        })
-      }
-    }
-    return spans
-  } catch {
-    return []
-  }
 }
 
 function restoreText(text: string, mapping: Record<string, string>) {

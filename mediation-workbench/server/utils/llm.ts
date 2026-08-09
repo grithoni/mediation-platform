@@ -33,6 +33,8 @@ export interface LlmChatOptions {
   history?: LlmMessage[]
   temperature?: number
   maxTokens?: number
+  /** 覆盖默认非流式超时（毫秒）；长输入/长输出任务可调大，默认 125s。 */
+  timeoutMs?: number
 }
 
 /** 运行地址：环境变量 > Nuxt runtimeConfig > 默认值。 */
@@ -69,33 +71,48 @@ function buildUserContent(opts: LlmChatOptions): string {
   return parts.join('\n\n')
 }
 
-/** 非流式调用，返回完整文本 */
+/** 非流式调用，返回完整文本；对空响应自动重试（DeepSeek 长输入偶发空 content）。 */
 export async function llmChat(opts: LlmChatOptions): Promise<string> {
   const { apiKey, baseUrl, model } = getLlmConfig()
   if (!apiKey) throw new Error('缺少 DeepSeek API Key（请设置 NUXT_OPENAI_API_KEY）')
-  let res: Response
-  try {
-    res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(LLM_CHAT_TIMEOUT_MS),
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: buildUserContent(opts) }],
-        temperature: opts.temperature ?? 0.7,
-        max_tokens: opts.maxTokens ?? 4096,
-        stream: false,
-      }),
-    })
-  } catch (err) {
-    throw new Error(`LLM 请求失败: ${abortReason(err, '请求超时')}`)
+
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let res: Response
+    try {
+      res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(opts.timeoutMs ?? LLM_CHAT_TIMEOUT_MS),
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: buildUserContent(opts) }],
+          temperature: opts.temperature ?? 0.7,
+          max_tokens: opts.maxTokens ?? 4096,
+          stream: false,
+        }),
+      })
+    } catch (err) {
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt))
+        continue
+      }
+      throw new Error(`LLM 请求失败: ${abortReason(err, '请求超时')}`)
+    }
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`LLM API ${res.status}: ${errText.slice(0, 300)}`)
+    }
+    const data = await res.json()
+    const content = data.choices?.[0]?.message?.content || ''
+    if (content && content.trim().length > 0) return content
+    // 空 content：重试（长输入/长输出下 DeepSeek 偶发返回空）
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt))
+      continue
+    }
   }
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`LLM API ${res.status}: ${errText.slice(0, 300)}`)
-  }
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content || ''
+  return ''
 }
 
 /** 流式调用，逐段 yield 文本增量 */

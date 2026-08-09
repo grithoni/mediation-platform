@@ -125,10 +125,11 @@ test('runMigrations upgrades an old database without dropping data', () => {
     const result = runMigrations(sqlite)
 
     assert.ok(result.addedColumns.includes('documents.category'))
-    assert.ok(result.addedColumns.includes('case_dynamic_files.agent_status'))
-    assert.ok(result.addedColumns.includes('case_dynamic_files.agent_analysis'))
-    assert.ok(result.addedColumns.includes('case_dynamic_files.material_checklist'))
-    assert.ok(result.addedColumns.includes('case_dynamic_files.agent_updated_at'))
+    // agent_* 列已从功能中移除（VALUE 预分析摘要已删除），迁移不应再添加
+    assert.equal(result.addedColumns.includes('case_dynamic_files.agent_status'), false)
+    assert.equal(result.addedColumns.includes('case_dynamic_files.agent_analysis'), false)
+    assert.equal(result.addedColumns.includes('case_dynamic_files.material_checklist'), false)
+    assert.equal(result.addedColumns.includes('case_dynamic_files.agent_updated_at'), false)
     assert.ok(result.createdTables.includes('case_applications'))
     assert.ok(result.createdTables.includes('case_analyses'))
     assert.ok(result.createdTables.includes('case_creation_requests'))
@@ -137,8 +138,8 @@ test('runMigrations upgrades an old database without dropping data', () => {
     const doc = sqlite.prepare("SELECT * FROM documents WHERE id = 'd1'").get() as { filename: string; path: string }
     assert.equal(doc.filename, 'f.pdf')
     assert.equal(doc.path, '/abs/outside/uploads/f.pdf')
-    const cdf = sqlite.prepare("SELECT * FROM case_dynamic_files WHERE id = 'cdf1'").get() as { agent_status: string }
-    assert.equal(cdf.agent_status, 'pending')
+    const cdf = sqlite.prepare("SELECT * FROM case_dynamic_files WHERE id = 'cdf1'").get() as { id: string }
+    assert.equal(cdf.id, 'cdf1')
   })
 })
 

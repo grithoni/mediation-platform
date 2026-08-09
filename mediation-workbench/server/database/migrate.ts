@@ -221,19 +221,10 @@ export function runMigrations(db: Database.Database): MigrationResult {
       agent_log TEXT,
       dialog_turn_count INTEGER DEFAULT 0,
       dialog_ended INTEGER DEFAULT 0,
-      agent_status TEXT NOT NULL DEFAULT 'pending',
-      agent_analysis TEXT,
-      material_checklist TEXT,
-      agent_updated_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
   `, result)
-  // 旧库可能缺少外部 Agent 回写字段
-  addColumnIfMissing(db, 'case_dynamic_files', 'agent_status', `agent_status TEXT NOT NULL DEFAULT 'pending'`, result)
-  addColumnIfMissing(db, 'case_dynamic_files', 'agent_analysis', `agent_analysis TEXT`, result)
-  addColumnIfMissing(db, 'case_dynamic_files', 'material_checklist', `material_checklist TEXT`, result)
-  addColumnIfMissing(db, 'case_dynamic_files', 'agent_updated_at', `agent_updated_at INTEGER`, result)
 
   // ============================================================
   // 调解申请详情表 (1:1 关联 cases；申请表单已迁入工作台，原 3006 服务已退役)

@@ -75,11 +75,13 @@ export async function createAiWelcomeForCase(caseNumber: string): Promise<void> 
 
   let issues: string[] = []
   try {
+    const { getCaseRules } = await import('./desensitize-rules')
     const workflowResult = await runDesensitizedSkillWorkflow({
       analysisType: 'dynamic_file',
       materials: fileContent,
       partyNames: [caseData.partyAName, caseData.partyBName].filter(Boolean),
       addresses: [],
+      rules: getCaseRules(caseNumber),
       prompt: reviewPrompt,
       system: '你是仲裁材料审查助手。只输出JSON。',
     })

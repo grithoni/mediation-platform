@@ -178,6 +178,24 @@ test('skill catalog includes uploaded enabled skills ahead of builtin defaults',
   })
 })
 
+test('desensitization does not treat verb phrases after role words as names', async () => {
+  await withTempProjectDir(async () => {
+    const { desensitizeCaseMaterials } = await import('../server/utils/case-analysis-orchestrator')
+    const result = await desensitizeCaseMaterials('乙方签订合同，甲方付款。被申请人主张违约金过高，乙方与甲方签订补充协议。', {
+      knownEntities: [],
+      partyNames: [],
+      addresses: [],
+    })
+
+    // 纯动词/术语短语不应被当作角色姓名掩掉
+    assert.equal(result.maskedText.includes('签订合同'), true)
+    assert.equal(result.maskedText.includes('付款'), true)
+    assert.equal(result.maskedText.includes('主张违约金'), true)
+    assert.equal(result.maskedText.includes('与甲方签订'), true)
+    assert.equal(result.mapping['[被申请人_1]'], undefined)
+  })
+})
+
 test('desensitization recognizes new roles (上诉人/被上诉人/第三人/当事人) and masks them', async () => {
   await withTempProjectDir(async () => {
     const { desensitizeCaseMaterials } = await import('../server/utils/case-analysis-orchestrator')

@@ -164,11 +164,15 @@
               block
               size="lg"
               :loading="creatingCase"
+              :disabled="creatingCase || extractingInfo"
               @click="createCase"
               class="bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-100"
             >
-              创建案件
+              {{ extractingInfo ? 'AI 正在提取信息，请稍候...' : '创建案件' }}
             </UButton>
+            <p v-if="extractingInfo" class="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
+              正在从材料中自动识别当事人与案件信息，完成后按钮自动可用；也可等待识别后手动修改
+            </p>
           </div>
         </template>
 
@@ -265,24 +269,26 @@ async function autoExtractInfo() {
   if (uploadedFiles.value.length === 0) return
   extractingInfo.value = true
   try {
-    // 优先走 OCR 服务（本地模型结构化字段抽取，单文件）
-    const ocrFile = uploadedFiles.value[0]
-    const ocrForm = new FormData()
-    ocrForm.append('file', ocrFile)
-    const ocrResp = await $fetch<{ success: boolean; fields?: Record<string, string>; error?: string }>('/api/ocr', {
-      method: 'POST',
-      body: ocrForm,
-    })
-    if (ocrResp.success && ocrResp.fields) {
-      const f = ocrResp.fields
-      let filled = false
-      if (f.applicant_name) { partyName.value = f.applicant_name; filled = true }
-      if (f.respondent_name) { respondentName.value = f.respondent_name; filled = true }
-      const descParts = [f.case_facts, f.dispute_matters, f.mediation_demands].filter(Boolean)
-      if (descParts.length) { caseDescription.value = descParts.join('\n'); filled = true }
-      if (filled) { extractingInfo.value = false; return }
+    // 优先走 OCR 服务（本地模型结构化字段抽取）：
+    // 依次尝试每个文件，直到某个文件提取出有效字段（如第一个文件是合同/宣传页，跳过继续）
+    for (const ocrFile of uploadedFiles.value) {
+      const ocrForm = new FormData()
+      ocrForm.append('file', ocrFile)
+      const ocrResp = await $fetch<{ success: boolean; fields?: Record<string, string>; error?: string }>('/api/ocr', {
+        method: 'POST',
+        body: ocrForm,
+      })
+      if (ocrResp.success && ocrResp.fields) {
+        const f = ocrResp.fields
+        let filled = false
+        if (f.applicant_name) { partyName.value = f.applicant_name; filled = true }
+        if (f.respondent_name) { respondentName.value = f.respondent_name; filled = true }
+        const descParts = [f.case_facts, f.dispute_matters, f.mediation_demands].filter(Boolean)
+        if (descParts.length) { caseDescription.value = descParts.join('\n'); filled = true }
+        if (filled) { extractingInfo.value = false; return }
+      }
+      console.warn('[party] OCR empty for', ocrFile.name, ':', ocrResp.error || 'no fields', '— trying next file')
     }
-    console.warn('[party] OCR extraction failed or empty, falling back to extract-info:', ocrResp.error || 'no fields')
   } catch (err) {
     console.warn('[party] OCR extraction error, falling back to extract-info:', err)
   }

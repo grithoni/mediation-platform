@@ -62,10 +62,6 @@ test('initial VALUE pipeline writes summary, checklist and advances case flow', 
     assert.equal(flowCase?.phase, 'reviewing')
     assert.equal(flowCase?.status, 'active')
 
-    const dynamic = db.select().from(caseDynamicFiles).all().find((row) => row.caseId === '2026-1')
-    assert.equal(dynamic?.agentAnalysis?.includes('VALUE-v2-RESULT'), true)
-    assert.equal(dynamic?.materialChecklist?.includes('VALUE-v4-RESULT'), true)
-
     const analyses = db.select().from(caseAnalyses).all()
     assert.equal(analyses.some((row) => row.analysisType === 'value_v2'), true)
     assert.equal(analyses.some((row) => row.analysisType === 'value_v4'), true)

@@ -41,9 +41,6 @@ export default defineNuxtConfig({
     openaiApiKey: '',
     openaiBaseUrl: '',
     openaiModel: 'deepseek-v4-flash',
-    // 直连 DeepSeek（OpenAI 兼容 API）：地址/模型/密钥按 环境变量(NUXT_OPENAI_*) > 此处 runtimeConfig > 默认值 解析。
-    localNerBaseUrl: 'http://127.0.0.1:11434',
-    localNerModel: '',
     // OCR / KB 微服务地址：环境变量（NUXT_OCR_URL / NUXT_KB_URL）可覆盖，默认指向本地开发服务
     ocrUrl: 'http://localhost:8701',
     kbUrl: 'http://localhost:8700',

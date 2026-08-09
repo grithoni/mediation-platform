@@ -5,6 +5,48 @@ import { llmChat } from './llm'
 import { buildWorkflowBundle, runDesensitizedSkillWorkflow } from './case-analysis-orchestrator'
 import { getCaseRules } from './desensitize-rules'
 
+/**
+ * 去除技能输出中的 Markdown 标记，转成纯文本。
+ * 覆盖：标题(#)、加粗/斜体(双星号/双下划线/单星号)、行内代码、链接、列表符、表格、引用、
+ *      水平分隔线、HTML 标签、多余空行。
+ */
+export function stripMarkdown(text: string): string {
+  if (!text) return ''
+  return text
+    // HTML 标签
+    .replace(/<[^>]*>/g, '')
+    // 图片/链接：保留链接文字
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // 标题符号
+    .replace(/^#{1,6}\s*/gm, '')
+    // 表格行：把 | 分隔符换成空格并去掉表头分隔线
+    .replace(/^\s*\|.*\|\s*$/gm, (line) => {
+      const cells = line.replace(/^\s*\||\|\s*$/g, '').split('|').map((c) => c.trim())
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) return ''
+      return cells.join('　')
+    })
+    // 列表符（- * + 数字. 复选框）
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+[.、]\s+/gm, '')
+    .replace(/^\s*[-*+]\s*\[[ xX]\]\s*/gm, '')
+    // 引用
+    .replace(/^\s*>\s?/gm, '')
+    // 粗体/斜体/行内代码
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/(^|[^*])\*([^*]+)\*(?![^*])/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    // 水平分隔线
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, '')
+    // 空行压缩
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** 表格行清洗后的单元格连接符：全角空格（避免与 md 表格标记混淆且可读） */
+
 export interface ValuePhase {
   key: string
   en: string
@@ -133,42 +175,6 @@ function saveValue(caseNumber: string, skillId: string, content: string, now = D
   }
 }
 
-function buildValueSummary(outputs: Record<string, string>): string {
-  return [
-    outputs.v2 ? `【案件摘要】\n${outputs.v2}` : '',
-    outputs.v3 ? `【争点识别】\n${outputs.v3}` : '',
-    outputs.l5 ? `【隐含利益识别】\n${outputs.l5}` : '',
-    outputs.u4 ? `【风险分析】\n${outputs.u4}` : '',
-  ].filter(Boolean).join('\n\n')
-}
-
-function buildValueChecklist(outputs: Record<string, string>): string {
-  return outputs.v4 || ''
-}
-
-function upsertValueOverview(caseNumber: string, outputs: Record<string, string>, now: number) {
-  const db = getDb()
-  const existing = db.select().from(caseDynamicFiles).where(eq(caseDynamicFiles.caseId, caseNumber)).get()
-  const patch = {
-    agentAnalysis: buildValueSummary(outputs),
-    materialChecklist: buildValueChecklist(outputs),
-    agentStatus: 'done' as const,
-    agentUpdatedAt: now,
-    updatedAt: now,
-  }
-
-  if (existing) {
-    db.update(caseDynamicFiles).set(patch).where(eq(caseDynamicFiles.caseId, caseNumber)).run()
-  } else {
-    db.insert(caseDynamicFiles).values({
-      id: `cdf_${caseNumber}_${now}`,
-      caseId: caseNumber,
-      createdAt: now,
-      ...patch,
-    }).run()
-  }
-}
-
 function advanceCaseFlow(caseNumber: string, phaseKey: string, now: number) {
   const nextPhase = PHASE_TO_CASE_PHASE[phaseKey]
   if (!nextPhase) return
@@ -225,7 +231,11 @@ export async function runValueSkill(caseNumber: string, skillId: string): Promis
         system: input.system,
         prompt: userPrompt,
         temperature: 0.4,
-        maxTokens: 3200,
+        // DeepSeek 的 max_tokens 同时覆盖 reasoning + content；
+        // reasoning 会消耗大量配额，给足输出空间避免内容截断
+        maxTokens: 8000,
+        // 长材料 + 长输出，给足时间（默认 125s 在 10K 字符输入下可能超时）
+        timeoutMs: 300_000,
       }).catch((error: any) => {
         throw new Error(`AI调用失败: ${error.message}`)
       })
@@ -233,7 +243,8 @@ export async function runValueSkill(caseNumber: string, skillId: string): Promis
     },
   })
 
-  const content = result.restoredOutput.trim()
+  // 存储为纯文本（去除 Markdown 标记，界面直接显示文字）
+  const content = stripMarkdown(result.restoredOutput.trim())
   const now = Date.now()
   saveValue(caseNumber, skillId, content, now)
   advanceCaseFlow(caseNumber, phase.key, now)
@@ -251,7 +262,6 @@ export async function runInitialValuePipeline(caseNumber: string, deps: InitialV
     saveValue(caseNumber, skillId, content, now())
   }
 
-  upsertValueOverview(caseNumber, outputs, now())
   advanceCaseFlow(caseNumber, 'V', now())
 
   return {

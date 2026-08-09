@@ -1,17 +1,18 @@
 // ============================================================
 // 案件脱敏规则复核
 //
-// 参照 /Users/honi/Desktop/skills/文档脱敏/SKILL.md 的规则表，
+// 参照 /Users/honi/Desktop/skills/文档脱敏助手-1/SKILL.md 的规则表，
 // 允许调解员按案件手动修改/确认脱敏规则；其余自动化流程不变。
 //
 // 规则模型：
 //   { category, label, enabled, action }
-//   - category: 脱敏类别（证件/电话/邮箱/银行卡/信用代码/姓名/地址/角色姓名）
+//   - category: 脱敏类别（证件/电话/邮箱/银行卡/信用代码/姓名/地址/角色姓名/企业名称/金额/日期/案号）
 //   - enabled:  是否启用该类别的脱敏
 //   - action:   'mask'（替换为令牌并回填）| 'delete'（直接删除，不回填）| 'keep'（保留原样）
 //
 // 默认规则对齐 SKILL.md：强格式标识（证件/电话/邮箱/银行卡/信用代码）→ delete；
-// 姓名/地址 → mask（保留令牌可回填）；角色姓名 → mask。
+// 姓名/地址/角色姓名/企业名称/金额 → mask（保留令牌可回填）；案号 → mask；
+// 日期 → keep（SKILL.md 注明日期按场景决定是否脱敏，默认保留以保证时间线分析质量）。
 // 说明：为保持「其余自动化流程不变」，默认全部 enabled=true，
 // 行为与现有引擎一致（mask 即当前令牌行为；delete 为 SKILL.md 的“直接删除”）。
 // ============================================================
@@ -38,6 +39,11 @@ export const RULE_CATEGORIES: Array<{ category: string; label: string }> = [
   { category: '姓名', label: '自然人姓名' },
   { category: '地址', label: '地址' },
   { category: '角色姓名', label: '当事人角色姓名（申请人/被申请人等）' },
+  // 参照「文档脱敏助手」SKILL.md 规则表补充：
+  { category: '企业名称', label: '企业名称' },
+  { category: '金额', label: '金额（人民币/元/万元等）' },
+  { category: '日期', label: '日期' },
+  { category: '案号', label: '案号（如（2025）京01民初123号）' },
 ]
 
 /** SKILL.md 默认规则。 */
@@ -48,7 +54,9 @@ export function defaultRules(): DesensitizeRule[] {
     enabled: true,
     action: (category === '证件' || category === '电话' || category === '邮箱' || category === '银行卡' || category === '信用代码')
       ? 'delete'
-      : 'mask',
+      : category === '日期'
+        ? 'keep' // SKILL.md：日期按场景决定，默认保留，避免破坏时间线分析
+        : 'mask',
   }))
 }
 

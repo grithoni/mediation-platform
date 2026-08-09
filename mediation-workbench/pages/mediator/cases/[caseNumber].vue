@@ -3,6 +3,30 @@
 const route = useRoute()
 const { getAuthHeaders, fetchUser } = useAuth()
 
+/** 前端兜底：去除技能结果中的 Markdown 标记，直接显示纯文字（兼容历史已存 md 数据） */
+function stripValueMarkdown(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*\|.*\|\s*$/gm, (line) => {
+      const cells = line.replace(/^\s*\||\|\s*$/g, '').split('|').map((c) => c.trim())
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) return ''
+      return cells.join('　')
+    })
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+[.、]\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 const caseNumber = route.params.caseNumber as string
 const caseData = ref<any>(null)
 const loading = ref(true)
@@ -56,7 +80,7 @@ async function runValue(skillId: string, force = false) {
       { method: 'POST', headers: getAuthHeaders() },
     )
     if (resp?.success && resp.data) {
-      valueResults.value[skillId] = resp.data.content || ''
+      valueResults.value[skillId] = stripValueMarkdown(resp.data.content || '')
       valueCached.value[skillId] = !!resp.data.cached
       valueStatus.value[skillId] = { done: true, generatedAt: Date.now() }
     } else {
@@ -471,19 +495,6 @@ onMounted(async () => {
 
           <!-- 结果展示区 -->
           <div class="p-5 sm:p-6">
-            <div
-              v-if="caseData.dynamicFile?.agentAnalysis || caseData.dynamicFile?.materialChecklist"
-              class="mb-5 rounded-xl border border-blue-100 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/30 p-4 space-y-3"
-            >
-              <div v-if="caseData.dynamicFile?.agentAnalysis">
-                <div class="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">VALUE 预分析摘要</div>
-                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ caseData.dynamicFile.agentAnalysis }}</p>
-              </div>
-              <div v-if="caseData.dynamicFile?.materialChecklist">
-                <div class="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">调解准备清单</div>
-                <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{{ caseData.dynamicFile.materialChecklist }}</p>
-              </div>
-            </div>
             <div v-if="selectedValueSkill && valueLoading[selectedValueSkill]" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-6">
               <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />正在运行技能，请稍候…
             </div>

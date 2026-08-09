@@ -117,10 +117,6 @@ export function initTestDb() {
       agent_log TEXT,
       dialog_turn_count INTEGER DEFAULT 0,
       dialog_ended INTEGER DEFAULT 0,
-      agent_status TEXT NOT NULL DEFAULT 'pending',
-      agent_analysis TEXT,
-      material_checklist TEXT,
-      agent_updated_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
