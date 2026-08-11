@@ -95,6 +95,9 @@ async function runValue(skillId: string, force = false, expand = true) {
       valueStatus.value[skillId] = { done: true, generatedAt: Date.now() }
       // 结果生成后自动展开结果区（初始化拉取缓存时不展开，保持默认折叠）
       if (expand) resultsOpen.value = true
+      // 刷新评估信息（幻觉检测/引用来源）；异步 judge 稍后完成，延时二次刷新
+      loadRuns()
+      setTimeout(loadRuns, 8000)
     } else {
       valueError.value = resp?.data?.message || '未返回结果'
     }
@@ -184,11 +187,9 @@ const resultsOpen = ref(false)
 const materialsOpen = ref(false)
 const messagesOpen = ref(false)
 
-// ── 代理执行记录（默认折叠，点击展开）────
-const runsOpen = ref(false)
+// ── 技能评估信息（幻觉检测 / 引用来源 / 复核，随选中技能展示在报告区）──
 const agentRuns = ref<any[]>([])
 const reviewOpen = ref('')
-const runsLoading = ref(false)
 
 interface AgentRunItem {
   id: string
@@ -205,20 +206,6 @@ interface AgentRunItem {
   finishedAt: number | null
 }
 
-const runTypeLabels: Record<string, string> = {
-  value_skill: 'VALUE 技能',
-  case_analysis: '案件分析',
-  chat: '对话',
-  workflow: '工作流',
-}
-
-const runStateLabels: Record<string, string> = {
-  running: '执行中',
-  done: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-}
-
 const reviewStateLabels: Record<string, string> = {
   none: '未复核',
   pending: '待复核',
@@ -226,14 +213,27 @@ const reviewStateLabels: Record<string, string> = {
   rejected: '待人工复核',
 }
 
+/** 当前选中技能对应的最近一次执行记录（优先取有评估结果的） */
+const currentRun = computed<AgentRunItem | null>(() => {
+  if (!selectedValueSkill.value) return null
+  const skillRuns = agentRuns.value.filter((r) => r.planJson?.skillId === selectedValueSkill.value)
+  if (skillRuns.length === 0) return null
+  return skillRuns.find((r) => runScore(r)) || skillRuns[0]
+})
+
 function runScore(run: AgentRunItem): { normalized: number; totalScore: number; maxTotal: number; hallucinationCount: number; hallucinations: string[]; missingPoints: string[] } | null {
   const evalCall = (run.toolCalls || []).find((t) => t.name === 'eval_llm_judge')
   return evalCall?.result || null
 }
 
+/** 旧版评估数据：报告了幻觉数量但未存明细（修复前生成的记录） */
+function isLegacyEval(run: AgentRunItem): boolean {
+  const score = runScore(run)
+  if (!score) return false
+  return (score.hallucinationCount > 0 || score.totalScore > 0) && !Array.isArray(score.hallucinations)
+}
+
 async function loadRuns() {
-  if (runsLoading.value) return
-  runsLoading.value = true
   try {
     const resp = await $fetch<{ success: boolean; data: AgentRunItem[] }>(`/api/cases/${caseNumber}/runs`, {
       headers: getAuthHeaders(),
@@ -241,8 +241,6 @@ async function loadRuns() {
     agentRuns.value = resp?.data || []
   } catch {
     agentRuns.value = []
-  } finally {
-    runsLoading.value = false
   }
 }
 
@@ -305,6 +303,7 @@ onMounted(async () => {
     })
     caseData.value = data.data
     await loadValue()
+    loadRuns() // 加载技能评估信息（幻觉检测/引用来源/复核状态）
     // 支持从 agents 页跳转：?value=skillId 预选并自动运行该技能
     const jumpSkill = route.query.value as string | undefined
     if (jumpSkill && valueSkills.value.some((s) => s.id === jumpSkill)) {
@@ -639,6 +638,61 @@ onMounted(async () => {
                   </button>
                 </div>
                 <div class="eval-md-body text-sm text-gray-700 dark:text-gray-300 leading-relaxed break-words" v-html="renderRichText(valueResults[selectedValueSkill], stripValueMarkdown)" />
+
+                <!-- 评估信息：幻觉检测 / 引用来源 / 复核（随当前技能显示在报告中） -->
+                <template v-if="currentRun">
+                  <!-- 幻觉警告 + 明细 -->
+                  <template v-if="runScore(currentRun) && runScore(currentRun)!.hallucinationCount > 0">
+                    <div class="mt-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/30 p-3">
+                      <div class="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
+                        <UIcon name="i-lucide-alert-triangle" class="w-3.5 h-3.5 shrink-0" />
+                        <span class="font-semibold">⚠ 检测到 {{ runScore(currentRun)!.hallucinationCount }} 处潜在幻觉，建议人工复核</span>
+                        <button
+                          class="ml-auto inline-flex items-center gap-0.5 hover:underline"
+                          @click="reviewOpen = reviewOpen === currentRun.id ? '' : currentRun.id"
+                        >
+                          <UIcon :name="reviewOpen === currentRun.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="w-3 h-3" />
+                          {{ reviewOpen === currentRun.id ? '收起' : '查看详情' }}
+                        </button>
+                      </div>
+                      <div v-if="reviewOpen === currentRun.id" class="mt-2 space-y-2">
+                        <div v-if="isLegacyEval(currentRun)" class="text-xs text-amber-700/80 dark:text-amber-300/80">
+                          此条为旧版评估记录，未保存幻觉明细。请点击"重新生成"重新运行该技能获取可核实的明细。
+                        </div>
+                        <template v-else>
+                          <ul class="text-xs text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-4">
+                            <li v-for="(h, hi) in (runScore(currentRun)!.hallucinations || [])" :key="hi">{{ h }}</li>
+                            <li v-if="!(runScore(currentRun)!.hallucinations || []).length" class="list-none">（无具体明细）</li>
+                          </ul>
+                          <div class="flex items-center gap-2 pt-1">
+                            <button
+                              class="text-xs px-2 py-1 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                              @click="approveRun(currentRun.id)"
+                            >
+                              已人工核实，无问题
+                            </button>
+                            <span class="text-xs text-gray-400 dark:text-gray-500">核实后此报告将标记为已通过</span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 引用来源（可审计可追溯） -->
+                  <div v-if="currentRun.retrievalRefs && currentRun.retrievalRefs.length" class="mt-3">
+                    <div class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">引用来源（知识库，可溯源）</div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span
+                        v-for="(ref, ri) in currentRun.retrievalRefs"
+                        :key="ri"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                      >
+                        {{ (ref.path || '').split('/').pop() }}
+                        <span class="text-blue-400 dark:text-blue-500 text-[10px]">{{ (ref.score || 0).toFixed(2) }}</span>
+                      </span>
+                    </div>
+                  </div>
+                </template>
               </div>
               <div v-else class="text-sm text-gray-400 dark:text-gray-500">
                 <UIcon name="i-lucide-inbox" class="w-4 h-4 inline mr-1 align-[-2px]" />点击上方技能开始运行。
@@ -704,141 +758,6 @@ onMounted(async () => {
             >
                <UIcon name="i-lucide-send" class="w-4 h-4" />
              </button>
-           </div>
-         </div>
-       </div>
-
-       <!-- 代理执行记录（默认折叠，点击展开） -->
-       <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-         <button
-           class="w-full flex items-center gap-2 p-5 sm:p-6 pb-4 text-left"
-           @click="runsOpen = !runsOpen; if (runsOpen && agentRuns.length === 0) loadRuns()"
-         >
-           <UIcon name="i-lucide-activity" class="w-4 h-4 text-violet-500 shrink-0" />
-           <span class="flex-1 min-w-0">
-             <span class="block text-base font-semibold text-gray-900 dark:text-white">
-               代理执行记录（{{ agentRuns.length }}）
-             </span>
-             <span class="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-               AI 执行留痕：评分、引用来源、可回放
-             </span>
-           </span>
-           <UIcon
-             name="i-lucide-chevron-down"
-             class="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200"
-             :class="runsOpen ? 'rotate-180' : ''"
-           />
-         </button>
-
-         <div v-if="runsOpen" class="px-5 sm:px-6 pb-6">
-           <div v-if="runsLoading" class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 py-4">
-             <UIcon name="i-lucide-loader-2" class="w-4 h-4 text-blue-500 animate-spin" /> 加载中…
-           </div>
-           <div v-else-if="agentRuns.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-2">
-             暂无执行记录（运行 VALUE 技能后自动产生）
-           </div>
-           <div v-else class="space-y-3">
-             <div
-               v-for="run in agentRuns"
-               :key="run.id"
-               class="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4"
-             >
-               <!-- 头部：类型 + 状态 + 评分 -->
-               <div class="flex items-center gap-2 flex-wrap">
-                 <span class="text-sm font-semibold text-gray-900 dark:text-white">
-                   {{ runTypeLabels[run.agentType] || run.agentType }}
-                 </span>
-                 <span
-                   class="px-2 py-0.5 rounded-full text-xs font-medium"
-                   :class="{
-                     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300': run.status === 'running',
-                     'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300': run.status === 'done',
-                     'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300': run.status === 'failed',
-                   }"
-                 >
-                   {{ runStateLabels[run.status] || run.status }}
-                 </span>
-                 <span
-                   v-if="run.reviewState === 'rejected'"
-                   class="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                 >
-                   {{ reviewStateLabels[run.reviewState] }}
-                 </span>
-                 <span v-else-if="run.reviewState === 'approved'" class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                   {{ reviewStateLabels[run.reviewState] }}
-                 </span>
-                 <span class="ml-auto text-xs text-gray-400 dark:text-gray-500">{{ fmtTime(run.startedAt) }}</span>
-               </div>
-
-               <!-- 评分（来自 eval_llm_judge） -->
-               <template v-if="runScore(run)">
-                 <div class="mt-3">
-                   <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                     <span>质量评分</span>
-                     <span :class="runScore(run)!.normalized >= 0.5 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'">
-                       {{ runScore(run)!.totalScore }}/{{ runScore(run)!.maxTotal }}（{{ Math.round(runScore(run)!.normalized * 100) }}%）
-                     </span>
-                   </div>
-                   <div class="w-full h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
-                     <div
-                       class="h-full rounded-full transition-all"
-                       :class="runScore(run)!.normalized >= 0.5 ? 'bg-green-500' : 'bg-amber-500'"
-                       :style="{ width: Math.min(100, runScore(run)!.normalized * 100) + '%' }"
-                     />
-                   </div>
-                    <div v-if="runScore(run)!.hallucinationCount > 0" class="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                      ⚠ 检测到 {{ runScore(run)!.hallucinationCount }} 处潜在幻觉，建议人工复核
-                      <button
-                        class="ml-2 inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 hover:underline"
-                        @click.stop="reviewOpen = reviewOpen === run.id ? '' : run.id"
-                      >
-                        <UIcon :name="reviewOpen === run.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="w-3 h-3" />
-                        {{ reviewOpen === run.id ? '收起' : '查看详情' }}
-                      </button>
-                    </div>
-                    <div v-if="reviewOpen === run.id" class="mt-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/30 p-3 space-y-2">
-                      <div class="text-xs font-semibold text-amber-700 dark:text-amber-300">潜在幻觉明细（AI 判断，请对照案件材料核实）</div>
-                      <ul class="text-xs text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-4">
-                        <li v-for="(h, hi) in (runScore(run)!.hallucinations || [])" :key="hi">{{ h }}</li>
-                        <li v-if="!(runScore(run)!.hallucinations || []).length" class="list-none">（无具体明细）</li>
-                      </ul>
-                      <div class="flex items-center gap-2 pt-1">
-                        <button
-                          class="text-xs px-2 py-1 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors"
-                          @click.stop="approveRun(run.id)"
-                        >
-                          已人工核实，无问题
-                        </button>
-                        <span class="text-xs text-gray-400 dark:text-gray-500">核实后此条将标记为已通过</span>
-                      </div>
-                    </div>
-                 </div>
-               </template>
-               <div v-else class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                 输入：{{ run.inputContext || '-' }}
-               </div>
-
-               <!-- 引用来源 -->
-               <div v-if="run.retrievalRefs && run.retrievalRefs.length" class="mt-3">
-                 <div class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">引用来源（知识库）</div>
-                 <div class="flex flex-wrap gap-1.5">
-                   <span
-                     v-for="(ref, ri) in run.retrievalRefs"
-                     :key="ri"
-                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                   >
-                     {{ (ref.path || '').split('/').pop() }}
-                     <span class="text-blue-400 dark:text-blue-500 text-[10px]">{{ (ref.score || 0).toFixed(2) }}</span>
-                   </span>
-                 </div>
-               </div>
-
-               <!-- 输出预览 -->
-               <div v-if="run.outputContent" class="mt-3">
-                 <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">输出</div>
-                 <div class="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">{{ run.outputContent }}</div>
-               </div>
-             </div>
            </div>
          </div>
        </div>
