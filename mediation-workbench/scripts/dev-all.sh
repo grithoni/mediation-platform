@@ -4,7 +4,7 @@
 # 依赖：mediation-workbench 与 ocr-service 在同一父目录下
 
 set -e
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORKBENCH="$ROOT/mediation-workbench"
 OCR="$ROOT/ocr-service"
 

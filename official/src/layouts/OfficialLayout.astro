@@ -1,6 +1,6 @@
 ---
 import ChatWidget from '../components/ChatWidget.astro'
-import { WORKBENCH_URL } from '../config'
+import { WORKBENCH_URL, IP_PLATFORM_URL } from '../config'
 
 export interface Props {
   title?: string
@@ -56,6 +56,7 @@ function navClass(path: string, matchStartsWith = false) {
             </button>
             <div class="absolute left-0 mt-1 w-44 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-50 hidden" data-dropdown-panel>
               <a href={`${WORKBENCH_URL}/party`} class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">我要调解</a>
+              <a href={`${WORKBENCH_URL}/mediator`} class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">调解员入口</a>
               <a href={`${WORKBENCH_URL}/guide`} class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">流程指引</a>
             </div>
           </div>
@@ -67,14 +68,14 @@ function navClass(path: string, matchStartsWith = false) {
               <svg class="w-3.5 h-3.5 transition-transform duration-200" data-dropdown-arrow xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="absolute left-0 mt-1 w-44 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-50 hidden" data-dropdown-panel>
-              <a href="/contact" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">我要评估</a>
+              <a href={`${IP_PLATFORM_URL}/party`} class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">我要评估</a>
+              <a href={`${IP_PLATFORM_URL}/expert`} class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">专家入口</a>
               <a href="/neutral-evaluation" class="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">流程指引</a>
             </div>
           </div>
           <a href="/dispute-review" class={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${navClass('/dispute-review')}`}>争议评审</a>
           <a href="/consulting" class={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${navClass('/consulting')}`}>咨询服务</a>
           <a href="/training" class={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${navClass('/training')}`}>培训服务</a>
-          <a href={`${WORKBENCH_URL}/mediator`} class="px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200">调解员入口</a>
         </nav>
 
         <!-- Actions -->
@@ -124,6 +125,7 @@ function navClass(path: string, matchStartsWith = false) {
         </button>
         <div id="mobileSub-mediation" class="ml-4 space-y-0.5 mt-0.5 overflow-hidden max-h-0 transition-all duration-200">
           <a href={`${WORKBENCH_URL}/party`} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">我要调解</a>
+          <a href={`${WORKBENCH_URL}/mediator`} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">调解员入口</a>
           <a href={`${WORKBENCH_URL}/guide`} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">流程指引</a>
         </div>
       </div>
@@ -133,13 +135,13 @@ function navClass(path: string, matchStartsWith = false) {
         <svg id="mobileSubArrow-neutral-eval" class="w-4 h-4 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div id="mobileSub-neutral-eval" class="ml-4 space-y-0.5 mt-0.5 overflow-hidden max-h-0 transition-all duration-200">
-        <a href="/contact" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">我要评估</a>
-          <a href="/neutral-evaluation" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">流程指引</a>
-        </div>
+        <a href={`${IP_PLATFORM_URL}/party`} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">我要评估</a>
+        <a href={`${IP_PLATFORM_URL}/expert`} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">专家入口</a>
+        <a href="/neutral-evaluation" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">流程指引</a>
+      </div>
       <a href="/dispute-review" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">争议评审</a>
       <a href="/consulting" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">咨询服务</a>
       <a href="/training" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">培训服务</a>
-      <a href={`${WORKBENCH_URL}/mediator`} class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileMenu()">调解员入口</a>
     </nav>
   </aside>
 

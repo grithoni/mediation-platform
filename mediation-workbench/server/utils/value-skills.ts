@@ -176,7 +176,7 @@ export async function runValueSkill(caseNumber: string, skillId: string, opts: {
   const phase = getValuePhase(skill.phaseKey)
   if (!phase) throw new Error(`未知阶段: ${skill.phaseKey}`)
 
-  const bundle = await buildWorkflowBundle(caseNumber)
+  const bundle = await buildWorkflowBundle(caseNumber, { currentSkillId: skillId })
   const rules = getCaseRules(caseNumber)
 
   const system = [

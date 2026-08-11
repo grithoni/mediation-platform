@@ -395,7 +395,30 @@ export async function runStructuredWorkflowAnalysis(
   return result.restoredOutput.trim()
 }
 
-export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowBundle> {
+/**
+ * 上下文规模控制：依据目标技能/阶段的相关性筛选前序阶段输出，并设置总量预算。
+ * 阶段流程顺序：V(0) → A(1) → L(2) → U(3) → E(4)。
+ * 传入 currentPhase（如 'U'）时：
+ *   - 仅保留来源阶段序号 <= 当前阶段序号 的前序输出（跳过未来阶段与同阶段旧结果）；
+ *   - 按相关度（当前序号 - 来源序号，越小越相关）排序，在总量预算内优先保留更相关的输出；
+ *   - 总量预算 CONTEXT_BUDGET_CHARS 控制 valueResults 拼接总长，避免后续阶段上下文膨胀溢出。
+ */
+const VALUE_PHASE_ORDER: Record<string, number> = { V: 0, A: 1, L: 2, U: 3, E: 4 }
+const CONTEXT_BUDGET_CHARS = 8_000
+
+function skillIdToPhase(skillId: string): string | null {
+  const prefix = skillId?.[0]?.toUpperCase()
+  return prefix && prefix in VALUE_PHASE_ORDER ? prefix : null
+}
+
+export interface WorkflowBundleOptions {
+  /** 当前正在运行的技能 id（如 'u3'），用于按相关性筛选前序阶段输出 */
+  currentSkillId?: string
+  /** 当前阶段（如 'U'）；优先级高于 currentSkillId */
+  currentPhase?: string
+}
+
+export async function buildWorkflowBundle(caseNumber: string, opts: WorkflowBundleOptions = {}): Promise<WorkflowBundle> {
   const db = getDb()
   const caseData = db.select().from(cases).where(eq(cases.id, caseNumber)).get()
   if (!caseData) throw new Error('案件不存在')
@@ -419,9 +442,53 @@ export async function buildWorkflowBundle(caseNumber: string): Promise<WorkflowB
   const valueRows = db.select().from(caseAnalyses)
     .where(and(eq(caseAnalyses.caseId, caseNumber), like(caseAnalyses.analysisType, 'value_%')))
     .all()
-  const valueResults = valueRows
+  const allValueResults = valueRows
     .map((row) => ({ skillId: row.analysisType.replace(/^value_/, ''), content: row.content || '' }))
     .filter((r) => r.content.trim())
+
+  // ── 上下文规模控制：按目标阶段相关性筛选 + 总量预算 ──
+  const targetPhase = opts.currentPhase
+    ? (opts.currentPhase.toUpperCase() as keyof typeof VALUE_PHASE_ORDER)
+    : opts.currentSkillId
+      ? (skillIdToPhase(opts.currentSkillId) as keyof typeof VALUE_PHASE_ORDER)
+      : undefined
+
+  let valueResults = allValueResults
+  if (targetPhase && targetPhase in VALUE_PHASE_ORDER) {
+    const targetOrder = VALUE_PHASE_ORDER[targetPhase]
+    // 1) 只保留来源阶段早于或等于当前阶段的前序输出（跳过未来阶段与同阶段旧结果）
+    const eligible = allValueResults
+      .map((r) => {
+        const srcPhase = skillIdToPhase(r.skillId)
+        return { ...r, srcPhase }
+      })
+      .filter((r) => r.srcPhase && VALUE_PHASE_ORDER[r.srcPhase] <= targetOrder)
+
+    // 2) 按相关度排序（来源阶段越靠近当前阶段越相关，同阶段按完成先后取最新）
+    eligible.sort((a, b) => {
+      const da = targetOrder - VALUE_PHASE_ORDER[a.srcPhase!]
+      const db_ = targetOrder - VALUE_PHASE_ORDER[b.srcPhase!]
+      return da - db_ || b.content.length - a.content.length
+    })
+
+    // 3) 总量预算：在 CONTEXT_BUDGET_CHARS 内优先保留更相关输出
+    const budgeted: typeof eligible = []
+    let used = 0
+    for (const item of eligible) {
+      const len = item.content.length
+      if (used + len > CONTEXT_BUDGET_CHARS) {
+        // 预算不足时按比例截断最后一条
+        const remain = CONTEXT_BUDGET_CHARS - used
+        if (remain > 500) budgeted.push({ ...item, content: item.content.slice(0, remain) })
+        break
+      }
+      budgeted.push(item)
+      used += len
+    }
+    // 恢复流程顺序（V→A→L→U→E）便于阅读
+    budgeted.sort((a, b) => VALUE_PHASE_ORDER[a.srcPhase!] - VALUE_PHASE_ORDER[b.srcPhase!])
+    valueResults = budgeted.map(({ skillId, content }) => ({ skillId, content }))
+  }
 
   const partyNames = Array.from(new Set([
     caseData.partyAName,

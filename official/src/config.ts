@@ -5,6 +5,7 @@
 // 所有 workbench / AI / OCR / KB 服务地址均可用环境变量覆盖：
 //
 //   PUBLIC_WORKBENCH_URL   调解工作台根地址（默认 http://localhost:6080）
+//   PUBLIC_IP_PLATFORM_URL 中立评估平台地址（IP-Platform，默认 http://localhost:6081）
 //   PUBLIC_CHAT_API_URL    AI 智能咨询接口（默认 {WORKBENCH_URL}/api/public/chat）
 //   PUBLIC_ANALYZE_API_URL 案件分析接口（默认 {WORKBENCH_URL}/api/public/analyze-case）
 //   PUBLIC_OCR_URL         OCR 服务地址（默认 {WORKBENCH_URL}/api/ocr，经工作台代理）
@@ -12,6 +13,7 @@
 //
 // 生产环境设置示例：
 //   PUBLIC_WORKBENCH_URL=https://mediation.example.com
+//   PUBLIC_IP_PLATFORM_URL=https://ip-eval.example.com
 //
 // 注意：PUBLIC_ 前缀的变量会暴露到浏览器端，切勿放入任何密钥。
 // ============================================================
@@ -21,6 +23,11 @@ const stripTrailingSlash = (s: string) => s.replace(/\/+$/, '')
 /** 调解工作台根地址 */
 export const WORKBENCH_URL = stripTrailingSlash(
   import.meta.env.PUBLIC_WORKBENCH_URL || 'http://localhost:6080'
+)
+
+/** 中立评估平台（IP-Platform）根地址 */
+export const IP_PLATFORM_URL = stripTrailingSlash(
+  import.meta.env.PUBLIC_IP_PLATFORM_URL || 'http://localhost:6081'
 )
 
 /** AI 智能咨询（SSE 对话）接口 */

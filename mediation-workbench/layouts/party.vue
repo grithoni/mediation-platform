@@ -67,8 +67,8 @@ const menuItems: Array<{
     <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900">
       <!-- 顶部标语（居中） -->
       <div class="shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col items-center justify-center gap-1">
-        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">调解创造价值 共识解决争议</span>
-        <span class="text-sm text-gray-500 dark:text-gray-400 font-mono">Create value through mediation, resolve disputes through consensus.</span>
+        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">解决争议 创造价值</span>
+        <span class="text-sm text-gray-500 dark:text-gray-400 font-mono">Resolve disputes, create value.</span>
       </div>
       <slot />
     </main>
