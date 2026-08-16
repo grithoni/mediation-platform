@@ -57,11 +57,87 @@ export interface ValuePhase {
   desc: string
 }
 
+/** 技能上下文配置规则：指定该技能分析所需的案件状态字段、先序阶段输出与附件策略。 */
+export interface SkillContextConfig {
+  /** 案件状态存储字段白名单（对应 buildWorkflowBundle 的 sections 键） */
+  fields?: string[]
+  /** 所需的前序阶段输出（阶段键列表，如 ['V','L']），配合相关性筛选 */
+  priorPhases?: string[]
+  /** 是否包含附件材料文本 */
+  includeDocs?: boolean
+  /** 是否需要知识库检索增强（RAG） */
+  useRag?: boolean
+}
+
 export interface ValueSkill {
   id: string
   phaseKey: string
   name: string
   prompt: string
+  /** 阶段内运行顺序（1-5），决定自动编排执行次序 */
+  order: number
+  /** 依赖的前序技能 id 列表；执行前校验，未完成则阻止/先自动补跑 */
+  dependsOn: string[]
+  /** 上下文配置规则；缺省时使用全量材料 + 相关性筛选 */
+  context?: SkillContextConfig
+}
+
+/**
+ * 技能元数据：阶段内运行顺序、依赖关系与上下文配置规则。
+ * 依据 V→A→L→U→E 阶段内从"认识"到"决策"的流程逻辑确定。
+ * 上下文配置说明：
+ *   - fields: 案件状态存储字段白名单（title/partyNames/description/caseFacts/disputeMatters/claimsSummary/evidenceSummary/mediationDemands/demandsBasis）
+ *   - priorPhases: 所需前序阶段输出（阶段键），配合 orchestrator 的相关性筛选
+ *   - includeDocs: 是否包含附件材料
+ *   - useRag: 是否需要知识库增强
+ */
+export const SKILL_METADATA: Record<string, Pick<ValueSkill, 'order' | 'dependsOn' | 'context'>> = {
+  // ── V 接案准备：评估→摘要→争点→清单→进入建议 ──
+  v1: { order: 1, dependsOn: [], context: { fields: ['title', 'partyNames', 'description', 'caseFacts', 'disputeMatters'], includeDocs: true } },
+  v2: { order: 2, dependsOn: [], context: { includeDocs: true } },
+  v3: { order: 3, dependsOn: ['v1'], context: { fields: ['caseFacts', 'disputeMatters', 'claimsSummary', 'evidenceSummary'], priorPhases: ['V'], includeDocs: true } },
+  v4: { order: 4, dependsOn: ['v2', 'v3'], context: { fields: ['title', 'partyNames', 'caseFacts', 'disputeMatters'], priorPhases: ['V'] } },
+  v5: { order: 5, dependsOn: ['v1', 'v3'], context: { fields: ['title', 'partyNames', 'description', 'caseFacts'], priorPhases: ['V'] } },
+  // ── A 开启过程：开场→规则→议程→氛围→程序确认 ──
+  a1: { order: 1, dependsOn: [], context: { fields: ['title', 'partyNames'], priorPhases: ['V'], useRag: true, includeDocs: false } },
+  a2: { order: 2, dependsOn: ['a1'], context: { fields: ['title', 'partyNames', 'disputeMatters'], priorPhases: ['V'] } },
+  a3: { order: 3, dependsOn: ['a2'], context: { fields: ['title', 'disputeMatters'], priorPhases: ['V', 'A'] } },
+  a4: { order: 4, dependsOn: [], context: { fields: ['title', 'partyNames'], priorPhases: ['V'] } },
+  a5: { order: 5, dependsOn: ['a1', 'a2'], context: { fields: ['title', 'partyNames'], priorPhases: ['V', 'A'] } },
+  // ── L 倾听理解：提问→复述→澄清→降温→利益识别 ──
+  l1: { order: 1, dependsOn: [], context: { fields: ['caseFacts', 'disputeMatters'], priorPhases: ['V'] } },
+  l2: { order: 2, dependsOn: ['l1'], context: { fields: ['caseFacts', 'disputeMatters'], priorPhases: ['V', 'L'] } },
+  l3: { order: 3, dependsOn: ['l2'], context: { fields: ['caseFacts', 'disputeMatters', 'evidenceSummary'], priorPhases: ['V', 'L'] } },
+  l4: { order: 4, dependsOn: [], context: { fields: ['caseFacts', 'disputeMatters'], priorPhases: ['L'] } },
+  l5: { order: 5, dependsOn: ['l1', 'l3'], context: { fields: ['caseFacts', 'disputeMatters', 'claimsSummary'], priorPhases: ['V', 'L'], includeDocs: true } },
+  // ── U 方案验证：发散→重构→比较→风险→优先级 ──
+  u1: { order: 1, dependsOn: [], context: { fields: ['caseFacts', 'disputeMatters', 'mediationDemands'], priorPhases: ['L'] } },
+  u2: { order: 2, dependsOn: ['u1'], context: { fields: ['disputeMatters', 'mediationDemands'], priorPhases: ['L', 'U'] } },
+  u3: { order: 3, dependsOn: ['u2'], context: { priorPhases: ['L', 'U'] } },
+  u4: { order: 4, dependsOn: ['u3'], context: { priorPhases: ['L', 'U'] } },
+  u5: { order: 5, dependsOn: ['u3', 'u4'], context: { priorPhases: ['L', 'U'] } },
+  // ── E 促成解决：推进→条款→校对→履行→复盘 ──
+  e1: { order: 1, dependsOn: [], context: { fields: ['mediationDemands', 'demandsBasis'], priorPhases: ['U'] } },
+  e2: { order: 2, dependsOn: ['e1'], context: { fields: ['mediationDemands', 'demandsBasis'], priorPhases: ['U'] } },
+  e3: { order: 3, dependsOn: ['e2'], context: { priorPhases: ['U', 'E'] } },
+  e4: { order: 4, dependsOn: ['e3'], context: { priorPhases: ['U', 'E'] } },
+  e5: { order: 5, dependsOn: ['e3', 'e4'], context: { priorPhases: ['U', 'E'] } },
+}
+
+/** 合并技能定义与元数据，返回带顺序/依赖/上下文配置的完整技能。 */
+export function getValueSkillsWithMeta(): ValueSkill[] {
+  return VALUE_SKILLS.map((s) => {
+    const meta = SKILL_METADATA[s.id]
+    return meta ? { ...s, ...meta } : { ...s, order: 0, dependsOn: [] }
+  })
+}
+
+/** 返回按阶段+阶段内顺序排列的全部技能（自动编排默认执行顺序）。 */
+export function getOrderedValueSkills(): ValueSkill[] {
+  return getValueSkillsWithMeta().sort((a, b) => {
+    const p = (VALUE_PHASE_ORDER[a.phaseKey] ?? 99) - (VALUE_PHASE_ORDER[b.phaseKey] ?? 99)
+    return p !== 0 ? p : (a.order ?? 0) - (b.order ?? 0)
+  })
 }
 
 export const VALUE_PHASES: ValuePhase[] = [
@@ -101,6 +177,9 @@ export const VALUE_SKILLS: ValueSkill[] = [
 ]
 
 const INITIAL_VALUE_SKILL_IDS = ['v2', 'v3', 'l5', 'u4', 'v4'] as const
+
+/** 阶段流程顺序（与 orchestrator 的 VALUE_PHASE_ORDER 保持一致） */
+export const VALUE_PHASE_ORDER: Record<string, number> = { V: 0, A: 1, L: 2, U: 3, E: 4 }
 
 type ValueSkillRunner = (caseNumber: string, skillId: string) => Promise<string>
 
@@ -170,13 +249,27 @@ function saveValue(caseNumber: string, skillId: string, content: string, now = D
   }
 }
 
-export async function runValueSkill(caseNumber: string, skillId: string, opts: { awaitEval?: boolean } = {}): Promise<string> {
-  const skill = getValueSkill(skillId)
+export async function runValueSkill(caseNumber: string, skillId: string, opts: { awaitEval?: boolean; skipDependencyCheck?: boolean } = {}): Promise<string> {
+  const skill = getValueSkillsWithMeta().find((s) => s.id === skillId)
   if (!skill) throw new Error(`未知技能: ${skillId}`)
   const phase = getValuePhase(skill.phaseKey)
   if (!phase) throw new Error(`未知阶段: ${skill.phaseKey}`)
 
-  const bundle = await buildWorkflowBundle(caseNumber, { currentSkillId: skillId })
+  // ── 依赖校验：所依赖的前序技能未完成时自动补跑（若依赖执行失败则阻止）──
+  if (!opts.skipDependencyCheck && skill.dependsOn?.length) {
+    for (const depId of skill.dependsOn) {
+      const depDone = getCachedValue(caseNumber, depId)
+      if (depDone) continue
+      // 依赖未完成：自动编排先执行依赖（自动编排为默认执行方式）
+      console.log(`[value] ${skillId} 依赖 ${depId} 未完成，自动补跑`)
+      await runValueSkill(caseNumber, depId, { ...opts, skipDependencyCheck: false })
+    }
+  }
+
+  const bundle = await buildWorkflowBundle(caseNumber, {
+    currentSkillId: skillId,
+    context: skill.context,
+  })
   const rules = getCaseRules(caseNumber)
 
   const system = [
@@ -305,6 +398,154 @@ export async function runValueSkill(caseNumber: string, skillId: string, opts: {
   }
 
   return content
+}
+
+export interface PipelineRunResult {
+  run: string[]
+  skipped: string[]
+  failed: Array<{ skillId: string; error: string }>
+  total: number
+  /** 阶段暂停点：每阶段出口技能后等待人工确认；null 表示流程已跑完或无需暂停 */
+  pauseAtPhase?: string | null
+}
+
+interface PipelineState {
+  /** 当前运行阶段 */
+  currentPhase: string
+  /** 已完成（含跳过）的技能 */
+  completed: string[]
+  /** 失败技能 */
+  failed: Array<{ skillId: string; error: string }>
+  /** 运行状态: running | paused | done | cancelled */
+  status: string
+  /** 下次继续运行的起点阶段 */
+  resumePhase: string
+}
+
+const PIPELINE_TABLE = 'case_task_runs'
+
+function getPipelineState(caseNumber: string): PipelineState | null {
+  try {
+    const db = getDb()
+    const sqlite = (db as any).$client as any
+    const row = sqlite.prepare(
+      `SELECT plan_json, output_content FROM ${PIPELINE_TABLE}
+       WHERE case_id = ? AND agent_type = 'value_pipeline' ORDER BY rowid DESC LIMIT 1`,
+    ).get(caseNumber)
+    if (!row?.plan_json) return null
+    return JSON.parse(row.plan_json) as PipelineState
+  } catch { return null }
+}
+
+function savePipelineState(caseNumber: string, state: PipelineState): void {
+  try {
+    const db = getDb()
+    const sqlite = (db as any).$client as any
+    sqlite.prepare(
+      `INSERT INTO ${PIPELINE_TABLE} (id, case_id, tenant_id, agent_type, status, plan_json, output_content, created_at)
+       VALUES (?, ?, ?, 'value_pipeline', ?, ?, ?, ?)`,
+    ).run(
+      `pipe_${caseNumber}_${Date.now()}`,
+      caseNumber,
+      'tenant-default',
+      state.status,
+      JSON.stringify(state),
+      JSON.stringify(state.completed),
+      Date.now(),
+    )
+  } catch (err: any) {
+    console.warn(`[value-pipeline] 状态保存失败:`, err?.message || err)
+  }
+}
+
+/**
+ * 自动编排（默认执行方式）：按 V→A→L→U→E 阶段及阶段内预设顺序依次运行全部技能。
+ * - 依赖校验：目标技能依赖未完成时自动补跑；执行失败记录但不中断整链。
+ * - 已完成技能默认跳过（force 强制重跑全部）。
+ * - phaseByPhase=true：每阶段出口技能后暂停（awaitConfirm），返回 pauseAtPhase 等待人工确认。
+ * - 恢复：fromPhase 指定从某阶段继续（跳过更早阶段）。
+ */
+export async function runValuePipelineAuto(
+  caseNumber: string,
+  opts: { force?: boolean; fromPhase?: string; phaseByPhase?: boolean } = {},
+): Promise<PipelineRunResult> {
+  const ordered = getOrderedValueSkills()
+  const result: PipelineRunResult = { run: [], skipped: [], failed: [], total: ordered.length, pauseAtPhase: null }
+
+  // 恢复运行：基于上次暂停状态继续
+  const prev = !opts.force ? getPipelineState(caseNumber) : null
+  const startPhase = opts.fromPhase || prev?.resumePhase
+  const resumeCompleted = new Set(prev?.completed || [])
+
+  for (const skill of ordered) {
+    // 阶段起点：从指定阶段开始（含该阶段）
+    if (startPhase && VALUE_PHASE_ORDER[skill.phaseKey] < VALUE_PHASE_ORDER[startPhase]) continue
+    // 恢复时已完成的技能跳过
+    if (resumeCompleted.has(skill.id)) { result.skipped.push(skill.id); continue }
+
+    const cached = getCachedValue(caseNumber, skill.id)
+    if (cached && !opts.force && !resumeCompleted.has(skill.id)) {
+      result.skipped.push(skill.id)
+      resumeCompleted.add(skill.id)
+      continue
+    }
+    try {
+      await runValueSkill(caseNumber, skill.id, { skipDependencyCheck: opts.force })
+      result.run.push(skill.id)
+      resumeCompleted.add(skill.id)
+    } catch (err: any) {
+      result.failed.push({ skillId: skill.id, error: err?.message || String(err) })
+      resumeCompleted.add(skill.id) // 记录已尝试，避免无限重试
+      console.warn(`[value-pipeline] ${skill.id} 执行失败:`, err?.message || err)
+    }
+
+    // ── 阶段暂停点：阶段内最后一个技能完成后，若启用 phaseByPhase 则暂停等待人工确认 ──
+    const isPhaseExit = VALUE_PHASE_ORDER[skill.phaseKey] !== undefined
+      && !ordered.some(s => s.phaseKey === skill.phaseKey && (s.order ?? 0) > (skill.order ?? 0))
+    if (isPhaseExit && opts.phaseByPhase) {
+      const nextPhase = Object.entries(VALUE_PHASE_ORDER)
+        .sort((a, b) => a[1] - b[1])
+        .find(([, order]) => order > VALUE_PHASE_ORDER[skill.phaseKey])?.[0]
+      result.pauseAtPhase = skill.phaseKey
+      // 保存暂停状态：下次从下一阶段恢复
+      savePipelineState(caseNumber, {
+        currentPhase: skill.phaseKey,
+        completed: [...resumeCompleted],
+        failed: result.failed,
+        status: 'paused',
+        resumePhase: nextPhase || '',
+      })
+      break
+    }
+  }
+
+  // 全部跑完：记录完成状态
+  if (result.pauseAtPhase === null) {
+    savePipelineState(caseNumber, {
+      currentPhase: 'E',
+      completed: [...resumeCompleted],
+      failed: result.failed,
+      status: 'done',
+      resumePhase: '',
+    })
+  }
+  return result
+}
+
+/** 获取案件当前的自动编排状态（供前端恢复/展示）。 */
+export function getPipelineStatus(caseNumber: string): { status: string; currentPhase: string; completed: string[]; failed: PipelineRunResult['failed'] } | null {
+  const state = getPipelineState(caseNumber)
+  if (!state) return null
+  return { status: state.status, currentPhase: state.currentPhase, completed: state.completed, failed: state.failed }
+}
+
+/** 取消自动编排：标记为 cancelled（下次自动分析将重新开始，但仍跳过已完成技能）。 */
+export function cancelValuePipeline(caseNumber: string): void {
+  const state = getPipelineState(caseNumber)
+  if (state) {
+    state.status = 'cancelled'
+    savePipelineState(caseNumber, state)
+  }
 }
 
 export async function runInitialValuePipeline(caseNumber: string, deps: InitialValuePipelineDeps = {}) {

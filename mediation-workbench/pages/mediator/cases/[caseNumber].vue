@@ -49,6 +49,7 @@ const selectedValueSkill = ref<string | null>(null)
 const valueResults = ref<Record<string, string>>({})
 const valueCached = ref<Record<string, boolean>>({})
 const valueLoading = ref<Record<string, boolean>>({})
+const abortControllers = ref<Record<string, AbortController>>({})
 const valueError = ref('')
 
 const currentPhaseSkills = computed(() => valueSkills.value.filter((s) => s.phaseKey === selectedPhase.value))
@@ -84,10 +85,13 @@ async function runValue(skillId: string, force = false, expand = true) {
   if (valueLoading.value[skillId]) return
   valueLoading.value[skillId] = true
   valueError.value = ''
+  // 中止控制器：运行中可"暂停"（AbortController 中止请求）
+  const controller = new AbortController()
+  abortControllers.value[skillId] = controller
   try {
     const resp = await $fetch<{ success: boolean; data: any }>(
       `/api/cases/${caseNumber}/value/${skillId}${force ? '?force=1' : ''}`,
-      { method: 'POST', headers: getAuthHeaders() },
+      { method: 'POST', headers: getAuthHeaders(), signal: controller.signal },
     )
     if (resp?.success && resp.data) {
       valueResults.value[skillId] = stripValueMarkdown(resp.data.content || '', true)
@@ -102,10 +106,101 @@ async function runValue(skillId: string, force = false, expand = true) {
       valueError.value = resp?.data?.message || '未返回结果'
     }
   } catch (err: any) {
-    valueError.value = err?.data?.message || err?.message || '技能运行失败，请稍后重试'
+    // 用户主动暂停（AbortError）不视为错误
+    if (err?.name === 'AbortError') {
+      pipelineProgress.value = `已暂停 ${currentValueSkill?.name || skillId}`
+      setTimeout(() => { pipelineProgress.value = '' }, 3000)
+    } else {
+      valueError.value = err?.data?.message || err?.message || '技能运行失败，请稍后重试'
+    }
   } finally {
     valueLoading.value[skillId] = false
+    delete abortControllers.value[skillId]
   }
+}
+
+/** 中止单个技能运行（暂停按钮） */
+function pauseSkill(skillId: string) {
+  abortControllers.value[skillId]?.abort()
+}
+
+// ── 单技能运行前确认（内联展开在技能下方）──
+const confirmSkill = ref<string | null>(null) // 待确认的技能 id
+
+function requestRunSkill(skillId: string) {
+  // 已在运行则忽略
+  if (valueLoading.value[skillId]) return
+  // 点击同一技能：若在确认态则取消，否则进入确认态
+  confirmSkill.value = confirmSkill.value === skillId ? null : skillId
+}
+
+function confirmRunSkill() {
+  if (confirmSkill.value) {
+    runValue(confirmSkill.value)
+    confirmSkill.value = null
+  }
+}
+
+// ── 自动编排：阶段暂停 + 人工接管（先单点技能会被跳过，缺口自动补齐）──
+const pipelineRunning = ref(false)
+const pipelineProgress = ref('')
+const phasePause = ref<string | null>(null) // 等待确认的阶段（如 'V'）
+const resumeFromPhase = ref('')             // 恢复时从哪一阶段继续
+
+interface PipelineResult {
+  run: string[]; skipped: string[]; failed: Array<{ skillId: string; error: string }>; total: number
+  pauseAtPhase?: string | null
+}
+
+const PHASE_NAMES: Record<string, string> = { V: '接案准备', A: '开启过程', L: '倾听理解', U: '方案验证', E: '促成解决' }
+
+/** 运行自动编排：从指定阶段开始（默认从头），启用阶段暂停，每阶段出口后返回等确认 */
+async function runAllSkills(fromPhase = '') {
+  if (pipelineRunning.value) return
+  pipelineRunning.value = true
+  pipelineProgress.value = fromPhase
+    ? `正在运行 ${PHASE_NAMES[fromPhase] || fromPhase} 阶段…`
+    : '正在准备…'
+  try {
+    const resp = await $fetch<{ success: boolean; data: PipelineResult }>(
+      `/api/cases/${caseNumber}/value/run-all?phaseByPhase=1${fromPhase ? `&fromPhase=${fromPhase}` : ''}`,
+      { method: 'POST', headers: getAuthHeaders() },
+    )
+    const r = resp?.data
+    if (r) {
+      pipelineProgress.value = `完成 ${r.run.length} / 跳过 ${r.skipped.length} / 失败 ${r.failed.length}`
+      await loadValue()
+      if (r.pauseAtPhase) {
+        // 阶段暂停：等待人工确认后继续下一阶段
+        phasePause.value = r.pauseAtPhase
+        resumeFromPhase.value = (['V', 'A', 'L', 'U', 'E'].find((p) => p > r.pauseAtPhase!) ?? '')
+      }
+    }
+  } catch (err: any) {
+    valueError.value = err?.data?.message || err?.message || '自动分析失败'
+  } finally {
+    pipelineRunning.value = false
+  }
+}
+
+/** 确认继续：从暂停的下一阶段恢复自动编排 */
+async function confirmContinue() {
+  const from = resumeFromPhase.value
+  phasePause.value = null
+  if (from) {
+    await runAllSkills(from)
+  }
+}
+
+/** 终止自动编排（转为纯手动） */
+async function cancelPipeline() {
+  phasePause.value = null
+  resumeFromPhase.value = ''
+  pipelineProgress.value = '已终止自动编排，可手动运行技能'
+  try {
+    await $fetch(`/api/cases/${caseNumber}/value/pipeline-cancel`, { method: 'POST', headers: getAuthHeaders() })
+  } catch {}
+  setTimeout(() => { pipelineProgress.value = '' }, 3000)
 }
 
 const statusLabels: Record<string, string> = {
@@ -304,6 +399,17 @@ onMounted(async () => {
     caseData.value = data.data
     await loadValue()
     loadRuns() // 加载技能评估信息（幻觉检测/引用来源/复核状态）
+    // 恢复自动编排：若有暂停状态，提示继续
+    try {
+      const pipeResp = await $fetch<{ success: boolean; data: any }>(`/api/cases/${caseNumber}/value/pipeline-status`, {
+        headers: getAuthHeaders(),
+      })
+      const ps = pipeResp?.data
+      if (ps?.status === 'paused' && ps.resumePhase) {
+        resumeFromPhase.value = ps.resumePhase
+        phasePause.value = ps.currentPhase || 'V'
+      }
+    } catch { /* 无暂停状态则忽略 */ }
     // 支持从 agents 页跳转：?value=skillId 预选并自动运行该技能
     const jumpSkill = route.query.value as string | undefined
     if (jumpSkill && valueSkills.value.some((s) => s.id === jumpSkill)) {
@@ -550,11 +656,29 @@ onMounted(async () => {
       <div class="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
         <!-- VALUE 调解技能库卡 -->
         <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-          <div class="p-5 sm:p-6 pb-4">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <UIcon name="i-lucide-wand-2" class="w-4 h-4 text-blue-500" />VALUE 调解技能库
-            </h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">5 阶段 × 5 技能，脱敏后逐项运行，结果缓存至本地</p>
+          <div class="p-5 sm:p-6 pb-4 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <UIcon name="i-lucide-wand-2" class="w-4 h-4 text-blue-500" />VALUE 调解技能库
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">5 阶段 × 5 技能，自动编排运行，结果缓存至本地</p>
+            </div>
+            <div class="shrink-0">
+              <UButton
+                color="primary"
+                icon="i-lucide-play"
+                :loading="pipelineRunning"
+                :disabled="pipelineRunning"
+                size="sm"
+                title="按阶段顺序自动运行全部技能（依赖自动补跑）"
+                @click="runAllSkills"
+              >
+                {{ pipelineRunning ? '自动分析中…' : '自动分析' }}
+              </UButton>
+              <p v-if="pipelineProgress" class="text-xs text-blue-600 dark:text-blue-400 mt-1 text-right">
+                {{ pipelineProgress }}
+              </p>
+            </div>
           </div>
 
           <!-- 阶段切换 -->
@@ -580,23 +704,49 @@ onMounted(async () => {
 
           <!-- 技能列表 -->
           <div class="px-3 py-3 border-b border-gray-100 dark:border-gray-800 space-y-1">
-            <button
+            <div
               v-for="skill in currentPhaseSkills"
               :key="skill.id"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-              :class="selectedValueSkill === skill.id
+              class="rounded-lg"
+              :class="confirmSkill === skill.id
                 ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
-                : 'border border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'"
-              @click="runValue(skill.id)"
+                : selectedValueSkill === skill.id
+                  ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
+                  : 'border border-transparent'"
             >
-              <UIcon name="i-lucide-magic-wand" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
-              <span class="flex-1 text-sm font-medium min-w-0 truncate text-gray-700 dark:text-gray-300">{{ skill.name }}</span>
-              <span v-if="valueLoading[skill.id]" class="shrink-0 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                <UIcon name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />运行中
-              </span>
-              <UIcon v-else-if="valueStatus[skill.id]?.done" name="i-lucide-check-circle-2" class="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
-              <UIcon v-else name="i-lucide-clock-3" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
-            </button>
+              <button
+                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                @click="requestRunSkill(skill.id)"
+              >
+                <UIcon name="i-lucide-magic-wand" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
+                <span class="flex-1 text-sm font-medium min-w-0 truncate text-gray-700 dark:text-gray-300">{{ skill.name }}</span>
+                <span v-if="valueLoading[skill.id]" class="shrink-0 flex items-center gap-1.5">
+                  <span class="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                    <UIcon name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />运行中
+                  </span>
+                  <button
+                    class="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    title="暂停运行"
+                    @click.stop="pauseSkill(skill.id)"
+                  >
+                    <UIcon name="i-lucide-square" class="w-3 h-3" />暂停
+                  </button>
+                </span>
+                <UIcon v-else-if="valueStatus[skill.id]?.done" name="i-lucide-check-circle-2" class="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+                <UIcon v-else name="i-lucide-clock-3" class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" />
+              </button>
+
+              <!-- 内联确认区：点技能后在此技能下方出现 -->
+              <div v-if="confirmSkill === skill.id" class="px-3 pb-3">
+                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-2">
+                  运行前将先执行本地脱敏，再基于脱敏后的案件材料调用云端模型分析，完成后结果回填还原并缓存至本地。
+                </p>
+                <div class="flex items-center gap-2">
+                  <UButton size="xs" color="primary" icon="i-lucide-play" @click="confirmRunSkill">确认运行</UButton>
+                  <UButton size="xs" color="neutral" variant="soft" @click="confirmSkill = null">取消</UButton>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 结果展示区（默认折叠，点击展开） -->
@@ -701,6 +851,41 @@ onMounted(async () => {
           </div>
         </div>
         <!-- VALUE 卡结束 -->
+
+        <!-- ══ 阶段暂停确认（自动编排关键节点人工接管） ══ -->
+        <UModal v-model="phasePause" :ui="{ width: 'sm:max-w-md' }">
+          <div class="p-5 sm:p-6">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                <UIcon name="i-lucide-pause" class="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                  {{ PHASE_NAMES[phasePause || ''] || phasePause }} 阶段已完成
+                </h3>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">自动编排已暂停，请在关键节点确认后继续</p>
+              </div>
+            </div>
+
+            <div class="rounded-lg bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-3 mb-4">
+              <p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                可在下方对已完成技能进行人工接管（重跑/调整），确认后自动编排将从
+                <span class="font-semibold text-gray-900 dark:text-white">{{ PHASE_NAMES[resumeFromPhase] || resumeFromPhase }}</span>
+                阶段继续执行。
+              </p>
+            </div>
+
+            <div class="flex items-center justify-end gap-2">
+              <UButton color="neutral" variant="soft" icon="i-lucide-square" @click="cancelPipeline">
+                终止自动编排
+              </UButton>
+              <UButton color="primary" icon="i-lucide-play" @click="confirmContinue">
+                确认并继续
+              </UButton>
+            </div>
+          </div>
+        </UModal>
+        <!-- 阶段暂停确认结束 -->
 
         <!-- ══ 智能对话：调解技能库下方（常驻） ══ -->
         <div

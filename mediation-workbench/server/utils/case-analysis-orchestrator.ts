@@ -416,6 +416,13 @@ export interface WorkflowBundleOptions {
   currentSkillId?: string
   /** 当前阶段（如 'U'）；优先级高于 currentSkillId */
   currentPhase?: string
+  /** 技能上下文配置规则：字段白名单/前序阶段/附件策略 */
+  context?: {
+    fields?: string[]
+    priorPhases?: string[]
+    includeDocs?: boolean
+    useRag?: boolean
+  }
 }
 
 export async function buildWorkflowBundle(caseNumber: string, opts: WorkflowBundleOptions = {}): Promise<WorkflowBundle> {
@@ -509,22 +516,34 @@ export async function buildWorkflowBundle(caseNumber: string, opts: WorkflowBund
   if (application?.agentName) knownEntities.push({ value: application.agentName, category: '委托代理人' })
   for (const address of addresses) knownEntities.push({ value: address, category: '地址' })
 
+  // ── 上下文配置：按技能 context.fields 白名单组装案件字段，缺省则全量 ──
+  const fieldSections: Record<string, string | false> = {
+    title: caseData.title && `【案件标题】${caseData.title}`,
+    partyNames: `【当事人】申请人：${caseData.partyAName}；被申请人：${caseData.partyBName}`,
+    description: caseData.description && `【案件描述】${caseData.description}`,
+    claimsSummary: caseData.claimsSummary && `【主张与答辩摘要】${caseData.claimsSummary}`,
+    evidenceSummary: caseData.evidenceSummary && `【证据与质证摘要】${caseData.evidenceSummary}`,
+    caseFacts: application?.caseFacts && `【案件事实】${application.caseFacts}`,
+    disputeMatters: application?.disputeMatters && `【争议事项】${application.disputeMatters}`,
+    mediationDemands: application?.mediationDemands && `【调解请求】${application.mediationDemands}`,
+    demandsBasis: application?.demandsBasis && `【请求依据】${application.demandsBasis}`,
+    timeline: dynamicFile?.timeline && `【已有时间线】${dynamicFile.timeline}`,
+    disputeChecklist: dynamicFile?.disputeChecklist && `【已有争议清单】${dynamicFile.disputeChecklist}`,
+    positions: dynamicFile?.positions && `【已有立场】${dynamicFile.positions}`,
+    potentialInterests: dynamicFile?.potentialInterests && `【已有利益点】${dynamicFile.potentialInterests}`,
+    batna: dynamicFile?.batna && `【已有 BATNA】${dynamicFile.batna}`,
+  }
+
+  const contextFields = opts.context?.fields
+  const selectedFields = contextFields && contextFields.length > 0
+    ? contextFields.filter((f) => fieldSections[f])
+    : Object.keys(fieldSections)
+
   const sections = [
-    caseData.title && `【案件标题】${caseData.title}`,
-    `【当事人】申请人：${caseData.partyAName}；被申请人：${caseData.partyBName}`,
-    caseData.description && `【案件描述】${caseData.description}`,
-    caseData.claimsSummary && `【主张与答辩摘要】${caseData.claimsSummary}`,
-    caseData.evidenceSummary && `【证据与质证摘要】${caseData.evidenceSummary}`,
-    application?.caseFacts && `【案件事实】${application.caseFacts}`,
-    application?.disputeMatters && `【争议事项】${application.disputeMatters}`,
-    application?.mediationDemands && `【调解请求】${application.mediationDemands}`,
-    application?.demandsBasis && `【请求依据】${application.demandsBasis}`,
-    dynamicFile?.timeline && `【已有时间线】${dynamicFile.timeline}`,
-    dynamicFile?.disputeChecklist && `【已有争议清单】${dynamicFile.disputeChecklist}`,
-    dynamicFile?.positions && `【已有立场】${dynamicFile.positions}`,
-    dynamicFile?.potentialInterests && `【已有利益点】${dynamicFile.potentialInterests}`,
-    dynamicFile?.batna && `【已有 BATNA】${dynamicFile.batna}`,
-    ...docTexts.map((doc) => `【附件材料：${doc.originalName}】\n${doc.text.slice(0, 4000)}`),
+    ...selectedFields.map((f) => fieldSections[f]),
+    ...(opts.context?.includeDocs !== false
+      ? docTexts.map((doc) => `【附件材料：${doc.originalName}】\n${doc.text.slice(0, 4000)}`)
+      : []),
     ...(valueResults.length
       ? [`【本案件已完成的 VALUE 技能分析结果（供当前技能参考，勿重复）】\n${valueResults
           .map((r) => `--- ${r.skillId} ---\n${r.content.slice(0, 3000)}`)
